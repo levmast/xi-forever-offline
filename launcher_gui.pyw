@@ -4270,6 +4270,24 @@ def one_launcher_only():
     return True
 
 
+def bring_to_front(win):
+    """(2026-11-18, Yumainai) after the admin prompt Windows often opens the elevated launcher behind other windows (or
+    without its taskbar button flashing), so it looked like it never opened. Raise it once it is drawn."""
+    def up():
+        try:
+            win.deiconify()
+            win.lift()
+            win.attributes("-topmost", True)
+            win.after(400, lambda: win.attributes("-topmost", False))
+            win.focus_force()
+        except Exception:
+            pass
+    try:
+        win.after(250, up)
+    except Exception:
+        pass
+
+
 def main():
     if len(sys.argv) > 2 and sys.argv[1] == "--run":     # the packaged exe running one of the kit's scripts (see core.py_cmd)
         core.run_script_main(sys.argv[2:])
@@ -4291,7 +4309,9 @@ def main():
             wizard.mainloop()
             if not wizard.done or not os.path.exists(os.path.join(HERE, "config.json")):
                 return
-        App().mainloop()
+        app = App()
+        bring_to_front(app)
+        app.mainloop()
     except Exception:
         os.makedirs(LOGS, exist_ok=True)
         err = traceback.format_exc()

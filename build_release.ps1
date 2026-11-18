@@ -13,7 +13,12 @@ if (-not (Test-Path (Join-Path $venv "Scripts\python.exe"))) {
   if ($LASTEXITCODE -ne 0) { throw "Could not make the build environment (python -m venv)" }
 }
 $py = Join-Path $venv "Scripts\python.exe"
-& $py -m pip install --disable-pip-version-check pyinstaller mariadb bcrypt pillow certifi
+# Pinned to the versions the last release was built with (datadecay, 2026-11-18: a new upload of any of these can't
+# change a build without us choosing to). Raise a pin on purpose, test, then release.
+& $py -m pip install --disable-pip-version-check `
+    "pyinstaller==6.22.3" "pyinstaller-hooks-contrib==2026.10" "altgraph==0.17.5" "pefile==2024.8.26" `
+    "pywin32-ctypes==0.2.3" "packaging==26.3" "setuptools==84.2.1" `
+    "mariadb==1.1.15" "bcrypt==5.0.0" "pillow==13.0.0" "certifi==2026.10.23"
 if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
 
 # The kit's scripts run inside the exe but are not part of it, so PyInstaller cannot see what they import:
