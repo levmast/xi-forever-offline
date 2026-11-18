@@ -41,6 +41,7 @@ except Exception:  # the launcher still works, without the Co-op page
     coopgui = None
 
 LOGS = os.path.join(HERE, "logs")
+KIT_REPO_NAME = "Hurami89/xi-forever-offline"
 BG, PANEL, PANEL2, FG, DIM = "#0a1118", "#101c28", "#162634", "#e9f1f5", "#8aa0ad"
 BORDER, GOLD = "#1d3445", "#e6be64"
 GREEN, RED, GREY, ACCENT = "#3ecf6e", "#e5534b", "#44525d", "#35c4e0"
@@ -1676,7 +1677,65 @@ class RatesTab(tk.Frame):
                        "from monsters you defeat with a squad Blue Mage out. Below 18 everything stays automatic.",
                        variable=self.spell_scrolls, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
                        wraplength=520, justify="left").grid(row=n + 19, column=0, columnspan=2, sticky="w", padx=6, pady=2)
+        if tp is not None:
+            self.ai_model_row(inner, n + 21)
         self.show_world(rates)
+
+    def ai_model_row(self, inner, row):
+        """(Meli, 2026-11-18) which local AI model squad chat and the town/bot chat use: a suggested one, any Ollama
+        model name, or your own .gguf file. Saved in squad-chat/config.json right away; used from the next PLAY."""
+        tk.Label(inner, text="AI chat model (Ollama)", bg=BG, fg=FG, anchor="w", width=38).grid(row=row, column=0, sticky="w", padx=6, pady=2)
+        box = tk.Frame(inner, bg=BG)
+        box.grid(row=row, column=1, sticky="w", padx=6, pady=2)
+        self.ai_model = tk.StringVar(value=tp.chat_model(HERE))
+        names = [m for m, _ in tp.SUGGESTED_MODELS]
+        ttk.Combobox(box, values=names, textvariable=self.ai_model, width=22).pack(side="left")
+        tk.Button(box, text="Use and download", command=self.use_ai_model, bg=PANEL, fg=FG, relief="flat", padx=6).pack(side="left", padx=4)
+        tk.Button(box, text="Use a .gguf file...", command=self.use_gguf, bg=PANEL, fg=FG, relief="flat", padx=6).pack(side="left")
+        hints = "; ".join(f"{m} ({t})" for m, t in tp.SUGGESTED_MODELS)
+        self.ai_model_note = tk.Label(inner, text="Bigger models chat better but need more video memory and can lower your "
+                                      "frame rate. Any model from ollama.com/library works. " + hints,
+                                      bg=BG, fg=FG, wraplength=520, justify="left", anchor="w")
+        self.ai_model_note.grid(row=row + 1, column=0, columnspan=2, sticky="w", padx=6, pady=(0, 4))
+
+    def _ai_work(self, job, done_text):
+        def work():
+            try:
+                name = job()
+                self.after(0, lambda: messagebox.showinfo("AI model", done_text.format(name=name)))
+            except Exception as e:
+                err = str(e)
+                self.after(0, lambda: messagebox.showerror("AI model", err))
+        threading.Thread(target=work, daemon=True).start()
+
+    def use_ai_model(self):
+        model = self.ai_model.get().strip()
+        try:
+            tp.set_chat_model(model, HERE)
+        except ValueError as e:
+            messagebox.showerror("AI model", str(e))
+            return
+        if model in tp.ollama_models():
+            messagebox.showinfo("AI model", f"Squad and town chat will use {model} from your next PLAY.")
+            return
+        self.ai_model_note.configure(text=f"Downloading {model} (several GB; you can keep using the launcher)...")
+        def job():
+            tp.pull_model(model, log=lambda line: self.after(0, lambda: self.ai_model_note.configure(text=line)))
+            return model
+        self._ai_work(job, "{name} is downloaded. Squad and town chat use it from your next PLAY.")
+
+    def use_gguf(self):
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(title="Pick a .gguf model file", filetypes=[("GGUF model", "*.gguf")])
+        if not path:
+            return
+        self.ai_model_note.configure(text="Importing the model into Ollama...")
+        def job():
+            name = tp.import_gguf(path, log=lambda line: self.after(0, lambda: self.ai_model_note.configure(text=line)))
+            tp.set_chat_model(name, HERE)
+            self.after(0, lambda: self.ai_model.set(name))
+            return name
+        self._ai_work(job, "Your model is in Ollama as {name}. Squad and town chat use it from your next PLAY.")
 
     def show_world(self, rates):
         """Show which world and population the switches below match (or Custom)."""
@@ -2062,10 +2121,13 @@ class UpdatesTab(tk.Frame):
         self.buttons = []
         if linux is not None:
             self.build_linux()
+        self.contributor = app.cfg.get("contributor")       # a team member's GitHub name, once they signed in (contributor mode)
         if self.player:
             self.build_player_updates()
         else:
-            self.build_publish()
+            if not self.contributor:
+                self.build_publish()
+                self.build_team()
             tk.Label(self, text="Keep your server up to date with Phoenix", bg=BG, fg=FG, font=(UI_FONT, 12, "bold")).pack(anchor="w", padx=14, pady=(8, 2))
             tk.Label(self, text=("Check shows what is new and changes nothing. Update saves your database, then merges the new version in, applies database "
                                  "changes and rebuilds the server. If anything clashes with our own changes it is cancelled and nothing changes. "
@@ -2078,6 +2140,10 @@ class UpdatesTab(tk.Frame):
                 button = tk.Button(bar, text=text, command=command, bg=PANEL, fg=FG, relief="flat", padx=14, pady=6, activebackground=PANEL2, activeforeground=FG)
                 button.pack(side="left", padx=(0, 8))
                 self.buttons.append(button)
+        self.contrib_frame = tk.Frame(self, bg=BG)
+        self.contrib_frame.pack(fill="x")
+        if self.contributor or app.cfg.get("contributor_mode"):      # hidden unless switched on in config.json (team members only)
+            self.build_contributor()
         box = tk.Frame(self, bg=BG)
         box.pack(fill="both", expand=True, padx=14, pady=10)
         self.output = tk.Text(box, bg=PANEL, fg=FG, font=(MONO_FONT, 9), state="disabled", relief="flat", wrap="word", bd=0, highlightthickness=0)
@@ -2153,6 +2219,149 @@ class UpdatesTab(tk.Frame):
                  bg=PANEL, fg=DIM, wraplength=880, justify="left", font=(UI_FONT, 9)).pack(anchor="w", padx=12, pady=(0, 8))
         tk.Button(frame, text="Publish update...", command=lambda: PublishDialog(self.app), bg=ACCENT, fg="white", relief="flat",
                   padx=14, pady=5).pack(anchor="w", padx=12, pady=(0, 12))
+
+    # ----- dev PC: updates your team sent (contributor mode) -----
+    def build_team(self):
+        frame = tk.Frame(self, bg=PANEL, highlightbackground=BORDER, highlightthickness=1)
+        frame.pack(fill="x", padx=14, pady=6)
+        tk.Label(frame, text="Updates from your team", bg=PANEL, fg=FG, font=(UI_FONT, 12, "bold")).pack(anchor="w", padx=12, pady=(10, 2))
+        tk.Label(frame, text=("Contributors send their changes from their launcher; each one arrives as a pull request on GitHub. Review it "
+                              "there and merge it (or ask for changes), then pull here and publish as usual. Who can send what is in "
+                              "contributors.json: edit it, commit and push to add or remove someone."),
+                 bg=PANEL, fg=DIM, wraplength=880, justify="left", font=(UI_FONT, 9)).pack(anchor="w", padx=12, pady=(0, 8))
+        bar = tk.Frame(frame, bg=PANEL)
+        bar.pack(anchor="w", padx=12, pady=(0, 12))
+        tk.Button(bar, text="Show waiting updates", command=self.team_check, bg=PANEL2, fg=FG, relief="flat",
+                  padx=12, pady=5).pack(side="left", padx=(0, 8))
+        tk.Button(bar, text="Open on GitHub", command=lambda: self.app.open_url(f"https://github.com/{KIT_REPO_NAME}/pulls"),
+                  bg=PANEL2, fg=FG, relief="flat", padx=12, pady=5).pack(side="left", padx=(0, 8))
+
+    def team_check(self):
+        def work():
+            try:
+                import json as _json
+                import launcher_contrib as lc
+                import launcher_thirdparty as tp
+                waiting = lc.open_updates(lambda url: _json.loads(tp._get(url)))
+            except Exception as e:
+                self.lines.put(("line", f"Could not check: {e}"))
+                return
+            if not waiting:
+                self.lines.put(("line", "No updates waiting for review."))
+            for number, title, who, url in waiting:
+                self.lines.put(("line", f"#{number} {title}  (from {who})  {url}"))
+        threading.Thread(target=work, daemon=True).start()
+
+    # ----- contributor mode: send your changes to the dev for review -----
+    def build_contributor(self):
+        for child in self.contrib_frame.winfo_children():
+            child.destroy()
+        if not self.contributor:            # switched on but not signed in yet: only names on the list on GitHub get any further
+            tk.Button(self.contrib_frame, text="Contributor sign-in", command=self.contrib_sign_in, bg=BG, fg=DIM, relief="flat",
+                      bd=0, font=(UI_FONT, 8), activebackground=BG, activeforeground=FG, cursor="hand2").pack(anchor="w", padx=14, pady=(6, 0))
+            return
+        import launcher_contrib as lc
+        areas = self.app.cfg.get("contributor_areas") or []
+        frame = tk.Frame(self.contrib_frame, bg=PANEL, highlightbackground=BORDER, highlightthickness=1)
+        frame.pack(fill="x", padx=14, pady=6)
+        tk.Label(frame, text=f"Contributor: {self.contributor}", bg=PANEL, fg=FG, font=(UI_FONT, 12, "bold")).pack(anchor="w", padx=12, pady=(10, 2))
+        tk.Label(frame, text=("Change and test in game as usual, then send. Your update goes to Hurami for review as a pull request on "
+                              "GitHub; nothing reaches players until it is merged and published. You can send: " +
+                              (", ".join(lc.AREAS[a]["label"] for a in areas) or "nothing yet") + "."),
+                 bg=PANEL, fg=DIM, wraplength=880, justify="left", font=(UI_FONT, 9)).pack(anchor="w", padx=12, pady=(0, 8))
+        bar = tk.Frame(frame, bg=PANEL)
+        bar.pack(anchor="w", padx=12, pady=(0, 12))
+        for area in areas:
+            label = lc.AREAS[area]["label"]
+            tk.Button(bar, text=f"Send {label} update to Hurami...", command=lambda a=area: self.contrib_send(a), bg=ACCENT, fg="white",
+                      relief="flat", padx=14, pady=5).pack(side="left", padx=(0, 8))
+            tk.Button(bar, text=f"What changed in {label}", command=lambda a=area: self.contrib_check(a), bg=PANEL2, fg=FG,
+                      relief="flat", padx=12, pady=5).pack(side="left", padx=(0, 8))
+        tk.Button(bar, text="My sent updates", command=self.contrib_mine, bg=PANEL2, fg=FG, relief="flat", padx=12, pady=5).pack(side="left", padx=(0, 8))
+        tk.Button(bar, text="Sign out", command=self.contrib_sign_out, bg=PANEL2, fg=FG, relief="flat", padx=12, pady=5).pack(side="left")
+
+    def contrib_sign_in(self):
+        self.write("Signing in to GitHub (a browser page may open the first time)...")
+
+        def work():
+            try:
+                import launcher_contrib as lc
+                token, login, areas = lc.sign_in()
+            except Exception as e:
+                self.lines.put(("line", f"Sign-in stopped: {e}"))
+                return
+            if not areas:
+                self.lines.put(("line", f"Signed in as {login}, but {login} is not on the contributor list. Ask Hurami to add you."))
+                return
+            self.after(0, lambda: self.contrib_signed_in(login, areas))
+        threading.Thread(target=work, daemon=True).start()
+
+    def contrib_signed_in(self, login, areas):
+        self.contributor = login
+        self.app.cfg["contributor"], self.app.cfg["contributor_areas"] = login, areas
+        try:
+            save_config_value("contributor", login)
+            save_config_value("contributor_areas", areas)
+        except Exception as e:
+            self.write(f"Could not save the sign-in: {e}")
+        self.build_contributor()
+        self.write(f"Contributor mode is on for {login}.")
+
+    def contrib_sign_out(self):
+        self.contributor = None
+        for key in ("contributor", "contributor_areas", "contributor_mode"):
+            self.app.cfg.pop(key, None)
+            try:
+                save_config_value(key, None)
+            except Exception:
+                pass
+        self.build_contributor()
+        self.write("Contributor mode is off.")
+
+    def contrib_check(self, area, then=None):
+        def work():
+            try:
+                import launcher_contrib as lc
+                token, login, areas = lc.sign_in()       # the list on GitHub decides, every time
+                if area not in areas:
+                    raise RuntimeError(f"{login} can't send {lc.AREAS[area]['label']} updates (not on the contributor list for it).")
+                found = lc.check(token, area, self.app.cfg)
+            except Exception as e:
+                self.lines.put(("line", f"Could not check: {e}"))
+                return
+            d = found["diff"]
+            self.lines.put(("line", f"{lc.AREAS[area]['label']} ({found['folder']}): " +
+                            (f"{len(d['changed'])} changed, {len(d['added'])} new" if d["changed"] or d["added"] else "same as the released files")))
+            for rel in d["changed"]:
+                self.lines.put(("line", f"   changed  {rel}"))
+            for rel in d["added"]:
+                self.lines.put(("line", f"   new      {rel}"))
+            if then:
+                self.after(0, lambda: then(token, login, found))
+        threading.Thread(target=work, daemon=True).start()
+
+    def contrib_send(self, area):
+        def ready(token, login, found):
+            if not (found["diff"]["changed"] or found["diff"]["added"]):
+                messagebox.showinfo("Send update", "Nothing to send: your files are the same as the released ones.", parent=self)
+                return
+            SendUpdateDialog(self.app, token, login, area, found)
+        self.contrib_check(area, then=ready)
+
+    def contrib_mine(self):
+        def work():
+            try:
+                import launcher_contrib as lc
+                token, login, _ = lc.sign_in()
+                mine = lc.my_updates(token, login)
+            except Exception as e:
+                self.lines.put(("line", f"Could not check: {e}"))
+                return
+            if not mine:
+                self.lines.put(("line", "No sent updates waiting for review."))
+            for number, title, url in mine:
+                self.lines.put(("line", f"Waiting for review: #{number} {title}  {url}"))
+        threading.Thread(target=work, daemon=True).start()
 
     # ----- player install: updates from the GitHub releases -----
     def build_player_updates(self):
@@ -2340,6 +2549,79 @@ class UpdatesTab(tk.Frame):
         except queue.Empty:
             pass
         self.after(200, self.pump)
+
+
+class SendUpdateDialog(tk.Toplevel):
+    """Contributor mode: what you are sending, a title and a note for Hurami, then Send (launcher_contrib.send)."""
+
+    def __init__(self, app, token, login, area, found):
+        super().__init__(app)
+        import launcher_contrib as lc
+        self.app, self.lc, self.token, self.login, self.area, self.found = app, lc, token, login, area, found
+        label = lc.AREAS[area]["label"]
+        self.title(f"Send {label} update to Hurami")
+        self.geometry("700x560")
+        self.configure(bg=BG)
+        self.q = queue.Queue()
+        d = found["diff"]
+        tk.Label(self, text="Files going in this update:", bg=BG, fg=FG, font=(UI_FONT, 10, "bold")).pack(anchor="w", padx=14, pady=(12, 2))
+        tk.Label(self, text="\n".join([f"changed  {r}" for r in d["changed"]] + [f"new      {r}" for r in d["added"]]),
+                 bg=BG, fg=DIM, justify="left", font=(MONO_FONT, 9)).pack(anchor="w", padx=14)
+        tk.Label(self, text="Title (one line: what this update does)", bg=BG, fg=FG).pack(anchor="w", padx=14, pady=(10, 2))
+        self.subject = tk.StringVar(value=f"{label}: ")
+        tk.Entry(self, textvariable=self.subject, bg=PANEL, fg=FG, insertbackground=FG, relief="flat").pack(fill="x", padx=14)
+        tk.Label(self, text="Note for Hurami (what changed, how you tested it)", bg=BG, fg=FG).pack(anchor="w", padx=14, pady=(10, 2))
+        self.note = tk.Text(self, height=7, bg=PANEL, fg=FG, insertbackground=FG, relief="flat", wrap="word", font=(UI_FONT, 9))
+        self.note.pack(fill="x", padx=14)
+        bar = tk.Frame(self, bg=BG)
+        bar.pack(anchor="w", padx=14, pady=8)
+        self.go = tk.Button(bar, text="Send", command=self.send, bg=ACCENT, fg="white", relief="flat", padx=18)
+        self.go.pack(side="left")
+        self.link = None
+        self.open_button = tk.Button(bar, text="Open on GitHub", command=lambda: self.link and self.app.open_url(self.link),
+                                     bg=PANEL, fg=FG, relief="flat", padx=12, state="disabled")
+        self.open_button.pack(side="left", padx=8)
+        self.log = tk.Text(self, bg=PANEL, fg=FG, relief="flat", font=(MONO_FONT, 9), wrap="word", state="disabled")
+        self.log.pack(fill="both", expand=True, padx=14, pady=(4, 12))
+        self.after(200, self.pump)
+
+    def send(self):
+        title = self.subject.get().strip()
+        if len(title) < 4 or title.endswith(":"):
+            messagebox.showinfo("Send update", "Add a title that says what the update does.", parent=self)
+            return
+        self.go.configure(state="disabled")
+        note = self.note.get("1.0", "end").strip()
+
+        def work():
+            try:
+                url = self.lc.send(self.token, self.login, self.area, self.found, title, note, log=lambda m: self.q.put(m))
+                self.q.put(("link", url))
+                self.q.put("Sent! Hurami gets it on GitHub. You'll get GitHub notifications when he comments or merges it.")
+            except Exception as e:
+                self.q.put(f"Stopped: {e}")
+                self.q.put(("again", None))
+        threading.Thread(target=work, daemon=True).start()
+
+    def pump(self):
+        try:
+            while True:
+                item = self.q.get_nowait()
+                if isinstance(item, tuple):
+                    if item[0] == "link":
+                        self.link = item[1]
+                        self.open_button.configure(state="normal")
+                    else:
+                        self.go.configure(state="normal")
+                    continue
+                self.log.configure(state="normal")
+                self.log.insert("end", item + "\n")
+                self.log.see("end")
+                self.log.configure(state="disabled")
+        except queue.Empty:
+            pass
+        if self.winfo_exists():
+            self.after(200, self.pump)
 
 
 class PublishDialog(tk.Toplevel):

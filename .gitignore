@@ -21,6 +21,9 @@
 !/launcher_setup.py
 !/launcher_update.py
 !/launcher_publish.py
+# contributor mode: team members send updates for review; who may is in contributors.json (main branch on GitHub)
+!/launcher_contrib.py
+!/contributors.json
 !/launcher_game.py
 !/launcher_client.py
 # co-op (experimental): the CO-OP page, the service two launchers talk through, and character passports

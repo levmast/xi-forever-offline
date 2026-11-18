@@ -28,7 +28,7 @@ $std = & $py -c "import sys; skip=set('$skip'.split()); print('\n'.join(sorted(n
 $hidden = @($std -split "`r?`n" | Where-Object { $_ }) + @("bcrypt", "certifi", "mariadb", "PIL.Image", "PIL.ImageTk",
             "launcher_core", "launcher_squad", "launcher_rules", "launcher_icons", "launcher_personality",
             "launcher_thirdparty", "launcher_setup", "launcher_game", "launcher_client",
-            "launcher_passport", "launcher_coop", "launcher_coop_gui")
+            "launcher_passport", "launcher_coop", "launcher_coop_gui", "launcher_contrib")
 $opts = @("--noconfirm", "--onefile", "--windowed", "--name", "XI Forever Offline",
           "--icon", (Join-Path $PSScriptRoot "assets\ui\icon.ico"),
           "--distpath", $PSScriptRoot, "--workpath", (Join-Path $PSScriptRoot "build\pyinstaller"),

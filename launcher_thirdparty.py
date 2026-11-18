@@ -283,6 +283,78 @@ def plan(item, names):
     return out
 
 
+# --- Choosing the AI model (Meli, 2026-11-18) -------------------------------------------------------------------
+# Squad chat and the crowd/bot chat both read "model" from squad-chat/config.json, so that is the one place to set it.
+SUGGESTED_MODELS = [
+    ("gemma4:12b", "default: good chat, about 8 GB of video memory"),
+    ("gemma4:4b", "lighter: about 3 GB, for smaller graphics cards"),
+    ("qwen3:8b", "about 5 GB"),
+    ("qwen3:14b", "about 9 GB, needs a strong graphics card"),
+    ("mistral-nemo:latest", "about 7 GB"),
+    ("llama3.1:8b", "about 5 GB"),
+]
+
+
+def chat_config_path(kit=None):
+    return os.path.join(kit or _kit_dir(), "squad-chat", "config.json")
+
+
+def chat_model(kit=None):
+    """The model squad chat and the crowd chat use now (gemma4:12b when none is set)."""
+    try:
+        with open(chat_config_path(kit), encoding="utf-8") as f:
+            return json.load(f).get("model") or "gemma4:12b"
+    except (OSError, ValueError):
+        return "gemma4:12b"
+
+
+def set_chat_model(model, kit=None):
+    """Saves the model name in squad-chat/config.json, keeping everything else in it. The chat helpers pick it up
+    at the next PLAY (until it is pulled they keep using the fallback model)."""
+    model = (model or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._\-/]*(:[A-Za-z0-9._\-]+)?", model):
+        raise ValueError(f"'{model}' is not a model name Ollama understands (like gemma4:12b).")
+    path = chat_config_path(kit)
+    data = {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        pass
+    data["model"] = model
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    os.replace(tmp, path)
+    return model
+
+
+def import_gguf(gguf_path, name=None, log=print, run=None):
+    """Makes an Ollama model from your own .gguf file (ollama create with a one-line Modelfile) and returns its name.
+    The Modelfile is kept in ai-models/ beside the kit; the .gguf stays where it is."""
+    import subprocess
+    exe = find_ollama()
+    if not exe:
+        raise RuntimeError("Ollama is not installed yet (ADDONS > Other > Ollama).")
+    if not (os.path.isfile(gguf_path) and gguf_path.lower().endswith(".gguf")):
+        raise ValueError("Pick a .gguf file.")
+    base = name or re.sub(r"[^a-z0-9._-]+", "-", os.path.splitext(os.path.basename(gguf_path))[0].lower()).strip("-.") or "my-model"
+    name = base if ":" in base else base + ":latest"
+    folder = os.path.join(_kit_dir(), "ai-models")
+    os.makedirs(folder, exist_ok=True)
+    modelfile = os.path.join(folder, re.sub(r"[:/]", "_", name) + ".Modelfile")
+    with open(modelfile, "w", encoding="utf-8") as f:
+        f.write(f'FROM "{os.path.abspath(gguf_path)}"\n')
+    log(f"Importing {os.path.basename(gguf_path)} into Ollama as {name} (this can take a few minutes)...")
+    out = (run or subprocess.run)([exe, "create", name, "-f", modelfile], capture_output=True, text=True,
+                                  creationflags=NO_WINDOW)
+    if out.returncode != 0:
+        raise RuntimeError(((out.stderr or out.stdout or "").strip()[-300:]) or "ollama create failed")
+    log(f"AI model {name} is ready.")
+    return name
+
+
 def pull_model(model, log=print, popen=None):
     """ollama pull <model>, starting Ollama first when it is not running. Reports progress about every 20 seconds."""
     import subprocess

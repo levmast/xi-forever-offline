@@ -57,6 +57,11 @@ def preflight(kit, server, server_running=False):
         dirty = [l for l in git(folder, "status", "--porcelain", "--untracked-files=no", check=False).splitlines() if l.strip()]
         if dirty:
             problems.append(f"{label}: {len(dirty)} changed file(s) are not committed ({', '.join(l[3:] for l in dirty[:4])}...). Commit them first.")
+    git(kit, "fetch", "--quiet", "origin", "main", check=False)        # contributions merged on GitHub since your last pull
+    behind = git(kit, "rev-list", "--count", "HEAD..origin/main", check=False)
+    if behind.isdigit() and int(behind):
+        problems.append(f"Kit: {behind} commit(s) on GitHub are not on this PC yet (merged contributions?). "
+                        f'Pull them first: git -C "{kit}" pull')
     ahead = git(kit, "rev-list", "--count", "origin/main..HEAD", check=False)
     if ahead.isdigit() and int(ahead):
         problems.append(f"Kit: {ahead} commit(s) are not pushed yet. Push them first.")
