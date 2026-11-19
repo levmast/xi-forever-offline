@@ -598,6 +598,38 @@ def detect_lang(viewer):
     return "US"
 
 
+def game_lang(cfg):
+    """JP, US or EU for xiloader: the setup's choice when it is not US, else EU when the copy has only the EU core."""
+    lang = (cfg.get("pol_lang") or "US").upper()
+    if lang in ("JP", "EU"):
+        return lang
+    viewer = cfg.get("pol_dir") or os.path.join(os.path.dirname(os.path.normpath(cfg.get("ffxi_client_dir", ""))), "PlayOnlineViewer")
+    if detect_lang(viewer) == "EU" and not any(f.lower() == "polcore.dll" for _r, _d, fs in os.walk(viewer)
+                                               if "patchfiles" not in _r.lower() for f in fs):
+        return "EU"
+    return "US"
+
+
+def apply_boot_lang(boot_ini, lang):
+    """(2026-11-18, Sunie: an EU install on Linux) xiloader looks for the US PlayOnline unless told otherwise, and an EU
+    install has only polcoreeu.dll. Writes --lang into the boot file's command line and Ashita's [ashita.language]
+    playonline (1 JP, 2 US, 3 EU). US removes our --lang again. Other lines are left as they are."""
+    import re
+    with open(boot_ini, "r", encoding="utf-8-sig", newline="") as f:
+        text = f.read()
+    def command(m):
+        cmd = re.sub(r"\s*--lang\s+\S+", "", m.group(2))
+        if lang != "US":
+            cmd += f" --lang {lang}"
+        return m.group(1) + cmd
+    new = re.sub(r"(?m)^(command\s*=\s*)(.*?)\s*$", command, text, count=1)
+    new = re.sub(r"(?m)^(playonline\s*=\s*)\d+", lambda m: m.group(1) + {"JP": "1", "US": "2", "EU": "3"}[lang], new, count=1)
+    if new != text:
+        with open(boot_ini, "w", encoding="utf-8", newline="") as f:
+            f.write(new)
+    return lang
+
+
 # ----- menu entry and Steam -----
 def desktop_entry_text(kit, exe):
     icon = os.path.join(kit, "assets", "ui", "icon.png")

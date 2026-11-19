@@ -93,48 +93,6 @@ class GameTests(unittest.TestCase):
             reg.set(p, n, v)
         self.assertFalse(lg.needs_switch(self.cfg, reg))
 
-    def test_msi_descriptors_removed_during_the_game_and_put_back(self):
-        # the official installer is an MSI: its descriptor made COM load the retail DLLs whatever the default value
-        # said (2026-11-18: crash in the retail FFXiMain.dll right after the switch)
-        game = rf"SOFTWARE\Classes\CLSID\{lg.FFXI_CLSID}\InprocServer32"
-        main = r"SOFTWARE\Classes\CLSID\{1027DC46-750D-4B1F-8834-1D25B8BEBAB8}\InprocServer32"
-        other = r"SOFTWARE\Classes\CLSID\{11111111-2222-3333-4444-555555555555}\InprocServer32"
-        desc = ["V fJs_Hn"]
-        reg = retail()
-        reg.set(game, lg.MSI_DESCRIPTOR, desc)
-        reg.set(main, "", RETAIL_F + r"\FFXiMain.dll")
-        reg.set(main, lg.MSI_DESCRIPTOR, desc)
-        reg.set(other, "", RETAIL_F + r"\NotInTheCopy.dll")
-        reg.set(other, lg.MSI_DESCRIPTOR, desc)
-        for name in ("FFXi.dll", "FFXiMain.dll"):
-            self._touch(self.copy["ffxi"], name)
-        want = {(p, n): v for p, n, v in lg.entries("US", self.copy["viewer"], self.copy["ffxi"], reg)}
-        self.assertIn((game, lg.MSI_DESCRIPTOR), want)
-        self.assertIsNone(want[(main, lg.MSI_DESCRIPTOR)])
-        self.assertNotIn((other, lg.MSI_DESCRIPTOR), want)        # still the retail DLL: its descriptor stays
-        state = os.path.join(self.kit, lg.STATE_FILE)
-        with open(state, "w", encoding="utf-8") as handle:
-            json.dump({"lang": "US", "viewer": self.copy["viewer"], "ffxi": self.copy["ffxi"]}, handle)
-        seen = []
-        lg.hold(state, reg, lambda: (seen.append((reg.get(game, lg.MSI_DESCRIPTOR), reg.get(main, lg.MSI_DESCRIPTOR)))
-                                     or len(seen) < 2), sleep=lambda s: None)
-        self.assertEqual(seen[0], (None, None))
-        self.assertEqual(reg.get(game, lg.MSI_DESCRIPTOR), desc)       # put back exactly, as a list (REG_MULTI_SZ)
-        self.assertEqual(reg.get(main, lg.MSI_DESCRIPTOR), desc)
-        self.assertEqual(reg.get(other, lg.MSI_DESCRIPTOR), desc)
-
-    def test_descriptor_alone_still_needs_a_switch(self):
-        # every path already points at the copy (fixed by hand) but a descriptor is left: still switch
-        game = rf"SOFTWARE\Classes\CLSID\{lg.FFXI_CLSID}\InprocServer32"
-        self._touch(self.copy["ffxi"], "FFXi.dll")
-        self._touch(self.copy["viewer"], "polcore.dll")
-        reg = retail()
-        for p, n, v in lg.entries("US", self.copy["viewer"], self.copy["ffxi"], reg):
-            reg.set(p, n, v)
-        self.assertFalse(lg.needs_switch(self.cfg, reg))
-        reg.set(game, lg.MSI_DESCRIPTOR, ["x"])
-        self.assertTrue(lg.needs_switch(self.cfg, reg))
-
     def test_every_language_key_follows_the_copy(self):
         # an EU install (or a second install under another language) left Ashita and FFXi.dll on the retail folder
         us = r"SOFTWARE\PlayOnlineUS\InstallFolder"

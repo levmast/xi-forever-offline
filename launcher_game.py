@@ -27,7 +27,6 @@ POLCORE_CLSID = {"JP": "{07974581-0DF6-4EF0-BD05-604B3ADA9BE9}", "US": "{3501F5D
 POLCORE_DLL = {"JP": "polcore.dll", "US": "polcore.dll", "EU": "polcoreeu.dll"}
 FFXI_CLSID = "{989D790D-6236-11D4-80E9-00105A81E890}"
 FFXI_DLL = "FFXi.dll"
-MSI_DESCRIPTOR = "InprocServer32"     # the Windows Installer value inside an InprocServer32 key (see entries)
 # Square Enix's own full installer (FFXI, PlayOnline and every expansion), straight from Square Enix: part1.exe
 # unpacks itself and part2.rar, part3.rar... (5 parts, about 7.2 GB, in 2026) into FFXIFullSetup_US, then
 # FFXISetup.exe in there installs the game. Parts are fetched until Square Enix has no next one.
@@ -61,11 +60,9 @@ class WinRegistry:
             return None
 
     def set(self, path, name, value):
-        """A string is written as REG_SZ, a list of strings (an MSI descriptor read back by get) as REG_MULTI_SZ."""
         w = self.w
-        kind = w.REG_MULTI_SZ if isinstance(value, list) else w.REG_SZ
         with w.CreateKeyEx(w.HKEY_LOCAL_MACHINE, path, 0, w.KEY_WRITE | w.KEY_WOW64_32KEY) as key:
-            w.SetValueEx(key, name, 0, kind, value)
+            w.SetValueEx(key, name, 0, w.REG_SZ, value)
 
     def delete(self, path, name):
         w = self.w
@@ -131,8 +128,7 @@ def entries(lang, viewer, ffxi, reg):
     # and event files) loading from the retail install (shujimi, 2026-11-16: crash in the retail FFXiMain.dll).
     roots = [(reg.get(folder, "0001"), ffxi), (reg.get(folder, "1000"), viewer)]
     done = {polcore.lower(), game.lower()}
-    servers = reg.com_servers() if hasattr(reg, "com_servers") else []
-    for clsid, dll in servers:
+    for clsid, dll in (reg.com_servers() if hasattr(reg, "com_servers") else []):
         path = rf"SOFTWARE\Classes\CLSID\{clsid}\InprocServer32"
         if path.lower() in done:
             continue
@@ -140,31 +136,7 @@ def entries(lang, viewer, ffxi, reg):
         if new is not None and not _same(new, dll):
             want.append((path, "", new))
             done.add(path.lower())
-    # Square Enix's installer is an MSI: each class it registers also gets a Windows Installer descriptor, a
-    # REG_MULTI_SZ value also named InprocServer32. While it is there COM asks Windows Installer for the DLL and
-    # ignores the default value, so the retail files kept loading after the switch (2026-11-18: retail installed with
-    # the official installer; pol.exe crashed in the retail FFXiMain.dll / app.dll, ~15 s after "Profile loaded.").
-    # It is removed for every class that points at the copy during the game, and put back afterwards.
-    to_copy = {p.lower(): p for p, n, _v in want if n == "" and p.lower() in done}
-    for clsid, dll in servers:
-        path = rf"SOFTWARE\Classes\CLSID\{clsid}\InprocServer32"
-        if _inside(dll, (ffxi, viewer)):          # already pointing at the copy (a switch left in place, or set by hand)
-            to_copy.setdefault(path.lower(), path)
-    for _low, path in sorted(to_copy.items()):
-        if reg.get(path, MSI_DESCRIPTOR) is not None:
-            want.append((path, MSI_DESCRIPTOR, None))
     return want
-
-
-def _inside(dll, folders):
-    """True when dll is inside one of folders."""
-    low = ntpath.normpath((dll or "").strip('"')).lower()
-    return any(f and low.startswith(ntpath.normpath(f).rstrip("\\").lower() + "\\") for f in folders)
-
-
-def _matches(current, wanted):
-    """wanted None means the value must not exist."""
-    return current is None if wanted is None else _same(current, wanted)
 
 
 def _game_dll(dll):
@@ -240,7 +212,7 @@ def needs_switch(cfg, reg):
     if not cfg.get("game_copy"):
         return False
     lang = cfg.get("pol_lang", "US")
-    return any(not _matches(reg.get(p, n), v) for p, n, v in entries(lang, cfg["pol_dir"], cfg["ffxi_client_dir"], reg))
+    return any(not _same(reg.get(p, n), v) for p, n, v in entries(lang, cfg["pol_dir"], cfg["ffxi_client_dir"], reg))
 
 
 def _restore(originals, reg):
@@ -268,10 +240,7 @@ def hold(state_path, reg, is_running, sleep=time.sleep, start_wait=180, poll=2):
     _write_state(state_path, state)
     try:
         for path, name, value in want:
-            if value is None:
-                reg.delete(path, name)
-            else:
-                reg.set(path, name, value)
+            reg.set(path, name, value)
         state["applied"] = True
         _write_state(state_path, state)
         waited = 0

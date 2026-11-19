@@ -41,30 +41,64 @@ ITEMS = [
         "icon": "crystalboy.png",
     },
     {
-        "id": 8101, "key": "ffa_cartridge", "name": "Mana Recollection",
-        "log": "Recollection of the Mana Tree", "plural": "Recollections of the Mana Tree", "article": 0,
-        "desc": "A crystal tablet that remembers a\nhero's journey to the Mana Tree.\nUse it with a Crystal Boy.",
+        "id": 8101, "key": "ffa_cartridge", "name": "Jueno Recollection I",
+        "log": "Recollection of Jueno I", "plural": "Recollections of Jueno I", "article": 0,
+        "desc": "A crystal tablet that remembers the\nfirst part of the Legend of Jueno.\nUse it with a Crystal Boy.",
         "icon": "cart_ffa.png",
-        "old_names": ("FF Adventure",),
+        "old_names": ("FF Adventure", "Mana Recollection"),
     },
     {
-        "id": 8102, "key": "tower_recollection", "name": "Tower Recollection",
-        "log": "Recollection of the Tower", "plural": "Recollections of the Tower", "article": 0,
-        "desc": "A crystal tablet that remembers a\ntower reaching up to Paradise.\nUse it with a Crystal Boy.",
+        "id": 8102, "key": "tower_recollection", "name": "Jueno Recollection II",
+        "log": "Recollection of Jueno II", "plural": "Recollections of Jueno II", "article": 0,
+        "desc": "A crystal tablet that remembers the\nsecond part of the Legend of Jueno.\nUse it with a Crystal Boy.",
+        "icon": "cart_ffl1.png",
+        "old_names": ("Tower Recollection",),
+    },
+    {
+        "id": 8103, "key": "magi_recollection", "name": "Jueno Recollection III",
+        "log": "Recollection of Jueno III", "plural": "Recollections of Jueno III", "article": 0,
+        "desc": "A crystal tablet that remembers the\nlast part of the Legend of Jueno.\nUse it with a Crystal Boy.",
+        "icon": "cart_ffl2.png",
+        "old_names": ("Magi Recollection",),
+    },
+    {
+        "id": 8104, "key": "time_recollection", "name": "Jueno Recollection IV",
+        "log": "Recollection of Jueno IV", "plural": "Recollections of Jueno IV", "article": 0,
+        "desc": "A crystal tablet that remembers the\nfourth part of the Legend of Jueno.\nUse it with a Crystal Boy.",
+        "icon": "cart_ffl3.png",
+        "title": "SEIKEN DENSETSU",   # ROM header title (the addon matches the ROM by this)
+        "old_names": ("Time Recollection", "Dungeon Recollection"),
+    },
+    # The event's games (Horro's Visit, crystalboy-games). Same treatment as the Jueno cartridges.
+    {
+        "id": 8105, "key": "dragonland1", "name": "Dragonland I",
+        "log": "Recollection of Dragonland I", "plural": "Recollections of Dragonland I", "article": 0,
+        "desc": "A crystal tablet that remembers the\nfirst part of Dragonland.\nUse it with a Crystal Boy.",
+        "icon": "cart_ffa.png",
+    },
+    {
+        "id": 8106, "key": "dragonland2", "name": "Dragonland II",
+        "log": "Recollection of Dragonland II", "plural": "Recollections of Dragonland II", "article": 0,
+        "desc": "A crystal tablet that remembers the\nsecond part of Dragonland.\nUse it with a Crystal Boy.",
         "icon": "cart_ffl1.png",
     },
     {
-        "id": 8103, "key": "magi_recollection", "name": "Magi Recollection",
-        "log": "Recollection of the Magi", "plural": "Recollections of the Magi", "article": 0,
-        "desc": "A crystal tablet that remembers the\nscattered pieces of a goddess.\nUse it with a Crystal Boy.",
+        "id": 8107, "key": "dragonland3", "name": "Dragonland III",
+        "log": "Recollection of Dragonland III", "plural": "Recollections of Dragonland III", "article": 0,
+        "desc": "A crystal tablet that remembers the\nthird part of Dragonland.\nUse it with a Crystal Boy.",
         "icon": "cart_ffl2.png",
     },
     {
-        "id": 8104, "key": "time_recollection", "name": "Time Recollection",
-        "log": "Recollection of Time", "plural": "Recollections of Time", "article": 0,
-        "desc": "A crystal tablet that remembers a\nship sailing through time.\nUse it with a Crystal Boy.",
+        "id": 8108, "key": "dragonland4", "name": "Dragonland IV",
+        "log": "Recollection of Dragonland IV", "plural": "Recollections of Dragonland IV", "article": 0,
+        "desc": "A crystal tablet that remembers the\nfourth part of Dragonland.\nUse it with a Crystal Boy.",
         "icon": "cart_ffl3.png",
-        "title": "SEIKEN DENSETSU",   # ROM header title (the addon matches the ROM by this)
+    },
+    {
+        "id": 8109, "key": "dragonland5", "name": "Dragonland V",
+        "log": "Recollection of Dragonland V", "plural": "Recollections of Dragonland V", "article": 0,
+        "desc": "A crystal tablet that remembers the\nlast part of Dragonland.\nUse it with a Crystal Boy.",
+        "icon": "cart_ffa.png",
     },
 ]
 
@@ -265,22 +299,26 @@ def dat_status(client):
 KI_REL = os.path.join("ROM", "175", "35.DAT")
 KEY_ITEMS = [
     {
-        "id": 1634, "category": 2, "name": "Memory of the Mana Tree", "plural": "Memories of the Mana Tree",
-        "desc": "\nA memory the Recollection of the Mana Tree\nleft behind. While Signet is active,\nexperience from monsters is raised by 1%.",
+        "id": 1634, "category": 2, "name": "Memory of Jueno I", "plural": "Memories of Jueno I",
+        "replaces": ("Memory of the Mana Tree",),
+        "desc": "\nA memory the Recollection of Jueno I\nleft behind. While Signet is active,\nexperience from monsters is raised by 1%.",
     },
     {
-        "id": 2605, "category": 2, "name": "Memory of the Tower", "plural": "Memories of the Tower",
-        "desc": "\nA memory the Recollection of the Tower\nleft behind. While Signet is active,\nexperience from monsters is raised by 1%.",
+        "id": 2605, "category": 2, "name": "Memory of Jueno II", "plural": "Memories of Jueno II",
+        "replaces": ("Memory of the Tower",),
+        "desc": "\nA memory the Recollection of Jueno II\nleft behind. While Signet is active,\nexperience from monsters is raised by 1%.",
     },
     {
         # the game file has a placeholder here; the server never uses this id
-        "id": 2841, "category": 2, "name": "Memory of the Magi", "plural": "Memories of the Magi", "replaces": ("\x81Q",),
-        "desc": "\nA memory the Recollection of the Magi\nleft behind. While Signet is active,\nexperience from monsters is raised by 1%.",
+        "id": 2841, "category": 2, "name": "Memory of Jueno III", "plural": "Memories of Jueno III",
+        "replaces": ("\x81Q", "Memory of the Magi"),
+        "desc": "\nA memory the Recollection of Jueno III\nleft behind. While Signet is active,\nexperience from monsters is raised by 1%.",
     },
     {
         # a Rhapsodies-era "cheer" the server never gives on this 75-era server
-        "id": 2716, "category": 2, "name": "Memory of Time", "plural": "Memories of Time", "replaces": ("Cheer: Lamb",),
-        "desc": "\nA memory the Recollection of Time\nleft behind. While Signet is active,\nexperience from monsters is raised by 1%.",
+        "id": 2716, "category": 2, "name": "Memory of Jueno IV", "plural": "Memories of Jueno IV",
+        "replaces": ("Cheer: Lamb", "Memory of Time", "Memory of the Dungeon"),
+        "desc": "\nA memory the Recollection of Jueno IV\nleft behind. While Signet is active,\nexperience from monsters is raised by 1%.",
     },
 ]
 KI_ENTRY = 0x2BC

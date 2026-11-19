@@ -1612,7 +1612,7 @@ class RatesTab(tk.Frame):
             ttk.Spinbox(inner, from_=field[5], to=field[6], increment=1 if field[7] == "int" else 0.25,
                         textvariable=var, width=8).grid(row=row, column=1, padx=6, pady=2)
             row += 1
-        for k in (2, 20, 18, 23, 0):            # era exp tables, fast travel, full bags, short quest waits, all crafts
+        for k in (2, 20, 18, 23, 0, 24):        # era exp tables, fast travel, full bags, short quest waits, all crafts, seasonal events
             R[k], row = row, row + 1
         row = header("World", row)
         for k in (3, 1, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14):
@@ -1722,6 +1722,12 @@ class RatesTab(tk.Frame):
                        "Forge Your Destiny 1 hour at the forge (era: three game days). Off = the era waits.",
                        variable=self.short_quest_waits, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
                        wraplength=520, justify="left").grid(row=R[23], column=0, columnspan=2, sticky="w", padx=6, pady=2)
+        # (2026-11-18) seasonal events: by their dates (default), all year, or none (events_mode.lua)
+        tk.Label(inner, text="Seasonal events (Harvest Festival, Starlight, Egg Hunt, Horro's Visit)", bg=BG, fg=FG,
+                 anchor="w", width=38, wraplength=300, justify="left").grid(row=R[24], column=0, sticky="w", padx=6, pady=2)
+        self.events = tk.StringVar(value=self.EVENTS_LABELS[core.clean_events(rates.get("events", "date"))])
+        ttk.Combobox(inner, values=list(self.EVENTS_LABELS.values()), state="readonly", textvariable=self.events,
+                     width=16).grid(row=R[24], column=1, padx=6, pady=2)
         if tp is not None:
             self.ai_model_row(inner, R[21])
         self.show_world(rates)
@@ -1817,6 +1823,12 @@ class RatesTab(tk.Frame):
         self.era_exp.set(bool(values.get("era_exp", True)))
         self.fast_travel.set(all(str(values.get(k, 1)) not in ("0", "0.0") for k in self.FAST_TRAVEL))
 
+    EVENTS_LABELS = {"date": "By date", "on": "Always on", "off": "Off"}
+
+    def events_value(self):
+        label = self.events.get()
+        return next((k for k, v in self.EVENTS_LABELS.items() if v == label), "date")
+
     BOOL_KEYS = ("all_crafts", "ah_sim", "era_exp", "conquest_sim", "crowds", "crowds_chat", "crowds_chat_ai", "crowds_field",
                  "bots", "squad_chat", "full_bags", "spell_scrolls", "short_quest_waits")
     TEXT_KEYS = (("crowds_per_zone", "crowds_size"), ("crowds_chat_amount", "crowds_chat_amount"),
@@ -1834,6 +1846,8 @@ class RatesTab(tk.Frame):
         for key, attr in self.TEXT_KEYS:
             if key in values and hasattr(self, attr):
                 getattr(self, attr).set(str(values[key]))
+        if "events" in values and hasattr(self, "events"):
+            self.events.set(self.EVENTS_LABELS[core.clean_events(values["events"])])
         self.fast_travel.set(all(str(self.vars[k].get()) not in ("0", "0.0") for k in self.FAST_TRAVEL))
         self.show_world(self.collect())
 
@@ -1927,6 +1941,7 @@ class RatesTab(tk.Frame):
         rates["full_bags"] = bool(self.full_bags.get())
         rates["spell_scrolls"] = bool(self.spell_scrolls.get())
         rates["short_quest_waits"] = bool(self.short_quest_waits.get())
+        rates["events"] = self.events_value()
         rates["bots_head_start"] = bool(self.bots_head_start.get()) and not self.head_start_done
         rates["bots_head_start_done"] = self.head_start_done
         rates["claim_shield"] = False
@@ -3842,7 +3857,7 @@ class App(tk.Tk):
         self.say(f"Getting ready to play in {world}...")
         if self.graphics_tab is not None:      # the visit's boot file is a copy of yours: put your graphics settings in first
             try:
-                core.apply_graphics(self.boot_ini, self.graphics)
+                core.apply_graphics(self.boot_ini, self.graphics, self.cfg.get("ffxi_client_dir"))
             except Exception:
                 pass
         self.launch_boot = co.write_visit_boot(self.ashita, self.cfg.get("ashita_boot", core.DEFAULT_BOOT), host)
@@ -3894,7 +3909,7 @@ class App(tk.Tk):
             self.say("Updated the loader inside Ashita.")
         if self.graphics_tab is not None:
             try:
-                core.apply_graphics(self.boot_ini, self.graphics)
+                core.apply_graphics(self.boot_ini, self.graphics, self.cfg.get("ffxi_client_dir"))
                 self.say("Applied your graphics settings.")
             except Exception as e:
                 self.say(f"Could not apply the graphics settings ({e}) - starting with the boot file as it is.")
@@ -3929,7 +3944,7 @@ class App(tk.Tk):
         cfg = self.cfg
         if self.graphics_tab is not None:
             try:
-                core.apply_graphics(self.boot_ini, self.graphics)
+                core.apply_graphics(self.boot_ini, self.graphics, self.cfg.get("ffxi_client_dir"))
                 self.say("Applied your graphics settings.")
             except Exception as e:
                 self.say(f"Could not apply the graphics settings ({e}) - starting with the boot file as it is.")
@@ -3938,6 +3953,12 @@ class App(tk.Tk):
         self.logfiles.append(alog)
         boot = getattr(self, "launch_boot", None) or cfg.get("ashita_boot", core.DEFAULT_BOOT)
         self.launch_boot = None
+        try:
+            lang = linux.apply_boot_lang(os.path.join(self.ashita, "config", "boot", boot), linux.game_lang(cfg))
+            if lang != "US":
+                self.say(f"PlayOnline language: {lang}.")
+        except Exception as e:
+            self.say(f"Could not set the PlayOnline language ({e}).")
         self.game_proc = linux.start_game(HERE, cfg, self.ashita, boot, alog)
         start, limit = time.time(), cfg.get("game_start_seconds", 300)     # the first start can download Proton's runtime
         while not core.is_running("xiloader"):
@@ -4419,16 +4440,31 @@ class SetupWizard(tk.Tk):
         tk.Label(self, text="XI: Forever Offline", bg=BG, fg=GOLD, font=("Georgia", 20, "bold")).pack(anchor="w", padx=16, pady=(14, 0))
         self.step_title = tk.Label(self, text="", bg=BG, fg=FG, font=(UI_FONT, 12, "bold"))
         self.step_title.pack(anchor="w", padx=16, pady=(2, 8))
+        # (2026-11-18, Sunie on Hyprland) the Back/Next row is packed first at the bottom, so a tall page can never push
+        # it out of the window; the window also grows to fit the page (up to the screen)
+        nav = tk.Frame(self, bg=BG)
+        nav.pack(side="bottom", fill="x", padx=16, pady=12)
         self.body = tk.Frame(self, bg=BG)
         self.body.pack(fill="both", expand=True, padx=16)
-        nav = tk.Frame(self, bg=BG)
-        nav.pack(fill="x", padx=16, pady=12)
         self.back_btn = tk.Button(nav, text="Back", command=lambda: self.show(self.page - 1), bg=PANEL, fg=FG, relief="flat", padx=14)
         self.back_btn.pack(side="left")
         self.next_btn = tk.Button(nav, text="Next", command=self.next, bg=ACCENT, fg="white", relief="flat", padx=18)
         self.next_btn.pack(side="right")
         self.pages = [self.page_folders, self.page_world, self.page_account, self.page_install]
         self.show(0)
+
+    def fit(self):
+        """Make the window tall enough for the page it shows (never taller than the screen)."""
+        try:
+            self.update_idletasks()
+            want_w = max(760, self.winfo_reqwidth())
+            want_h = max(600, self.winfo_reqheight())
+            screen_w, screen_h = self.winfo_screenwidth(), self.winfo_screenheight() - 60
+            w, h = min(want_w, screen_w), min(want_h, screen_h)
+            if w > self.winfo_width() or h > self.winfo_height():
+                self.geometry(f"{max(w, self.winfo_width())}x{max(h, self.winfo_height())}")
+        except Exception:
+            pass
 
     # ----- pages -----
     def clear(self, title):
@@ -4551,6 +4587,7 @@ class SetupWizard(tk.Tk):
         self.next_btn.configure(text="Next", command=self.next, state="normal")
         self.back_btn.configure(state="normal" if self.page > 0 else "disabled")
         self.pages[self.page]()
+        self.after_idle(self.fit)
 
     def next(self):
         problem = self.check_page()

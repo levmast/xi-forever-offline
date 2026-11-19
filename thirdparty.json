@@ -446,7 +446,7 @@
       },
       "unpack": "tree",
       "unpack_to": "proton",
-      "check": "proton/GE-Proton11-11/proton"
+      "check": "proton/GE-Proton11-11-x86_64/proton"
     },
     {
       "id": "eradats",

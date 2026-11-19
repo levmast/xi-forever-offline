@@ -270,6 +270,29 @@ def _as_root():
     return not IS_WINDOWS and hasattr(os, "geteuid") and os.geteuid() == 0
 
 
+def no_space_path(path, cache=None):
+    """Linux: MariaDB's mariadb-install-db is a shell script that splits --basedir/--datadir at spaces ("XI Forever
+    Offline" -> "XI", "Forever"...: Sunie, Fedora, 2026-11-18), so it gets a link to the same folder without spaces."""
+    if IS_WINDOWS or not any(c.isspace() for c in path):
+        return path
+    import hashlib
+    roots = [cache] if cache else [os.path.join(os.path.expanduser("~"), ".cache", "xi-forever-offline"), "/tmp/xi-forever-offline"]
+    for root in roots:
+        if any(c.isspace() for c in root):
+            continue
+        link = os.path.join(root, "mariadb-" + hashlib.sha1(os.path.abspath(path).encode("utf-8")).hexdigest()[:10])
+        try:
+            os.makedirs(root, exist_ok=True)
+            if os.path.islink(link) and os.path.realpath(link) != os.path.realpath(path):
+                os.remove(link)
+            if not os.path.islink(link):
+                os.symlink(os.path.abspath(path), link)
+            return link
+        except OSError:
+            continue
+    return path
+
+
 def init_mariadb(mariadb_dir, root_password, port, run=subprocess.run):
     """Creates the data folder once (mariadb-install-db)."""
     data = os.path.join(mariadb_dir, "data")
@@ -279,13 +302,15 @@ def init_mariadb(mariadb_dir, root_password, port, run=subprocess.run):
         cmd = [mariadb_exe(mariadb_dir, "mariadb-install-db"), f"--datadir={data}", f"--password={root_password}",
                f"--port={port}"]
     else:   # Linux: root starts with no password; set_root_password() gives it one once the server runs
-        cmd = mariadb_cmd(mariadb_dir, "mariadb-install-db") + [
-            f"--basedir={mariadb_dir}", f"--datadir={data}", "--auth-root-authentication-method=normal",
+        base = no_space_path(mariadb_dir)          # (the script can't take paths with spaces)
+        cmd = mariadb_cmd(base, "mariadb-install-db") + [
+            f"--basedir={base}", f"--datadir={os.path.join(base, 'data')}", "--auth-root-authentication-method=normal",
             "--skip-test-db"] + (["--user=root"] if _as_root() else [])
     result = run(cmd, capture_output=True, text=True, creationflags=NO_WINDOW,
-                 **({} if IS_WINDOWS else {"env": mariadb_env(mariadb_dir), "cwd": mariadb_dir}))
+                 **({} if IS_WINDOWS else {"env": mariadb_env(mariadb_dir), "cwd": base}))
     if result.returncode != 0:
-        raise RuntimeError("mariadb-install-db failed: " + (result.stderr or result.stdout)[-400:])
+        out = ((result.stderr or "") + "\n" + (result.stdout or "")).strip()
+        raise RuntimeError("mariadb-install-db failed: " + (out if len(out) <= 700 else out[:350] + " ... " + out[-350:]))
     return "Database folder created."
 
 
@@ -478,7 +503,8 @@ def create_account(mariadb_dir, port, db_password, login, password, run=subproce
         return f"The account '{login}' already exists."
     sql(mariadb_dir, port, DB_USER, db_password,
         "INSERT INTO accounts (id, login, password, timecreate, timelastmodify, status, priv) "
-        f"SELECT GREATEST(1000, IFNULL(MAX(id), 0) + 1), {quote(login)}, PASSWORD({quote(password)}), NOW(), NOW(), 1, 1 FROM accounts",
+        f"SELECT GREATEST(1000, IFNULL(MAX(id), 0) + 1), {quote(login)}, PASSWORD({quote(password)}), NOW(), NOW(), 1, 1 "
+        "FROM accounts WHERE id < 21000000",          # (below the bot accounts)
         database=DB_NAME, run=run)
     return f"Created the account '{login}'."
 
@@ -594,18 +620,56 @@ def install_own_addons(kit, ashita_dir):
         install_free_games(kit, cfg)
 
 
+# The free games this loader copied into <Ashita>\config\addons\crystalboy\roms, one file name per line, so the
+# next run knows what it may delete again. A player's own ROMs are never listed here.
+FREE_MANIFEST = "FREE-GAMES-MANIFEST.txt"
+
+# Games earlier builds shipped. They are removed when the current set is installed, so every player's folder ends up
+# with exactly the games in <kit>\crystalboy-games (the owner's rule, 2026-11-19: the Jueno games are the standard).
+RETIRED_FREE_GAMES = ("Aevilia.gbc", "Airaki.gb", "Labirinth.gbc", "GBHack.gbc")
+
+
 def install_free_games(kit, crystalboy_cfg):
-    """The free Game Boy games in <kit>\\crystalboy-games go into Crystal Boy's roms folder (never over a file there)."""
+    """Make Crystal Boy's roms folder match <kit>\\crystalboy-games.
+
+    A shipped game is copied over whatever is there (so an old or damaged copy is replaced), a game this kit used to
+    ship is deleted (RETIRED_FREE_GAMES plus whatever the last run listed in FREE-GAMES-MANIFEST.txt), and anything
+    else in the folder -- the player's own ROMs -- is left alone. Returns the names it copied."""
     src = os.path.join(kit, "crystalboy-games")
     roms = os.path.join(crystalboy_cfg, "roms")
     if not os.path.isdir(src):
         return []
     os.makedirs(roms, exist_ok=True)
+    games = sorted(n for n in os.listdir(src) if n.lower().endswith((".gb", ".gbc")))
+    manifest = os.path.join(roms, FREE_MANIFEST)
+    stale = set(RETIRED_FREE_GAMES)
+    try:
+        with open(manifest, encoding="utf-8") as f:
+            stale.update(line.strip() for line in f if line.strip() and not line.startswith("#"))
+    except OSError:
+        pass
+    for name in sorted(stale - set(games)):
+        path = os.path.join(roms, name)
+        if os.path.isfile(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass                    # read-only or open in game: try again next launch
     added = []
-    for name in sorted(os.listdir(src)):
-        if name.lower().endswith((".gb", ".gbc")) and not os.path.exists(os.path.join(roms, name)):
-            shutil.copy2(os.path.join(src, name), os.path.join(roms, name))
+    for name in games:
+        dest = os.path.join(roms, name)
+        same = os.path.isfile(dest) and os.path.getsize(dest) == os.path.getsize(os.path.join(src, name))
+        shutil.copy2(os.path.join(src, name), dest)
+        if not same:
             added.append(name)
+    try:
+        with open(manifest, "w", encoding="utf-8", newline="\n") as f:
+            f.write("# The free games this kit put in this folder (removed again when the kit stops shipping them).\n")
+            f.write("# Your own ROMs are never listed here, and never touched. One file name per line.\n")
+            for name in games:
+                f.write(name + "\n")
+    except OSError:
+        pass
     for name in ("CREDITS.md",):
         if os.path.exists(os.path.join(src, name)):
             shutil.copy2(os.path.join(src, name), os.path.join(roms, "FREE-GAMES-" + name))
@@ -668,6 +732,11 @@ def run_setup(kit, choices, tp, log=print, fetch=None, run=subprocess.run, popen
         try:
             tp.install(items["server"], kit, ashita, fetch=fetch, log=log, server=server)
         except Exception as problem:
+            if not IS_WINDOWS and "no file matching" in str(problem):
+                # (Sunie, 2026-11-18) the Linux server is built on GitHub after each release and arrives about 40 minutes
+                # later; until then the release has only the Windows files
+                raise RuntimeError("The Linux server for the newest version is still being built (it arrives about 40 "
+                                   "minutes after a release). Wait a little and press Install again.")
             raise RuntimeError(f"The server files could not be downloaded ({problem}). Check the internet connection, "
                                "or choose a folder with a built server.")
     if "vcredist" in items and not tp.status(items["vcredist"], kit, ashita)[0]:      # (Windows only)

@@ -178,8 +178,9 @@ def ensure_account(conn, source_login, new_login, new_password, hasher=hash_pass
         raise RuntimeError(f"the first account '{source_login}' was not found, so there is nothing to copy")
     columns = [d[0] for d in cur.description]
     values = dict(zip(columns, row))
-    cur.execute("SELECT MAX(id) FROM accounts")
-    values["id"] = int(cur.fetchone()[0]) + 1
+    # below the bot accounts (21000000 up): the next id after the last bot made the bots play this account (Reika)
+    cur.execute("SELECT MAX(id) FROM accounts WHERE id < 21000000")
+    values["id"] = max(1000, int(cur.fetchone()[0] or 0) + 1)
     values["login"] = new_login
     values["password"] = hasher(new_password, values.get("password"))
     cur.execute(f"INSERT INTO accounts ({', '.join(columns)}) VALUES ({', '.join('?' for _ in columns)})", [values[c] for c in columns])

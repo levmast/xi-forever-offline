@@ -24,14 +24,34 @@ LandSandBoat, Ashita 4, era DAT pack). This file is written for whoever installs
 | Gobbiebag part | Jeuno fame | Reward item | Game (ROM header title) | Finished after | On hand-in to Bluffnix |
 |---|---|---|---|---|---|
 | I | 3 | 8100 Crystal Boy | - | - | - |
-| II | 4 | 8101 Mana Recollection | Final Fantasy Adventure (SEIKEN DENSETSU) | 10 h play | KI 1634 Memory of the Mana Tree, 10,000 gil |
-| III | 5 | 8102 Tower Recollection | Final Fantasy Legend (SAGA) | 8 h | KI 2605 Memory of the Tower, 15,000 gil |
-| IV | 5 | 8103 Magi Recollection | Final Fantasy Legend II (SAGA2 DX / SAGA2) | 12 h | KI 2841 Memory of the Magi, 20,000 gil |
-| V | 6 | 8104 Time Recollection | Final Fantasy Legend III (SAGA3 DX / SAGA3) | 15 h | KI 2716 Memory of Time, 25,000 gil |
+| II | 4 | 8101 Jueno Recollection I | Legend of Jueno (JUENO LEG 1JUNO) or Final Fantasy Adventure (SEIKEN DENSETSU) | 9 h free / 10 h own ROM | KI 1634 Memory of Jueno I, 10,000 gil |
+| III | 5 | 8102 Jueno Recollection II | Legend of Jueno 2 (JUENO LEG 2JUNO) or Final Fantasy Legend (SAGA) | 14 h free / 8 h own ROM | KI 2605 Memory of Jueno II, 15,000 gil |
+| IV | 5 | 8103 Jueno Recollection III | Legend of Jueno 3 (JUENO LEG 3JUNO) or Final Fantasy Legend II (SAGA2 DX / SAGA2) | 13 h free / 12 h own ROM | KI 2841 Memory of Jueno III, 20,000 gil |
+| V | 6 | 8104 Jueno Recollection IV | Legend of Jueno 4 (JUENO LEG 4JUNO) or Final Fantasy Legend III (SAGA3 DX / SAGA3) | 7 h free / 15 h own ROM | KI 2716 Memory of Jueno IV, 25,000 gil |
 
 Every hand-in also gives a Page from the Dragon Chronicles (4198) and an Anniversary Ring (15793, made non-Rare so
 they stack). Each Memory key item = +1% exp from monsters while Signet is active (they add up; players only, not
 squad mates/trusts). Parts VI-X stay closed. Bluffnix speaks his own lines in chat (no bag cutscenes).
+
+## Horro's Visit (the Dragon Quest X event)
+
+The seasonal event (`server/horros_visit.lua`, copied to `<server>\modules\custom\lua\`) has its own five games.
+Talking to a town slime (Slarin in Southern San d'Oria, Sludge in Bastok Markets, Ultra Slime in Windurst Woods)
+gives every character **8100 Crystal Boy and 8105 Dragonland I once**; the other four parts are prizes at **15 slime
+coins each**. The ROMs ship in `roms\` with the Jueno ones and are installed and replaced the same way.
+
+| Item | Game (ROM header title) | Finished after | On finishing |
+|---|---|---|---|
+| 8105 Dragonland I | Dragonland 1 (DRAGONLAND 1) | 8 h | +1% exp while Signet is active |
+| 8106 Dragonland II | Dragonland 2 (DRAGONLAND 2) | 8 h | +1% exp while Signet is active |
+| 8107 Dragonland III | Dragonland 3 (DRAGONLAND 3) | 8 h | +1% combat and magic skill-up rate while Signet is active |
+| 8108 Dragonland IV | Dragonland 4 (DRAGONLAND 4) | 8 h | +1% combat and magic skill-up rate while Signet is active |
+| 8109 Dragonland V | Dragonland 5 (DRAGONLAND 5) | 8 h | +1% combat and magic skill-up rate while Signet is active |
+
+These five have no Memory key items: the client's key-item file is full (all 3,192 ids are named), so the server
+records each finished part on the character from the addon's claims file (`[CB]DL1`-`[CB]DL5` character variables,
+refreshed at most every five minutes while something is still missing, or immediately with `!cbdl`) and adds the
+bonus while Signet is active, exactly like the Memories above.
 
 ## Requirements on the target machine
 - LandSandBoat-based server with the interaction/quest framework and `modules\init.txt` (Phoenix fork tested).
@@ -67,7 +87,7 @@ squad mates/trusts). Parts VI-X stay closed. Bluffnix speaks his own lines in ch
   `<ashita_dir>\config\addons\crystalboy\claims\<CharacterName>\claims.lua`, with `ashita_dir` taken from
   `C:\FFXISOLO\config.json` (fallback `C:\Ashita-v4beta-main`). If the kit or Ashita live elsewhere on the laptop,
   change `ashitaDir()` near the middle of the file. The server and the game must be on the same PC.
-- Item ids 8100-8104 and key items 1634, 2605, 2841, 2716 must be free on that server and client (the installer checks the client side).
+- Item ids 8100-8109 and key items 1634, 2605, 2841, 2716 must be free on that server and client (the installer checks the client side).
 - The Gobbiebag rework replaces the quests' sections completely; it duplicates the era fame values (3,4,5,5,6,6,7,7,8,9)
   that Phoenix's era module sets.
 - The 1% exp bonus overrides `xi.experiencePoints.calculate` and calls the previous version, so it stacks with other modules (squad, era exp).

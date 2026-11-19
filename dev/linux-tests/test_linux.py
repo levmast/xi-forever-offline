@@ -462,9 +462,10 @@ class Downloads(unittest.TestCase):
         self.assertEqual((found["sha512"], found["url"]), ("abc123", "https://d/p.tar.gz"))
 
     def test_tree_install(self):
-        data = tar_bytes([("GE-Proton11-11/proton", b"#!/usr/bin/env python3\n", 0o755, None),
-                          ("GE-Proton11-11/files/lib/libx.so.1", b"x", 0o644, None),
-                          ("GE-Proton11-11/files/lib/libx.so", None, 0, "libx.so.1")])
+        # (the real GE-Proton11-11 tarball's top folder is GE-Proton11-11-x86_64: Sunie's log, 2026-11-18)
+        data = tar_bytes([("GE-Proton11-11-x86_64/proton", b"#!/usr/bin/env python3\n", 0o755, None),
+                          ("GE-Proton11-11-x86_64/files/lib/libx.so.1", b"x", 0o644, None),
+                          ("GE-Proton11-11-x86_64/files/lib/libx.so", None, 0, "libx.so.1")])
         digest = hashlib.sha512(data).hexdigest()
         release = {"tag_name": "GE-Proton11-11", "assets": [
             {"name": "GE-Proton11-11-x86_64.tar.gz", "browser_download_url": "https://d/p.tar.gz"},
@@ -480,7 +481,7 @@ class Downloads(unittest.TestCase):
         item = [i for i in tp.load_manifest(KIT, "linux") if i["id"] == "proton"][0]
         with tempfile.TemporaryDirectory() as kit:
             tp.install(item, kit, os.path.join(kit, "Ashita"), fetch=fetch, log=lambda m: None)
-            proton = os.path.join(kit, "proton", "GE-Proton11-11")
+            proton = os.path.join(kit, "proton", "GE-Proton11-11-x86_64")
             self.assertTrue(os.access(os.path.join(proton, "proton"), os.X_OK))
             self.assertEqual(os.readlink(os.path.join(proton, "files", "lib", "libx.so")), "libx.so.1")
             self.assertTrue(tp.status(item, kit, os.path.join(kit, "Ashita"))[0])
@@ -489,6 +490,20 @@ class Downloads(unittest.TestCase):
             shutil.rmtree(os.path.join(kit, "downloads"))
             with self.assertRaises(RuntimeError):
                 tp.install(item, kit, os.path.join(kit, "Ashita"), fetch=bad, log=lambda m: None)
+
+    def test_tree_unpack_twice(self):
+        # a relative link deep inside (like GE-Proton's default_pfx drivers) must unpack again over the first copy
+        entries = [("P/files/lib/wine/x.sys", b"x", 0o644, None),
+                   ("P/files/share/pfx/drive_c/windows/system32/drivers/x.sys", None, 0, "../../../../../../lib/wine/x.sys")]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "p.tar.gz")
+            with open(path, "wb") as handle:
+                handle.write(tar_bytes(entries))
+            dest = os.path.join(tmp, "dest")
+            tp.extract_tree(path, dest)
+            tp.extract_tree(path, dest)
+            with open(os.path.join(dest, "P/files/share/pfx/drive_c/windows/system32/drivers/x.sys"), "rb") as f:
+                self.assertEqual(f.read(), b"x")
 
     def test_tree_refuses_outside(self):
         with tempfile.TemporaryDirectory() as tmp:

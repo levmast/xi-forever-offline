@@ -9,10 +9,16 @@ M.CRYSTAL_BOY = 8100
 -- Each cartridge plays the first of its titles that is in the roms folder. The free games that come with
 -- XI: Forever Offline (crystalboy-games, copied into roms) are last, so a ROM of your own still comes first.
 M.list = {
-    [8101] = { name = 'Mana Recollection', titles = { 'SEIKEN DENSETSU', 'FINAL FANTASY ADV', 'FF ADVENTURE', 'MYSTIC QUEST', 'AEVILIA' } },
-    [8102] = { name = 'Tower Recollection', titles = { 'SAGA', 'AIRAKI1' } },
-    [8103] = { name = 'Magi Recollection', titles = { 'SAGA2 DX', 'SAGA2', 'LABIRYNT' } },
-    [8104] = { name = 'Time Recollection', titles = { 'SAGA3 DX', 'SAGA3', 'GBHACK' } },
+    [8101] = { name = 'Jueno Recollection I', titles = { 'SEIKEN DENSETSU', 'FINAL FANTASY ADV', 'FF ADVENTURE', 'MYSTIC QUEST', 'JUENO LEG 1JUNO' } },
+    [8102] = { name = 'Jueno Recollection II', titles = { 'SAGA', 'JUENO LEG 2JUNO' } },
+    [8103] = { name = 'Jueno Recollection III', titles = { 'SAGA2 DX', 'SAGA2', 'JUENO LEG 3JUNO' } },
+    [8104] = { name = 'Jueno Recollection IV', titles = { 'SAGA3 DX', 'SAGA3', 'JUENO LEG 4JUNO' } },
+    -- Horro's Visit (the Dragon Quest X event): handed out and sold by the slimes.
+    [8105] = { name = 'Dragonland I',   titles = { 'DRAGONLAND 1' } },
+    [8106] = { name = 'Dragonland II',  titles = { 'DRAGONLAND 2' } },
+    [8107] = { name = 'Dragonland III', titles = { 'DRAGONLAND 3' } },
+    [8108] = { name = 'Dragonland IV',  titles = { 'DRAGONLAND 4' } },
+    [8109] = { name = 'Dragonland V',   titles = { 'DRAGONLAND 5' } },
 }
 
 -- Only the main inventory counts: the Crystal Boy and the cartridge must be in your bag to play

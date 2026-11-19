@@ -10,10 +10,10 @@
 --   * the reward is a Crystal Boy item instead of 5 more slots.
 -- Parts without a reward yet stay closed, as they were.
 --   Part I  -> Crystal Boy (8100)
---   Part II -> Recollection of the Mana Tree (8101, plays Final Fantasy Adventure)
---   Part III -> Recollection of the Tower (8102, Final Fantasy Legend)
---   Part IV  -> Recollection of the Magi  (8103, Final Fantasy Legend II)
---   Part V   -> Recollection of Time      (8104, Final Fantasy Legend III)
+--   Part II -> Jueno Recollection I   (8101, plays Legend of Jueno)
+--   Part III -> Jueno Recollection II  (8102, Legend of Jueno 2)
+--   Part IV  -> Jueno Recollection III (8103, Legend of Jueno 3)
+--   Part V   -> Jueno Recollection IV  (8104, Legend of Jueno 4)
 -- After each: finish the game in the Crystal Boy (play time, see the addon's rewards.lua), then bring the Recollection
 -- back to Bluffnix: a Memory key item (+1% monster exp under Signet, they add up), Page from the Dragon Chronicles,
 -- Anniversary Ring, and 10,000 / 15,000 / 20,000 / 25,000 gil. Once per character.
@@ -35,43 +35,43 @@ local RECOLLECTIONS =
 {
     [8101] =
     {
-        titles  = { 'SEIKEN DENSETSU', 'FINAL FANTASY ADV', 'FF ADVENTURE', 'MYSTIC QUEST' },
-        game    = 'Final Fantasy Adventure',
-        memory  = 1634, -- "Memory of the Mana Tree" (key item text written by install_crystalboy_items.py)
+        titles  = { 'SEIKEN DENSETSU', 'FINAL FANTASY ADV', 'FF ADVENTURE', 'MYSTIC QUEST', 'JUENO LEG 1JUNO' },
+        game    = 'Legend of Jueno',
+        memory  = 1634, -- "Memory of Jueno I" (key item text written by install_crystalboy_items.py)
         items   = { 4198, 15793 }, -- Page from the Dragon Chronicles, Anniversary Ring (no longer Rare: they stack)
         gil     = 10000,
         var     = '[CB]Done8101',
-        story   = 'You saw the end? Tell Bluffnix everything! ...The tree, the sword, the girl... hmm, hmm... Bluffnix has goosebumps.',
+        story   = 'You saw how it ends? Tell Bluffnix everything! ...The road, the city, the people... hmm, hmm... Bluffnix has goosebumps.',
     },
     [8102] =
     {
-        titles  = { 'SAGA' },
-        game    = 'Final Fantasy Legend',
-        memory  = 2605, -- "Memory of the Tower"
+        titles  = { 'SAGA', 'JUENO LEG 2JUNO' },
+        game    = 'Legend of Jueno 2',
+        memory  = 2605, -- "Memory of Jueno II"
         items   = { 4198, 15793 },
         gil     = 15000,
         var     = '[CB]Done8102',
-        story   = 'You reached the top of the tower? And what was waiting in Paradise...? Hmm! Bluffnix will think about that one for a long time.',
+        story   = 'The second part, all the way to the end? Hmm! Bluffnix will think about that one for a long time.',
     },
     [8103] =
     {
-        titles  = { 'SAGA2 DX', 'SAGA2' },
-        game    = 'Final Fantasy Legend II',
-        memory  = 2841, -- "Memory of the Magi"
+        titles  = { 'SAGA2 DX', 'SAGA2', 'JUENO LEG 3JUNO' },
+        game    = 'Legend of Jueno 3',
+        memory  = 2841, -- "Memory of Jueno III"
         items   = { 4198, 15793 },
         gil     = 20000,
         var     = '[CB]Done8103',
-        story   = 'All the MAGI gathered, and the boy found his father? Bluffnix knew it! ...Bluffnix hoped it, anyway.',
+        story   = 'So that is how the whole legend ends! Bluffnix knew it! ...Bluffnix hoped it, anyway.',
     },
     [8104] =
     {
-        titles  = { 'SAGA3 DX', 'SAGA3' },
-        game    = 'Final Fantasy Legend III',
-        memory  = 2716, -- "Memory of Time"
+        titles  = { 'SAGA3 DX', 'SAGA3', 'JUENO LEG 4JUNO' },
+        game    = 'Legend of Jueno 4',
+        memory  = 2716, -- "Memory of Jueno IV"
         items   = { 4198, 15793 },
         gil     = 25000,
         var     = '[CB]Done8104',
-        story   = 'Past, future, and back again, and the flood stopped? Bluffnix feels dizzy just listening. What a ride!',
+        story   = 'All four parts, right to the very end? Bluffnix has to sit down. What a story!',
     },
 }
 
@@ -163,7 +163,7 @@ local talk =
         start =
         {
             'Crystal Boy friend! Bluffnix found something in a cracked crate from an old Mithra caravan.',
-            'A Recollection! A crystal tablet with a memory inside: a far away land, a young hero, a girl with a strange pendant... and a great tree full of mana.',
+            'A Recollection! A crystal tablet with a memory inside: a city of stone and lanterns, a young traveler, and a long road that starts at its gates.',
             'But the crystal is cloudy and the frame is broken. Bluffnix needs a square of ram leather, a mythril ingot, a square of wool cloth and a turquoise to make it clear again.',
             '...A bowl of Goblin Stew also helps. Thinking is hungry work.',
         },
@@ -173,9 +173,9 @@ local talk =
         },
         finish =
         {
-            'Look! Clear as morning water. Bluffnix can almost hear the wind in the leaves of that tree.',
-            'This is the Recollection of the Mana Tree. Use it with your Crystal Boy and you walk the old hero\'s road yourself.',
-            'People say whoever sees the whole story to its end keeps a little of the tree\'s wisdom. Bluffnix wonders what you will find there...',
+            'Look! Clear as morning water. Bluffnix can almost hear the street cries of that city.',
+            'This is the Recollection of Jueno I. Use it with your Crystal Boy and walk the road yourself.',
+            'People say whoever sees the whole story to its end keeps a little of that city\'s wisdom. Bluffnix wonders what you will find there...',
         },
     },
 }
@@ -200,15 +200,15 @@ talk[3] =
     start =
     {
         'Psst! Bluffnix found another Recollection. Do not ask where. ...Fine: at the bottom of a well, under a very angry crab.',
-        'Inside is a tower so tall it pierces the sky. People climb it, world after world, because they say Paradise waits at the top.',
+        'This one is the second part of the legend. Same city behind you, a longer road ahead, and more people who want something from you.',
         'The tablet is chipped. Bluffnix needs a square of black tiger leather, a gold ingot, a square of velvet cloth and a painite to mend it.',
         '...Goblin Stew also works. Bluffnix always says so.',
     },
-    remind = { 'The tower tablet waits! Black tiger leather, a gold ingot, velvet cloth and a painite. Or Goblin Stew, hehe.' },
+    remind = { 'The second tablet waits! Black tiger leather, a gold ingot, velvet cloth and a painite. Or Goblin Stew, hehe.' },
     finish =
     {
-        'Leather to hold it, gold to seal the chip, velvet to polish... and the painite makes the tower shine again. Look!',
-        'The Recollection of the Tower. Climb it with your Crystal Boy, and tell Bluffnix what is at the top.',
+        'Leather to hold it, gold to seal the chip, velvet to polish... and the painite makes it shine again. Look!',
+        'The Recollection of Jueno II. Carry on with your Crystal Boy, and tell Bluffnix where the road goes.',
     },
 }
 
@@ -217,15 +217,15 @@ talk[4] =
     start =
     {
         'Crystal Boy friend! This one Bluffnix traded from a Galka who traded it from a Mithra who found it in a Quadav nest. Very old.',
-        'Inside: pieces of a goddess, scattered across many worlds. MAGI, they are called. A boy is gathering them, looking for his lost father.',
+        'Inside: the last part of the legend. Everything the first two parts promised, and a few things nobody promised at all.',
         'The tablet is cracked in three places. Bring a cermet chunk, a darksteel ingot, a square of silk cloth and a goshenite.',
         '...Or Goblin Stew. Bluffnix is very consistent about stew.',
     },
-    remind = { 'The MAGI tablet is still cracked! A cermet chunk, a darksteel ingot, silk cloth and a goshenite. Or Goblin Stew.' },
+    remind = { 'The last tablet is still cracked! A cermet chunk, a darksteel ingot, silk cloth and a goshenite. Or Goblin Stew.' },
     finish =
     {
         'Cermet for the frame, darksteel for the corners, silk to wipe it, goshenite to wake it. Listen to it hum!',
-        'The Recollection of the Magi. Find every piece of the goddess, and find the father too. Bluffnix wants to know how it ends!',
+        'The Recollection of Jueno III. See the legend to its end, and tell Bluffnix how it finishes!',
     },
 }
 
@@ -233,16 +233,16 @@ talk[5] =
 {
     start =
     {
-        'Bluffnix found the strangest Recollection yet. Every time Bluffnix looks at it, the memory is a little different.',
-        'A world sinking under a great flood, and travelers riding a ship that sails through time itself, past and future, to stop it.',
+        'Bluffnix found one more Recollection. Do not ask how. ...Fine: a Galka owed Bluffnix a favour.',
+        'The fourth and last part of the legend. Everything the first three parts set up, and one long road to finish it.',
         'It flickers too much to play. Bluffnix needs a rhodonite, a paktong ingot, a square of moblinweave and a square of bugard leather.',
-        '...Goblin Stew helps Bluffnix think about time. Everything is easier with stew.',
+        '...Goblin Stew helps Bluffnix think. Everything is easier with stew.',
     },
-    remind = { 'The time tablet still flickers! Rhodonite, a paktong ingot, moblinweave and bugard leather. Or Goblin Stew, hehe.' },
+    remind = { 'The last tablet still flickers! Rhodonite, a paktong ingot, moblinweave and bugard leather. Or Goblin Stew, hehe.' },
     finish =
     {
-        'There! It stopped flickering. Now the memory stays still... mostly. Time is tricky.',
-        'The Recollection of Time. Sail the time ship with your Crystal Boy, and come back and tell Bluffnix if you stopped the flood.',
+        'There! It stopped flickering. Now the memory holds still... mostly. Four parts of a legend are tricky.',
+        'The Recollection of Jueno IV. Walk the last road with your Crystal Boy, and come back and tell Bluffnix how it ends.',
     },
 }
 
@@ -485,6 +485,76 @@ m:addOverride('xi.server.onServerStart', function()
     end
 end)
 
+-- The event's games (Horro's Visit, cartridges 8105-8109 in crystalboy-games). The client key-item file has no free
+-- ids left, so a finished game is recorded on the character from the addon's claims file instead of with a Memory key
+-- item: parts I-II add 1% experience each, parts III-V add 1% to the combat and magic skill-up rates each, all while
+-- Signet is active. The claims file is only read while something is still missing, at most once every five minutes.
+local DRAGONLAND =
+{
+    { title = 'DRAGONLAND 1', var = '[CB]DL1', kind = 'exp',   name = 'Dragonland I'   },
+    { title = 'DRAGONLAND 2', var = '[CB]DL2', kind = 'exp',   name = 'Dragonland II'  },
+    { title = 'DRAGONLAND 3', var = '[CB]DL3', kind = 'skill', name = 'Dragonland III' },
+    { title = 'DRAGONLAND 4', var = '[CB]DL4', kind = 'skill', name = 'Dragonland IV'  },
+    { title = 'DRAGONLAND 5', var = '[CB]DL5', kind = 'skill', name = 'Dragonland V'   },
+}
+
+local DL_CHECK = {}   -- [player id] = os.time() of the last claims read
+local DL_MODS  = {}   -- [player id] = { combat, magic }: the percentage we have added
+
+local function dragonlandCount(player, kind)
+    local n = 0
+    for _, g in ipairs(DRAGONLAND) do
+        if g.kind == kind and player:getCharVar(g.var) == 1 then n = n + 1 end
+    end
+
+    return n
+end
+
+-- +1% skill-up chance per finished part III-V, while Signet is active. Only our own share is ever taken back out, so
+-- a Moghancement or a piece of gear that also raises the rate keeps its bonus.
+local function applySkillGain(player)
+    local have = player:hasStatusEffect(xi.effect.SIGNET) and dragonlandCount(player, 'skill') or 0
+    local was  = DL_MODS[player:getID()] or { combat = 0, magic = 0 }
+    if was.combat ~= have then
+        player:setMod(xi.mod.COMBAT_SKILLUP_RATE, player:getMod(xi.mod.COMBAT_SKILLUP_RATE) - was.combat + have)
+        was.combat = have
+    end
+
+    if was.magic ~= have then
+        player:setMod(xi.mod.MAGIC_SKILLUP_RATE, player:getMod(xi.mod.MAGIC_SKILLUP_RATE) - was.magic + have)
+        was.magic = have
+    end
+
+    DL_MODS[player:getID()] = was
+end
+
+local function refreshDragonland(player, force)
+    if not player then return end
+    local open = false
+    for _, g in ipairs(DRAGONLAND) do
+        if player:getCharVar(g.var) == 0 then open = true; break end
+    end
+
+    local now  = os.time()
+    local last = DL_CHECK[player:getID()] or 0
+    if not force and (not open or now - last < 300) then
+        applySkillGain(player)
+        return
+    end
+
+    DL_CHECK[player:getID()] = now
+    local claims = readClaims(player)
+    for _, g in ipairs(DRAGONLAND) do
+        if player:getCharVar(g.var) == 0 and type(claims[g.title]) == 'table' then
+            player:setCharVar(g.var, 1)
+            player:printToPlayer(string.format('%s finished! %s while Signet is active from now on.', g.name,
+                g.kind == 'exp' and '+1% experience' or '+1% combat and magic skill gain'), xi.msg.channel.SYSTEM_3)
+        end
+    end
+
+    applySkillGain(player)
+end
+
 -- Memories of finished Recollections: +1% exp from monsters each while Signet is active.
 -- Added once to the final number (after Dedication, chains and the era tables), only for the player, not squad mates.
 m:addOverride('xi.experiencePoints.calculate', function(member, mob, data)
@@ -498,9 +568,15 @@ m:addOverride('xi.experiencePoints.calculate', function(member, mob, data)
         return result
     end
 
+    refreshDragonland(member)
+
     local percent = 0
     for _, ki in ipairs(MEMORY_KEY_ITEMS) do
         if member:hasKeyItem(ki) then percent = percent + 1 end
+    end
+
+    for _, g in ipairs(DRAGONLAND) do
+        if g.kind == 'exp' and member:getCharVar(g.var) == 1 then percent = percent + 1 end
     end
 
     if percent > 0 then
@@ -571,5 +647,27 @@ finishCommand.onTrigger = function(player, arg)
 end
 
 xi.module.registerCommand('cbfinish', finishCommand)
+
+-- GM helper: re-read the Crystal Boy claims now and show the Dragonland parts this character has finished.
+-- !cbdl
+local dlCommand = {}
+
+dlCommand.cmdprops =
+{
+    permission = 1,
+    parameters = 's',
+}
+
+dlCommand.onTrigger = function(player, arg)
+    refreshDragonland(player, true)
+    local out = {}
+    for _, g in ipairs(DRAGONLAND) do
+        table.insert(out, g.name .. (player:getCharVar(g.var) == 1 and ' done' or ' -'))
+    end
+
+    player:printToPlayer(table.concat(out, ' | '), xi.msg.channel.SYSTEM_3)
+end
+
+xi.module.registerCommand('cbdl', dlCommand)
 
 return m

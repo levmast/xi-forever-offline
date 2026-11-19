@@ -528,6 +528,7 @@ RATE_DEFAULTS.update({"bots_growth": "realistic"})
 RATE_DEFAULTS.update({"bots_head_start": False, "bots_head_start_done": False})   # one-time bot head start (bots_growth.lua)
 RATE_DEFAULTS.update({"spell_scrolls": False})  # squad mates need scrolls for spells of level 18+ (blue magic from monsters) (squad.lua)
 RATE_DEFAULTS.update({"short_quest_waits": True})   # Chocobo's Wounds 1 minute, Forge Your Destiny 1 hour (late/quest_waits.lua)
+RATE_DEFAULTS.update({"events": "date"})   # seasonal events: "date" (their own dates), "on" (all year), "off" (events_mode.lua)
 RATE_DEFAULTS.update({"full_bags": True})   # every bag (inventory, Mog Safe, Satchel, Sack, Case, Wardrobes) at 80 from the start (crystalboy_quests.lua)
 RATE_DEFAULTS.update({"squad_call_cooldown": 5})   # minutes before a squad mate can be called again (squad.lua)   # bots grow while you are away (bots_growth.lua)
 RATE_DEFAULTS.update({"squad_chat": True})   # squad mates answer in party chat with the local AI (squad-chat/squad_chat.py)
@@ -627,7 +628,8 @@ RATE_PRESETS = {
 PLAYER_HIDDEN_RATES = {"map.CAPACITY_RATE", "main.SPARKS_RATE", "main.MAX_LEVEL", "main.ENABLE_WOTG", "main.ENABLE_ACP",
                        "main.ENABLE_AMK", "main.ENABLE_ASA", "main.ENABLE_ABYSSEA", "main.ENABLE_SOA", "main.ENABLE_ROV",
                        "main.ENABLE_VOIDWATCH", "main.ENABLE_TVR", "main.RESTRICT_CONTENT", "main.ENABLE_TRUST_QUESTS",
-                       "main.ENABLE_DAILY_TALLY", "main.HALLOWEEN_2005"}
+                       "main.ENABLE_DAILY_TALLY", "main.HALLOWEEN_2005",
+                       "main.ROE_EXP_RATE"}   # (Records of Eminence are not in this era: Senna, 2026-11-18)
 RATE_PRESETS["Era default"] = {}
 PLAYER_RATE_PRESETS = ["Era default", "Relaxed solo", "Fast"]
 
@@ -704,6 +706,17 @@ def write_crowds_config(server_dir, rates):
     with open(os.path.join(module_dir, "quest_waits_config.lua"), "w", encoding="utf-8", newline="\n") as f:
         f.write("-- Written by the XI: Forever Offline launcher (Rates tab). Do not edit: it is rewritten every launch.\n")
         f.write("return { short = %s }\n" % ("true" if rates.get("short_quest_waits", True) else "false"))
+    with open(os.path.join(module_dir, "events_config.lua"), "w", encoding="utf-8", newline="\n") as f:
+        f.write("-- Written by the XI: Forever Offline launcher (Rates tab). Do not edit: it is rewritten every launch.\n")
+        f.write("return { mode = '%s' }\n" % clean_events(rates.get("events", "date")))
+
+
+EVENTS_MODES = ("date", "on", "off")
+
+
+def clean_events(value):
+    """Seasonal events setting: "date", "on" or "off" (anything else falls back to "date")."""
+    return value if value in EVENTS_MODES else "date"
 
 
 def clean_call_cooldown(value):
@@ -790,6 +803,8 @@ def load_rates(here):
             rates["spell_scrolls"] = bool(saved["spell_scrolls"])
         if "short_quest_waits" in saved:
             rates["short_quest_waits"] = bool(saved["short_quest_waits"])
+        if "events" in saved:
+            rates["events"] = clean_events(saved["events"])
         for key, lo, hi in (("bots_roster", 0, 600), ("bots_online", 0, 550)):
             if key in saved:
                 try:
@@ -894,7 +909,7 @@ def apply_preset(rates, name):
                          ("bots", True), ("bots_roster", 100), ("bots_online", 50), ("bots_growth", "realistic"),
                          ("squad_chat", True), ("bots_head_start", False), ("bots_head_start_done", False),
                          ("squad_call_cooldown", 5), ("full_bags", True), ("spell_scrolls", False),
-                         ("short_quest_waits", True)):
+                         ("short_quest_waits", True), ("events", "date")):
         out[key] = rates.get(key, default)
     out["crowds_per_zone"] = rates.get("crowds_per_zone", 15)
     out["main.MAX_LEVEL"] = rates.get("main.MAX_LEVEL", 75)
@@ -1196,10 +1211,24 @@ def read_boot_graphics(ini_path):
     return clean_graphics(values)
 
 
-def apply_graphics(ini_path, values):
+def game_dir_value(game_dir):
+    """Registry 0042 (the game's install folder, where PrintScreen saves screenshots) as the game sees it: on Linux the
+    Proton Z: path. None when the folder is not known or missing."""
+    if not game_dir or not os.path.isdir(game_dir):
+        return None
+    if os.name == "nt":
+        return os.path.abspath(game_dir)
+    import launcher_linux
+    return launcher_linux.windows_path(game_dir)
+
+
+def apply_graphics(ini_path, values, game_dir=None):
     """Writes the chosen display values into [ffxi.registry]; every other line in the file stays exactly as it was.
+    With game_dir, key 0042 is pointed at the real game folder too (Ashita's example file says C:\\Program Files (x86),
+    and the game crashed on PrintScreen when that folder did not exist).
     The original file is saved once as <file>.before-graphics."""
     values = clean_graphics(values)
+    shot_dir = game_dir_value(game_dir)
     with open(ini_path, "r", encoding="utf-8-sig", newline="") as f:   # newline="" keeps the file's own line endings
         text = f.read()
     newline = "\r\n" if "\r\n" in text else "\n"
@@ -1215,6 +1244,11 @@ def apply_graphics(ini_path, values):
         m = re.match(r"^(\s*)(\d{4})(\s*=\s*)(-?\d+)(.*)$", lines[i])
         if m and m.group(2) in pending:
             lines[i] = f"{m.group(1)}{m.group(2)}{m.group(3)}{pending.pop(m.group(2))}{m.group(5)}"
+        elif shot_dir and re.match(r"^\s*0042\s*=", lines[i]):
+            lines[i] = f"0042 = {shot_dir}"
+            shot_dir = None
+    if shot_dir:
+        pending["0042"] = shot_dir
     insert_at = end
     while insert_at > start + 1 and not lines[insert_at - 1].strip():
         insert_at -= 1   # keep blank lines before the next section where they were

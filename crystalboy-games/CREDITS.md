@@ -1,14 +1,20 @@
 # Mini games for the Crystal Boy
 
-Free Game Boy games by their own authors, included with their licenses (see `licenses/`).
-Thank you to everyone who made them, and to Homebrew Hub (https://hh.gbdev.io) for archiving them.
+Free Game Boy Color games that come with XI: Forever Offline. The Legend of Jueno parts are our own work; the
+Dragonland parts were supplied by the project owner.
 
 | Game | Author | License | Source |
 | --- | --- | --- | --- |
-| Aevilia (short RPG demo) | AeviDev team: ISSOtm, Kai, Parzival, Charmy; music engine DevSound by DevEd | Apache 2.0 (DevSound: MIT) | https://github.com/ISSOtm/Aevilia-GB |
-| Airaki! (tile-matching puzzle RPG) | furrtek | GPL 3.0 or later | https://github.com/furrtek/Airaki |
-| Labirinth (adventure) | Bartek "godai" Biedrzycki / Gniazdo Światów, made with GB Studio | CC BY-SA 4.0 | https://github.com/godai78/labirinth (play online: https://godai78.itch.io/labirinth) |
-| GBHack (roguelike dungeon crawler) | statico | MIT | https://github.com/statico/gbhack |
+| Legend of Jueno (adventure, part 1) | written for XI: Forever Offline | included with the author's permission | this kit (`crystalboy-games/`) |
+| Legend of Jueno 2 (adventure, part 2) | written for XI: Forever Offline | included with the author's permission | this kit (`crystalboy-games/`) |
+| Legend of Jueno 3 (adventure, part 3) | written for XI: Forever Offline | included with the author's permission | this kit (`crystalboy-games/`) |
+| Legend of Jueno 4 (adventure, part 4) | written for XI: Forever Offline | included with the author's permission | this kit (`crystalboy-games/`) |
+| Dragonland I (adventure, part 1) | provided by the project owner | included with the owner's permission | supplied to the kit as `Dragonland_ROM_Collection` |
+| Dragonland II (adventure, part 2) | provided by the project owner | included with the owner's permission | supplied to the kit as `Dragonland_ROM_Collection` |
+| Dragonland III (adventure, part 3) | provided by the project owner | included with the owner's permission | supplied to the kit as `Dragonland_ROM_Collection` |
+| Dragonland IV (adventure, part 4) | provided by the project owner | included with the owner's permission | supplied to the kit as `Dragonland_ROM_Collection` |
+| Dragonland V (adventure, part 5) | provided by the project owner | included with the owner's permission | supplied to the kit as `Dragonland_ROM_Collection` |
 
-The ROM files are unchanged copies from Homebrew Hub. Airaki's full source code (GPL) is at the link above.
-Each game's own README and license explain what you may do with it.
+Legend of Jueno 1-4 are our own games and ship here with the author's permission. Dragonland I-V were handed to us
+for the kit; their five copies here were retitled (`DRAGONLAND 1`-`5`) so the addon can tell them apart, which is the
+only change made to them.

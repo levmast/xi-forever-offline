@@ -441,7 +441,10 @@ def extract_tree(archive_path, dest):
     with tarfile.open(archive_path, mode) as archive:
         members = archive.getmembers()
         for member in members:
-            target = os.path.realpath(os.path.join(dest, member.name))
+            # (the folder of the entry, not the entry itself: on a second unpack a link already on disk would be
+            #  followed, and its target checked from the wrong folder: Sunie, GE-Proton winexinput.sys, 2026-11-18)
+            parts = member.name.rstrip("/").split("/")
+            target = os.path.join(os.path.realpath(os.path.join(dest, *parts[:-1])), parts[-1]) if parts[-1] else real
             if member.name.startswith("/") or ".." in member.name.split("/") or not (target == real or target.startswith(real + os.sep)):
                 raise RuntimeError(f"refusing a path outside the folder: {member.name}")
             if member.issym() or member.islnk():

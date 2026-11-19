@@ -75,34 +75,34 @@ tradeOK = false; trade(A); ok(said(A, 'memory box waits'), 'wrong trade: reminde
 tradeOK = true; A.full = true; trade(A); ok(confirmed == 0 and A.qs.THE_GOBBIEBAG_PART_I == 1, 'full bag: nothing taken')
 A.full = false; trade(A); ok(given[#given] == 8100 and A.qs.THE_GOBBIEBAG_PART_I == 2 and said(A, 'Crystal Boy'), 'Part I gives the Crystal Boy')
 talkTo(A); ok(said(A, 'does not know you'), 'Part II needs fame 4')
-A.fame = 4; talkTo(A); trade(A); ok(given[#given] == 8101 and A.qs.THE_GOBBIEBAG_PART_II == 2, 'Part II gives the Mana Recollection')
+A.fame = 4; talkTo(A); trade(A); ok(given[#given] == 8101 and A.qs.THE_GOBBIEBAG_PART_II == 2, 'Part II gives Jueno Recollection I')
 -- fame 4: Part III (fame 5) not yet -> low fame takes the turn
 talkTo(A); ok(said(A, 'does not know you'), 'Part III needs fame 5')
 A.fame = 5
-A.bag[8101] = nil; local _, h = talkTo(A); ok(h[1] == 3 and said(A, 'tower'), 'next part starts before the hint about the unfinished game')
+A.bag[8101] = nil; local _, h = talkTo(A); ok(h[1] == 3 and said(A, 'second part'), 'next part starts before the hint about the unfinished game')
 lines(A)
-trade(A); ok(given[#given] == 8102 and A.bag[8102], 'Part III gives the Tower Recollection')
-talkTo(A); ok(said(A, 'MAGI'), 'Part IV opens at fame 5'); trade(A); ok(given[#given] == 8103, 'Part IV gives the Magi Recollection')
+trade(A); ok(given[#given] == 8102 and A.bag[8102], 'Part III gives Jueno Recollection II')
+talkTo(A); ok(said(A, 'last part'), 'Part IV opens at fame 5'); trade(A); ok(given[#given] == 8103, 'Part IV gives Jueno Recollection III')
 talkTo(A); ok(said(A, 'does not know you'), 'Part V needs fame 6'); A.fame = 6
-talkTo(A); ok(said(A, 'time'), 'Part V story'); lines(A); trade(A); ok(given[#given] == 8104, 'Part V gives the Time Recollection')
+talkTo(A); ok(said(A, 'fourth'), 'Part V story'); lines(A); trade(A); ok(given[#given] == 8104, 'Part V gives Jueno Recollection IV')
 A.fame = 9
 -- Part VI has no reward: closed. Now the Recollection hints: Mana first (no tablet in the bag)
-talkTo(A); ok(said(A, 'Where is the Recollection'), 'Mana Recollection not in the bag: asks for it')
+talkTo(A); ok(said(A, 'Where is the Recollection'), 'Jueno Recollection I not in the bag: asks for it')
 A.bag[8101] = true; talkTo(A); ok(said(A, 'Not to the end yet'), 'not finished yet')
 -- finish Legend II via the claims file (title of 8103), claim works even though Mana is still pending
 local dir = 'C:\\Ashita-v4beta-main\\config\\addons\\crystalboy\\claims\\Alice\\claims.lua'
 local RT = os.getenv('T3') or 'SAGA2 DX'
 local f = io.open(dir, 'w'); f:write('return {\n    [' .. string.format('%q', RT) .. '] = { delivered = false },\n}\n'); f:close()
-talkTo(A); ok(A.gil == 20000 and A.kis[2841] and said(A, 'MAGI gathered'), 'Legend II handed in: 20,000 gil, Memory of the Magi, its own story')
+talkTo(A); ok(A.gil == 20000 and A.kis[2841] and said(A, 'whole legend ends'), 'Jueno III handed in: 20,000 gil, Memory of Jueno III, its own story')
 ok(A.vars['[CB]Done8103'] == 1, 'recorded once')
 talkTo(A); ok(said(A, 'Not to the end yet') and A.gil == 20000, 'back to the Mana hint, nothing paid twice')
 os.remove(dir)
 -- GM finish for the others
 local fc = commands['cbfinish']; ok(fc and fc.cmdprops.permission >= 1, 'GM-only finish command')
-fc.onTrigger(A, '8101'); talkTo(A); ok(A.gil == 30000 and A.kis[1634], 'Mana: 10,000 gil and Memory of the Mana Tree')
-A.bag[8102] = true; fc.onTrigger(A, '8102'); talkTo(A); ok(A.gil == 45000 and A.kis[2605], 'Tower: 15,000 gil')
+fc.onTrigger(A, '8101'); talkTo(A); ok(A.gil == 30000 and A.kis[1634], 'Jueno I: 10,000 gil and Memory of Jueno I')
+A.bag[8102] = true; fc.onTrigger(A, '8102'); talkTo(A); ok(A.gil == 45000 and A.kis[2605], 'Jueno II: 15,000 gil')
 fc.onTrigger(A, '8104'); A.full = true; talkTo(A); ok(said(A, 'too full') and A.gil == 45000, 'full bag: nothing given')
-A.full = false; talkTo(A); ok(A.gil == 70000 and A.kis[2716], 'Time: 25,000 gil')
+A.full = false; talkTo(A); ok(A.gil == 70000 and A.kis[2716], 'Jueno IV: 25,000 gil')
 talkTo(A); ok(said(A, 'still thinks about that story'), 'all done: thank-you')
 fc.onTrigger(A, '8104 reset'); ok(not A.kis[2716] and A.vars['[CB]Done8104'] == 0, '!cbfinish 8104 reset')
 fc.onTrigger(A, '9999'); ok(said(A, '!cbfinish'), 'unknown id: usage')
