@@ -1555,7 +1555,8 @@ def pack_hint(tag: str, name: str | None = None, n: int = 2) -> str:
             pass
     role = PACK_ROLE.get(str(PROFILES.get(name or "", {}).get("job", "")).upper(), "damage")
     pool = [l["text"].replace("{name}", name or "") for l in _PACK.get(tag, [])
-            if (not l.get("roles") or role in l["roles"]) and not l.get("races") and not l.get("genders")]
+            if (not l.get("roles") or role in l["roles"]) and not l.get("races") and not l.get("genders")
+            and not l.get("voices")]  # voice lines (bold, calm, cheerful, gruff) would fight the mate's own personality
     random.shuffle(pool)
     return (" Lines in this spirit (only the feel; never copy them): " + " | ".join(pool[:n])) if pool else ""
 

@@ -1,6 +1,24 @@
 -- Stand-in world for crowds.lua: fake zone, NPCs with timers, players and a clock. Run: texlua test_crowds.lua <dir with crowds.lua>
 local DIR = arg[1] or '..'
 package.path = DIR .. '/?.lua;' .. package.path
+-- These tests write the real crowd files in <dir> (settings, marked spots, the AI pool): keep them and put them back at the end
+local KEEP = {}
+for _, name in ipairs({ 'crowds_config.lua', 'crowds_spots_user.lua', 'crowds_chat_ai.lua' }) do
+    local f = io.open(DIR .. '/modules/custom/lua/' .. name, 'rb')
+    KEEP[name] = f and f:read('a') or false
+    if f then f:close() end
+end
+local function putBack()
+    for name, text in pairs(KEEP) do
+        local path = DIR .. '/modules/custom/lua/' .. name
+        if text then
+            local f = io.open(path, 'wb')
+            if f then f:write(text); f:close() end
+        else
+            os.remove(path)
+        end
+    end
+end
 
 local failures, passes = 0, 0
 local function check(name, cond, detail)
@@ -579,5 +597,6 @@ local lvlOk = true
 for _, sp in ipairs(spoken) do if sp[1] == 'Botone' and sp[3]:find('WAR') and sp[3]:find('75') then lvlOk = false end end
 check('their shouts use their own job and level', lvlOk)
 
+putBack()
 print(string.format('\n%d passed, %d failed', passes, failures))
 os.exit(failures == 0 and 0 or 1)

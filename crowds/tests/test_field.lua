@@ -2,6 +2,24 @@
 --   texlua test_field.lua .
 local DIR = arg[1] or '.'
 package.path = DIR .. '/?.lua;' .. package.path
+-- These tests write the real crowd files in <dir> (settings, marked spots, the AI pool): keep them and put them back at the end
+local KEEP = {}
+for _, name in ipairs({ 'crowds_config.lua', 'crowds_spots_user.lua', 'crowds_chat_ai.lua' }) do
+    local f = io.open(DIR .. '/modules/custom/lua/' .. name, 'rb')
+    KEEP[name] = f and f:read('a') or false
+    if f then f:close() end
+end
+local function putBack()
+    for name, text in pairs(KEEP) do
+        local path = DIR .. '/modules/custom/lua/' .. name
+        if text then
+            local f = io.open(path, 'wb')
+            if f then f:write(text); f:close() end
+        else
+            os.remove(path)
+        end
+    end
+end
 math.randomseed(tonumber(os.getenv('SEED') or '') or 4242)
 
 local passes, failures = 0, 0
@@ -386,5 +404,6 @@ p3.printToPlayer = function(self, text) msgs[#msgs + 1] = text end
 commands.crowd.onTrigger(p3, 'field', 'test')
 check('!crowd field test in a town says it is not a field area', msgs[#msgs]:find('not a field party area') ~= nil, msgs[#msgs])
 
+putBack()
 print(string.format('\n%d passed, %d failed', passes, failures))
 os.exit(failures == 0 and 0 or 1)

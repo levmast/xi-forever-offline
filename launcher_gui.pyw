@@ -1529,6 +1529,11 @@ class ImageButton(tk.Canvas):
 class RatesTab(tk.Frame):
     """Experience, drop, gil and skill-up rates, the level cap and a few switches. Read when PLAY is pressed."""
     FAST_TRAVEL = ("main.HOMEPOINT_TELEPORT", "main.ENABLE_SURVIVAL_GUIDE")   # one "Fast travel" checkbox for both
+    # (2026-11-18) settings about the era and how classic the game feels, shown together under "Era options"
+    ERA_KEYS = ("main.MAX_LEVEL", "main.ENABLE_COP", "main.ENABLE_TOAU", "main.ENABLE_WOTG", "main.ENABLE_ACP", "main.ENABLE_AMK",
+                "main.ENABLE_ASA", "main.ENABLE_ABYSSEA", "main.ENABLE_SOA", "main.ENABLE_ROV", "main.ENABLE_VOIDWATCH",
+                "main.ENABLE_TVR", "main.RESTRICT_CONTENT", "main.ENABLE_TRUST_QUESTS", "main.ENABLE_DAILY_TALLY",
+                "main.HALLOWEEN_2005", "main.NEW_CHARACTER_CUTSCENE", "map.BASE_SPEED", "map.MOUNT_SPEED")
 
     def __init__(self, parent, rates, player=False):
         super().__init__(parent, bg=BG)
@@ -1540,6 +1545,16 @@ class RatesTab(tk.Frame):
                                    state="readonly", width=22)
         self.preset.pack(side="left", padx=6)
         tk.Button(top, text="Fill in preset", command=self.fill_preset, bg=PANEL, fg=FG, relief="flat", padx=8).pack(side="left")
+        # (2026-11-18) your own rate builds: save them under a name, load them later, share them as .txt files
+        prof = tk.Frame(self, bg=BG)
+        prof.pack(fill="x", padx=10, pady=(2, 2))
+        tk.Label(prof, text="Profile:", bg=BG, fg=FG).pack(side="left")
+        self.profile = ttk.Combobox(prof, values=core.list_profiles(HERE), state="readonly", width=22)
+        self.profile.pack(side="left", padx=6)
+        for text, cmd in (("Load", self.load_profile), ("Save as...", self.save_profile), ("Import...", self.import_profile),
+                          ("Export...", self.export_profile)):
+            tk.Button(prof, text=text, command=cmd, bg=PANEL, fg=FG, relief="flat", padx=6).pack(side="left", padx=(0, 3))
+        tk.Label(prof, text="your own rate builds, shareable as .txt files", bg=BG, fg=DIM, font=(UI_FONT, 9)).pack(side="left", padx=6)
         world = tk.Frame(self, bg=BG)
         world.pack(fill="x", padx=10, pady=(2, 2))
         tk.Label(world, text="World:", bg=BG, fg=FG).pack(side="left")
@@ -1568,87 +1583,112 @@ class RatesTab(tk.Frame):
         canvas.pack(side="left", fill="both", expand=True)
         bar.pack(side="right", fill="y")
 
-        row = 0
+        row, era_fields = 0, []
         for field in core.RATE_FIELDS:
             hidden = player and field[0] in core.PLAYER_HIDDEN_RATES
             var = tk.StringVar(value=str(field[4] if hidden else rates.get(field[0], field[4])))
             self.vars[field[0]] = var
             if hidden or field[0] in self.FAST_TRAVEL:   # (fast travel: one checkbox below sets both)
                 continue
+            if field[0] in self.ERA_KEYS:
+                era_fields.append(field)
+                continue
             tk.Label(inner, text=field[3], bg=BG, fg=FG, anchor="w", width=38).grid(row=row, column=0, sticky="w", padx=6, pady=2)
             ttk.Spinbox(inner, from_=field[5], to=field[6], increment=1 if field[7] == "int" else 0.25,
                         textvariable=var, width=8).grid(row=row, column=1, padx=6, pady=2)
             row += 1
-        n = len(core.RATE_FIELDS)
+
+        # (2026-11-18) sections: the rates above, then Era options, World, Squad and AI. R[k] is the row of what used to
+        # be row n + k (the old single list), so each widget below only says which slot it fills.
+        R = {}
+        def header(title, at):
+            tk.Label(inner, text=title, bg=BG, fg=GOLD, font=(UI_FONT, 11, "bold"),
+                     anchor="w").grid(row=at, column=0, columnspan=2, sticky="w", padx=6, pady=(14, 2))
+            return at + 1
+        row = header("Era options", row)
+        for field in era_fields:
+            var = self.vars[field[0]]
+            tk.Label(inner, text=field[3], bg=BG, fg=FG, anchor="w", width=38).grid(row=row, column=0, sticky="w", padx=6, pady=2)
+            ttk.Spinbox(inner, from_=field[5], to=field[6], increment=1 if field[7] == "int" else 0.25,
+                        textvariable=var, width=8).grid(row=row, column=1, padx=6, pady=2)
+            row += 1
+        for k in (2, 20, 18, 23, 0):            # era exp tables, fast travel, full bags, short quest waits, all crafts
+            R[k], row = row, row + 1
+        row = header("World", row)
+        for k in (3, 1, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14):
+            R[k], row = row, row + 1
+        row = header("Squad and AI", row)
+        for k in (15, 16, 19, 21, 22, 17):
+            R[k], row = row, row + 1
         self.all_crafts = tk.BooleanVar(value=rates.get("all_crafts", True))
         tk.Checkbutton(inner, text="Every craft can reach 100 (off = only one, like the retail rule)", variable=self.all_crafts, bg=BG, fg=FG,
-                       selectcolor=PANEL, activebackground=BG, activeforeground=FG).grid(row=n, column=0, columnspan=2, sticky="w", padx=6, pady=(10, 2))
+                       selectcolor=PANEL, activebackground=BG, activeforeground=FG).grid(row=R[0], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         self.ah_sim = tk.BooleanVar(value=rates.get("ah_sim", False))
         tk.Checkbutton(inner, text="Auction house simulator (stocks the auction house, buys what you list)", variable=self.ah_sim, bg=BG, fg=FG,
-                       selectcolor=PANEL, activebackground=BG, activeforeground=FG).grid(row=n + 1, column=0, columnspan=2, sticky="w", padx=6, pady=2)
+                       selectcolor=PANEL, activebackground=BG, activeforeground=FG).grid(row=R[1], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         self.era_exp = tk.BooleanVar(value=True if player else rates.get("era_exp", True))
         era_box = tk.Checkbutton(inner, text="Aht Urhgan-era experience tables (kill exp and per-monster cap). Keep 'Experience from monsters' at 1.0 with this on.",
                                  variable=self.era_exp, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
                                  wraplength=520, justify="left")
         if not player:                                   # players always have the era tables
-            era_box.grid(row=n + 2, column=0, columnspan=2, sticky="w", padx=6, pady=2)
+            era_box.grid(row=R[2], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         self.conquest_sim = tk.BooleanVar(value=rates.get("conquest_sim", True))
         tk.Checkbutton(inner, text="Conquest simulator: the other nations and the beastmen act while you are away, so regions can change hands",
                        variable=self.conquest_sim, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
-                       wraplength=520, justify="left").grid(row=n + 3, column=0, columnspan=2, sticky="w", padx=6, pady=2)
+                       wraplength=520, justify="left").grid(row=R[3], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         self.crowds = tk.BooleanVar(value=rates.get("crowds", True))
         tk.Checkbutton(inner, text="Ambient crowds: adventurers resting, shopping and walking around in towns and outposts",
                        variable=self.crowds, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
-                       wraplength=520, justify="left").grid(row=n + 4, column=0, columnspan=2, sticky="w", padx=6, pady=2)
+                       wraplength=520, justify="left").grid(row=R[4], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         tk.Label(inner, text="Crowd size (adventurers per area, 0-40)", bg=BG, fg=FG, anchor="w", width=38).grid(
-            row=n + 5, column=0, sticky="w", padx=6, pady=2)
+            row=R[5], column=0, sticky="w", padx=6, pady=2)
         self.crowds_size = tk.StringVar(value=str(rates.get("crowds_per_zone", 15)))
-        ttk.Spinbox(inner, from_=0, to=40, increment=1, textvariable=self.crowds_size, width=8).grid(row=n + 5, column=1, padx=6, pady=2)
+        ttk.Spinbox(inner, from_=0, to=40, increment=1, textvariable=self.crowds_size, width=8).grid(row=R[5], column=1, padx=6, pady=2)
         self.crowds_chat = tk.BooleanVar(value=rates.get("crowds_chat", True))
         tk.Checkbutton(inner, text="Crowd chat: party-wanted shouts, people selling crafted items, small talk near you",
                        variable=self.crowds_chat, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
-                       wraplength=520, justify="left").grid(row=n + 6, column=0, columnspan=2, sticky="w", padx=6, pady=2)
-        tk.Label(inner, text="Chat amount", bg=BG, fg=FG, anchor="w", width=38).grid(row=n + 7, column=0, sticky="w", padx=6, pady=2)
+                       wraplength=520, justify="left").grid(row=R[6], column=0, columnspan=2, sticky="w", padx=6, pady=2)
+        tk.Label(inner, text="Chat amount", bg=BG, fg=FG, anchor="w", width=38).grid(row=R[7], column=0, sticky="w", padx=6, pady=2)
         self.crowds_chat_amount = tk.StringVar(value=rates.get("crowds_chat_amount", "normal"))
         ttk.Combobox(inner, values=["quiet", "normal", "busy"], state="readonly", textvariable=self.crowds_chat_amount,
-                     width=8).grid(row=n + 7, column=1, padx=6, pady=2)
+                     width=8).grid(row=R[7], column=1, padx=6, pady=2)
         self.crowds_chat_ai = tk.BooleanVar(value=rates.get("crowds_chat_ai", True))
         tk.Checkbutton(inner, text="AI chatter: your local Ollama model writes some of the small talk (runs quietly in the background)",
                        variable=self.crowds_chat_ai, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
-                       wraplength=520, justify="left").grid(row=n + 8, column=0, columnspan=2, sticky="w", padx=6, pady=2)
+                       wraplength=520, justify="left").grid(row=R[8], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         self.crowds_field = tk.BooleanVar(value=rates.get("crowds_field", True))
         self.crowds_field_parties = tk.StringVar(value=str(rates.get("crowds_field_parties", 1)))
         if not player:                                   # players get field parties from their world choice
             tk.Checkbutton(inner, text="Field parties: adventurer parties camping and fighting monsters out in the field (away from you)",
                            variable=self.crowds_field, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
-                           wraplength=520, justify="left").grid(row=n + 9, column=0, columnspan=2, sticky="w", padx=6, pady=2)
+                           wraplength=520, justify="left").grid(row=R[9], column=0, columnspan=2, sticky="w", padx=6, pady=2)
             tk.Label(inner, text="Field parties per area (0-3)", bg=BG, fg=FG, anchor="w", width=38).grid(
-                row=n + 10, column=0, sticky="w", padx=6, pady=2)
-            ttk.Spinbox(inner, from_=0, to=3, increment=1, textvariable=self.crowds_field_parties, width=8).grid(row=n + 10, column=1, padx=6, pady=2)
+                row=R[10], column=0, sticky="w", padx=6, pady=2)
+            ttk.Spinbox(inner, from_=0, to=3, increment=1, textvariable=self.crowds_field_parties, width=8).grid(row=R[10], column=1, padx=6, pady=2)
         self.bots = tk.BooleanVar(value=rates.get("bots", True))
         tk.Checkbutton(inner, text="Bot players: real characters (no game window) living in the nation towns - /sea, /check, invite them",
                        variable=self.bots, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
-                       wraplength=520, justify="left").grid(row=n + 11, column=0, columnspan=2, sticky="w", padx=6, pady=2)
+                       wraplength=520, justify="left").grid(row=R[11], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         tk.Label(inner, text="Bot roster (characters, 0-600)", bg=BG, fg=FG, anchor="w", width=38).grid(
-            row=n + 12, column=0, sticky="w", padx=6, pady=2)
+            row=R[12], column=0, sticky="w", padx=6, pady=2)
         self.bots_roster = tk.StringVar(value=str(rates.get("bots_roster", 100)))
-        ttk.Spinbox(inner, from_=0, to=600, increment=50, textvariable=self.bots_roster, width=8).grid(row=n + 12, column=1, padx=6, pady=2)
+        ttk.Spinbox(inner, from_=0, to=600, increment=50, textvariable=self.bots_roster, width=8).grid(row=R[12], column=1, padx=6, pady=2)
         tk.Label(inner, text="Bots online at a time (0-550)", bg=BG, fg=FG, anchor="w", width=38).grid(
-            row=n + 13, column=0, sticky="w", padx=6, pady=2)
+            row=R[13], column=0, sticky="w", padx=6, pady=2)
         self.bots_online = tk.StringVar(value=str(rates.get("bots_online", 50)))
-        ttk.Spinbox(inner, from_=0, to=550, increment=10, textvariable=self.bots_online, width=8).grid(row=n + 13, column=1, padx=6, pady=2)
-        tk.Label(inner, text="Bots grow while you are away", bg=BG, fg=FG, anchor="w", width=38).grid(row=n + 14, column=0, sticky="w", padx=6, pady=2)
+        ttk.Spinbox(inner, from_=0, to=550, increment=10, textvariable=self.bots_online, width=8).grid(row=R[13], column=1, padx=6, pady=2)
+        tk.Label(inner, text="Bots grow while you are away", bg=BG, fg=FG, anchor="w", width=38).grid(row=R[14], column=0, sticky="w", padx=6, pady=2)
         self.bots_growth = tk.StringVar(value=rates.get("bots_growth", "realistic"))
         ttk.Combobox(inner, values=["off", "realistic", "fast"], state="readonly", textvariable=self.bots_growth,
-                     width=8).grid(row=n + 14, column=1, padx=6, pady=2)
+                     width=8).grid(row=R[14], column=1, padx=6, pady=2)
         self.squad_chat = tk.BooleanVar(value=rates.get("squad_chat", True))
         tk.Checkbutton(inner, text="Squad mates talk: they answer you in party chat with the local AI (Ollama), each with their own personality",
                        variable=self.squad_chat, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
-                       wraplength=520, justify="left").grid(row=n + 15, column=0, columnspan=2, sticky="w", padx=6, pady=2)
-        tk.Label(inner, text="Squad call timer (minutes, 0-30)", bg=BG, fg=FG, anchor="w", width=38).grid(row=n + 16, column=0, sticky="w", padx=6, pady=2)
+                       wraplength=520, justify="left").grid(row=R[15], column=0, columnspan=2, sticky="w", padx=6, pady=2)
+        tk.Label(inner, text="Squad call timer (minutes, 0-30)", bg=BG, fg=FG, anchor="w", width=38).grid(row=R[16], column=0, sticky="w", padx=6, pady=2)
         self.squad_call_cooldown = tk.StringVar(value=str(rates.get("squad_call_cooldown", 5)))
         ttk.Spinbox(inner, from_=0, to=30, increment=1, textvariable=self.squad_call_cooldown, width=8).grid(
-            row=n + 16, column=1, padx=6, pady=2)
+            row=R[16], column=1, padx=6, pady=2)
         # One time per server: once a PLAY has used it, the switch is gone for good
         self.head_start_done = bool(rates.get("bots_head_start_done", False))
         self.bots_head_start = tk.BooleanVar(value=bool(rates.get("bots_head_start", False)) and not self.head_start_done)
@@ -1657,28 +1697,33 @@ class RatesTab(tk.Frame):
                            "(most 10-30), subjobs, crafts, gil, gear - as if the server had been running a while. "
                            "Used at your next PLAY, then this switch goes away.",
                            variable=self.bots_head_start, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
-                           wraplength=520, justify="left").grid(row=n + 17, column=0, columnspan=2, sticky="w", padx=6, pady=2)
+                           wraplength=520, justify="left").grid(row=R[17], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         self.full_bags = tk.BooleanVar(value=rates.get("full_bags", True))
         tk.Checkbutton(inner, text="Full bags from the start: inventory, Mog Safe, Mog Satchel, Mog Sack, Mog Case and every "
                        "Mog Wardrobe open at 80. Off = the classic way: 30 slots, and the Gobbiebag quests (and Phoenix's "
                        "wardrobe rewards) add space. Bags never shrink.",
                        variable=self.full_bags, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
-                       wraplength=520, justify="left").grid(row=n + 18, column=0, columnspan=2, sticky="w", padx=6, pady=2)
+                       wraplength=520, justify="left").grid(row=R[18], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         on = all(str(self.vars[k].get()).strip() not in ("0", "0.0") for k in self.FAST_TRAVEL)
         self.fast_travel = tk.BooleanVar(value=on)
         tk.Checkbutton(inner, text="Fast travel: Home Point and Survival Guide teleports (touch one once, then teleport to it "
                        "for a fee). Off = classic travel: walk, chocobos, airships and Teleport spells.",
                        variable=self.fast_travel, command=self.set_fast_travel, bg=BG, fg=FG, selectcolor=PANEL,
                        activebackground=BG, activeforeground=FG, wraplength=520, justify="left").grid(
-                       row=n + 20, column=0, columnspan=2, sticky="w", padx=6, pady=2)
+                       row=R[20], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         self.spell_scrolls = tk.BooleanVar(value=rates.get("spell_scrolls", False))
         tk.Checkbutton(inner, text="Squad mates learn spells from scrolls: spells of level 18 and up must be bought and given "
                        "to your squad once (trade the scroll to a mate, or !squad give). Blue magic from 18 is learned "
                        "from monsters you defeat with a squad Blue Mage out. Below 18 everything stays automatic.",
                        variable=self.spell_scrolls, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
-                       wraplength=520, justify="left").grid(row=n + 19, column=0, columnspan=2, sticky="w", padx=6, pady=2)
+                       wraplength=520, justify="left").grid(row=R[19], column=0, columnspan=2, sticky="w", padx=6, pady=2)
+        self.short_quest_waits = tk.BooleanVar(value=rates.get("short_quest_waits", True))
+        tk.Checkbutton(inner, text="Short quest waits: Chocobo's Wounds 1 minute between feedings (era: a game day each), "
+                       "Forge Your Destiny 1 hour at the forge (era: three game days). Off = the era waits.",
+                       variable=self.short_quest_waits, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
+                       wraplength=520, justify="left").grid(row=R[23], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         if tp is not None:
-            self.ai_model_row(inner, n + 21)
+            self.ai_model_row(inner, R[21])
         self.show_world(rates)
 
     def ai_model_row(self, inner, row):
@@ -1772,6 +1817,79 @@ class RatesTab(tk.Frame):
         self.era_exp.set(bool(values.get("era_exp", True)))
         self.fast_travel.set(all(str(values.get(k, 1)) not in ("0", "0.0") for k in self.FAST_TRAVEL))
 
+    BOOL_KEYS = ("all_crafts", "ah_sim", "era_exp", "conquest_sim", "crowds", "crowds_chat", "crowds_chat_ai", "crowds_field",
+                 "bots", "squad_chat", "full_bags", "spell_scrolls", "short_quest_waits")
+    TEXT_KEYS = (("crowds_per_zone", "crowds_size"), ("crowds_chat_amount", "crowds_chat_amount"),
+                 ("crowds_field_parties", "crowds_field_parties"), ("bots_roster", "bots_roster"), ("bots_online", "bots_online"),
+                 ("bots_growth", "bots_growth"), ("squad_call_cooldown", "squad_call_cooldown"))
+
+    def apply_values(self, values):
+        """Puts a whole set of settings (a loaded profile) into the tab. Nothing is saved until PLAY."""
+        for fid, var in self.vars.items():
+            if fid in values and not (self.player and fid in core.PLAYER_HIDDEN_RATES):
+                var.set(str(values[fid]))
+        for key in self.BOOL_KEYS:
+            if key in values and hasattr(self, key):
+                getattr(self, key).set(bool(values[key]))
+        for key, attr in self.TEXT_KEYS:
+            if key in values and hasattr(self, attr):
+                getattr(self, attr).set(str(values[key]))
+        self.fast_travel.set(all(str(self.vars[k].get()) not in ("0", "0.0") for k in self.FAST_TRAVEL))
+        self.show_world(self.collect())
+
+    def refresh_profiles(self, select=None):
+        self.profile.configure(values=core.list_profiles(HERE))
+        if select:
+            self.profile.set(select)
+
+    def load_profile(self):
+        name = self.profile.get()
+        if not name:
+            messagebox.showinfo("Rate profiles", "Pick a profile first (Save as... makes one from the settings below).")
+            return
+        try:
+            values = core.load_profile(HERE, name)
+        except Exception as e:
+            messagebox.showerror("Rate profiles", f"Could not read {name}: {e}")
+            return
+        self.apply_values(values)
+        messagebox.showinfo("Rate profiles", f"Loaded {name}. It is used from your next PLAY.")
+
+    def save_profile(self):
+        name = simpledialog.askstring("Save rate profile", "Name for these settings (for example 2x rates or WotG era):",
+                                      initialvalue=self.profile.get() or "", parent=self)
+        if not name:
+            return
+        try:
+            core.save_profile(HERE, name, self.collect())
+        except ValueError as e:
+            messagebox.showerror("Rate profiles", str(e))
+            return
+        self.refresh_profiles(name.strip())
+
+    def import_profile(self):
+        path = filedialog.askopenfilename(title="Import a rate profile", filetypes=[("Rate profile", "*.txt"), ("All files", "*.*")])
+        if not path:
+            return
+        try:
+            name = core.import_profile(HERE, path)
+        except Exception as e:
+            messagebox.showerror("Rate profiles", f"That file is not a rate profile ({e}).")
+            return
+        self.refresh_profiles(name)
+        messagebox.showinfo("Rate profiles", f"Imported {name}. Press Load to use it.")
+
+    def export_profile(self):
+        name = self.profile.get() or "My rates"
+        path = filedialog.asksaveasfilename(title="Export a rate profile", defaultextension=".txt", initialfile=name + ".txt",
+                                            filetypes=[("Rate profile", "*.txt")])
+        if not path:
+            return
+        values = core.load_profile(HERE, name) if self.profile.get() else self.collect()
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(core.profile_text(name, values))
+        messagebox.showinfo("Rate profiles", f"Saved {os.path.basename(path)}. Share it: others use Import... to add it.")
+
     def set_fast_travel(self):
         value = "1" if self.fast_travel.get() else "0"
         for key in self.FAST_TRAVEL:
@@ -1808,6 +1926,7 @@ class RatesTab(tk.Frame):
         rates["squad_call_cooldown"] = core.clean_call_cooldown(self.squad_call_cooldown.get())
         rates["full_bags"] = bool(self.full_bags.get())
         rates["spell_scrolls"] = bool(self.spell_scrolls.get())
+        rates["short_quest_waits"] = bool(self.short_quest_waits.get())
         rates["bots_head_start"] = bool(self.bots_head_start.get()) and not self.head_start_done
         rates["bots_head_start_done"] = self.head_start_done
         rates["claim_shield"] = False

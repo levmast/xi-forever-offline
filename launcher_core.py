@@ -527,6 +527,7 @@ RATE_DEFAULTS.update({"bots": True, "bots_roster": 100, "bots_online": 50})   # 
 RATE_DEFAULTS.update({"bots_growth": "realistic"})
 RATE_DEFAULTS.update({"bots_head_start": False, "bots_head_start_done": False})   # one-time bot head start (bots_growth.lua)
 RATE_DEFAULTS.update({"spell_scrolls": False})  # squad mates need scrolls for spells of level 18+ (blue magic from monsters) (squad.lua)
+RATE_DEFAULTS.update({"short_quest_waits": True})   # Chocobo's Wounds 1 minute, Forge Your Destiny 1 hour (late/quest_waits.lua)
 RATE_DEFAULTS.update({"full_bags": True})   # every bag (inventory, Mog Safe, Satchel, Sack, Case, Wardrobes) at 80 from the start (crystalboy_quests.lua)
 RATE_DEFAULTS.update({"squad_call_cooldown": 5})   # minutes before a squad mate can be called again (squad.lua)   # bots grow while you are away (bots_growth.lua)
 RATE_DEFAULTS.update({"squad_chat": True})   # squad mates answer in party chat with the local AI (squad-chat/squad_chat.py)
@@ -700,6 +701,9 @@ def write_crowds_config(server_dir, rates):
     with open(os.path.join(module_dir, "storage_config.lua"), "w", encoding="utf-8", newline="\n") as f:
         f.write("-- Written by the XI: Forever Offline launcher (Rates tab). Do not edit: it is rewritten every launch.\n")
         f.write("return { full_bags = %s }\n" % ("true" if rates.get("full_bags", True) else "false"))
+    with open(os.path.join(module_dir, "quest_waits_config.lua"), "w", encoding="utf-8", newline="\n") as f:
+        f.write("-- Written by the XI: Forever Offline launcher (Rates tab). Do not edit: it is rewritten every launch.\n")
+        f.write("return { short = %s }\n" % ("true" if rates.get("short_quest_waits", True) else "false"))
 
 
 def clean_call_cooldown(value):
@@ -784,6 +788,8 @@ def load_rates(here):
             rates["full_bags"] = bool(saved["full_bags"])
         if "spell_scrolls" in saved:
             rates["spell_scrolls"] = bool(saved["spell_scrolls"])
+        if "short_quest_waits" in saved:
+            rates["short_quest_waits"] = bool(saved["short_quest_waits"])
         for key, lo, hi in (("bots_roster", 0, 600), ("bots_online", 0, 550)):
             if key in saved:
                 try:
@@ -800,6 +806,84 @@ def save_rates(here, rates):
         json.dump(rates, f, indent=2)
 
 
+# --- Rate profiles (2026-11-18): save the Rates tab under a name, load it later, share it as a .txt file -----------
+PROFILE_DIR = "rate-profiles"
+PROFILE_SKIP = {"bots_head_start", "bots_head_start_done", "defaults_version"}   # (this PC's own one-time state)
+
+
+def profile_dir(here):
+    return os.path.join(here, PROFILE_DIR)
+
+
+def profile_name_ok(name):
+    return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 _\-()'.,!]{0,39}", (name or "").strip()))
+
+
+def list_profiles(here):
+    folder = profile_dir(here)
+    if not os.path.isdir(folder):
+        return []
+    return sorted(os.path.splitext(n)[0] for n in os.listdir(folder) if n.lower().endswith(".txt"))
+
+
+def profile_text(name, rates):
+    """The shareable form: a short header plus the settings as JSON (only the known settings)."""
+    data = {k: v for k, v in rates.items() if k in RATE_DEFAULTS and k not in PROFILE_SKIP}
+    return ("# XI: Forever Offline rate profile: %s\n# Load it in the launcher: CONFIG > Rates > Profile > Import.\n" % name
+            + json.dumps({"name": name, "rates": data}, indent=2) + "\n")
+
+
+def parse_profile(text):
+    """(name, rates) from a profile file; only known settings, each checked like a hand-edited rates.json."""
+    body = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
+    data = json.loads(body)
+    name, raw = str(data.get("name") or "Imported"), data.get("rates") or {}
+    if not isinstance(raw, dict):
+        raise ValueError("not a rate profile")
+    fields = {f[0]: f for f in RATE_FIELDS}
+    rates = {}
+    for key, value in raw.items():
+        if key not in RATE_DEFAULTS or key in PROFILE_SKIP:
+            continue
+        default = RATE_DEFAULTS[key]
+        if key in fields:
+            rates[key] = clean_rate(fields[key], value)
+        elif isinstance(default, bool):
+            rates[key] = bool(value)
+        elif isinstance(default, int):
+            try:
+                rates[key] = int(value)
+            except (TypeError, ValueError):
+                pass
+        elif isinstance(default, str) and isinstance(value, str):
+            rates[key] = value[:20]
+    return name, rates
+
+
+def save_profile(here, name, rates):
+    if not profile_name_ok(name):
+        raise ValueError("Use letters, numbers and spaces for the name (up to 40).")
+    os.makedirs(profile_dir(here), exist_ok=True)
+    path = os.path.join(profile_dir(here), name.strip() + ".txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(profile_text(name.strip(), rates))
+    return path
+
+
+def load_profile(here, name):
+    with open(os.path.join(profile_dir(here), name + ".txt"), encoding="utf-8") as f:
+        return parse_profile(f.read())[1]
+
+
+def import_profile(here, path):
+    with open(path, encoding="utf-8") as f:
+        name, rates = parse_profile(f.read())
+    name = re.sub(r"[^A-Za-z0-9 _\-()'.,!]", "", name)
+    name = re.sub(r"^[^A-Za-z0-9]+", "", name).strip()[:40] or "Imported"
+    save_profile(here, name, rates)
+    return name
+
+
 def apply_preset(rates, name):
     out = dict(RATE_DEFAULTS)
     out["ah_sim"], out["all_crafts"] = rates.get("ah_sim", False), True
@@ -809,7 +893,8 @@ def apply_preset(rates, name):
                          ("crowds_field", True), ("crowds_field_parties", 1),
                          ("bots", True), ("bots_roster", 100), ("bots_online", 50), ("bots_growth", "realistic"),
                          ("squad_chat", True), ("bots_head_start", False), ("bots_head_start_done", False),
-                         ("squad_call_cooldown", 5), ("full_bags", True), ("spell_scrolls", False)):
+                         ("squad_call_cooldown", 5), ("full_bags", True), ("spell_scrolls", False),
+                         ("short_quest_waits", True)):
         out[key] = rates.get(key, default)
     out["crowds_per_zone"] = rates.get("crowds_per_zone", 15)
     out["main.MAX_LEVEL"] = rates.get("main.MAX_LEVEL", 75)

@@ -250,6 +250,91 @@ local slot
 for _, x in ipairs(said) do if x.text:find('{') then slot = x.text end end
 check('no {slot} is ever left in a line', not slot, slot)
 
+-- voices: a mate only says voice lines of its own voice (bold, calm, cheerful, gruff), chosen as squad.lua does
+local okVoices, voices = pcall(dofile, LUA .. 'squad_dialogue.lua')
+check('squad_dialogue.lua loads (the voices)', okVoices and type(voices) == 'table', voices)
+local function expectedVoice(name)
+    local sum = 0
+    for i = 1, #name do sum = sum + string.byte(name, i) end
+    return voices.voiceOrder[(sum % #voices.voiceOrder) + 1]
+end
+P._reset()
+local names = { 'Tank', 'Heal', 'Hit', 'Gio', 'Lia', 'Kasumi', 'Ayame', 'Zeid' }
+local sameRule = true
+for _, nm in ipairs(names) do if P.voiceOf(nm) ~= expectedVoice(nm) then sameRule = nm end end
+check('each mate has the voice squad.lua gives it (from its name)', sameRule == true, sameRule)
+local voiceCount = {}
+for _, l in ipairs(data.lines) do for _, v in ipairs(l.voices or {}) do voiceCount[v] = (voiceCount[v] or 0) + 1 end end
+check('there are lines for all four voices', (voiceCount.bold or 0) > 20 and (voiceCount.calm or 0) > 20 and
+    (voiceCount.cheerful or 0) > 20 and (voiceCount.gruff or 0) > 20)
+local thin
+for _, role in ipairs({ 'tank', 'healer', 'damage', 'support', 'hybrid' }) do
+    for _, v in ipairs({ 'bold', 'calm', 'cheerful', 'gruff' }) do
+        for _, tag in ipairs({ 's.battle', 's.lowhp', 's.after', 's.idle_town', 's.idle_field' }) do
+            local n = 0
+            for _, l in ipairs(data.lines) do
+                if has(l.t, tag) and has(l.roles, role) and has(l.voices or {}, v) and #l.races == 0 and #l.genders == 0 and #l.fam == 0 then n = n + 1 end
+            end
+            if n < 6 then thin = role .. '/' .. v .. ' ' .. tag .. ': ' .. n end
+        end
+    end
+end
+check('every role and voice has at least 6 lines at the pull, low HP, after a fight and idle', not thin, thin)
+
+local wrongVoice, voiced = nil, 0
+for round = 1, 3 do
+    P._reset(); said = {}
+    pl = newPlayer('Hurami'); pl.town = (round == 2)
+    ms = { newMate(pl, 'Tank', 7, 40), newMate(pl, 'Heal', 3, 40), newMate(pl, 'Hit', 12, 40), newMate(pl, 'Gio', 5, 40) }
+    pl.party = ms
+    for _, mt in ipairs(ms) do P.remember(mt.name, 1, mt.job, mt.lvl) end
+    xi.squad.aiSaidAt = 0
+    P.tick(ms[1])
+    fights(P, pl, ms, 40)
+    for s = 1, 3 * 3600, 5 do NOW = NOW + 5; P.tick(ms[1]) end
+    for _, x in ipairs(said) do
+        local l = lineOf(x.text, x.name)
+        if l and l.voices and #l.voices > 0 then
+            voiced = voiced + 1
+            if not has(l.voices, P.voiceOf(x.name)) then wrongVoice = x.name .. ' (' .. tostring(P.voiceOf(x.name)) .. '): ' .. x.text end
+        end
+    end
+end
+check('fights and quiet moments use voice lines, always the mate\'s own voice', voiced > 0 and not wrongVoice, wrongVoice or voiced)
+
+package.loaded['modules/custom/lua/squad_dialogue'] = { voices = voices.voices, voiceOrder = voices.voiceOrder, voiceByName = { Gio = 'gruff', Lia = 'nosuchvoice' } }
+P._reset()
+check('voiceByName in squad_dialogue.lua picks the voice (an unknown voice falls back to the name)',
+    P.voiceOf('Gio') == 'gruff' and P.voiceOf('Lia') == expectedVoice('Lia'), tostring(P.voiceOf('Gio')) .. '/' .. tostring(P.voiceOf('Lia')))
+package.loaded['modules/custom/lua/squad_dialogue'] = 'not a table'  -- (false would make require load the file again)
+P._reset()
+check('without squad_dialogue.lua: no voice, and no voice lines', P.voiceOf('Gio') == nil)
+local noVoiceLine
+for i = 1, 60 do
+    local t = P.line('s.after', 'Gio')
+    local l = t and lineOf(t, 'Gio')
+    if l and #(l.voices or {}) > 0 then noVoiceLine = t end
+end
+check('... the other lines still play', not noVoiceLine, noVoiceLine)
+package.loaded['modules/custom/lua/squad_dialogue'] = nil
+
+-- resting with a tank and a damage dealer (no healer): one of the new rest scenes can play
+local restScene = false
+for round = 1, 40 do
+    P._reset(); said = {}
+    pl = newPlayer('Hurami'); ms = { newMate(pl, 'Tank', 7, 40), newMate(pl, 'Hit', 12, 40) }; pl.party = ms
+    for _, mt in ipairs(ms) do P.remember(mt.name, 1, mt.job, mt.lvl) end
+    xi.squad.aiSaidAt = 0
+    P.tick(ms[1])
+    pl.anim = xi.animation.HEALING
+    for s = 1, 40 do NOW = NOW + 1; P.tick(ms[1]) end
+    pl.anim = 0
+    for s = 1, 2 do NOW = NOW + 1; P.tick(ms[1]) end
+    NOW = NOW + 2 * 3600
+    if #said >= 2 and not lineOf(said[1].text, said[1].name) and said[1].name ~= said[2].name then restScene = true; break end
+end
+check('resting with a tank and a damage dealer: now and then a short scene between them', restScene)
+
 -- state survives a restart
 P._reset(); said = {}
 pl = newPlayer('Hurami'); local m = newMate(pl, 'Newbie', 1, 1); pl.party = { m }

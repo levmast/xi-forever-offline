@@ -35,7 +35,7 @@ Settings (button place, last tab): config/addons/servermenu/settings.cfg
 
 addon.name    = 'servermenu';
 addon.author  = 'XI: Forever Offline';
-addon.version = '1.20';
+addon.version = '1.21';
 addon.desc    = 'The XI: Forever Offline menu: squad mates, and the dualbox character with his gambits.';
 addon.link    = '';
 
@@ -493,6 +493,13 @@ local function onSheetLine(text)
                 data.eqId = data.eqId or {};
                 data.eqId[tonumber(slot)] = tonumber(id);
             end
+        end
+    elseif key == 'ls' then
+        -- (1.21) lockstyle: slot | label | name | id
+        local slot, name, id = rest:match('^(%d+)|[^|]*|([^|]*)|(%d+)$');
+        if slot then
+            data.ls = data.ls or {};
+            data.ls[tonumber(slot)] = { name = name, id = tonumber(id) };
         end
     elseif key == 'note' then
         data.note = rest;
@@ -2017,10 +2024,42 @@ end
 -- (1.14) Change gear: pick a slot, see the given gear this mate can wear there (from the server), click to put it on.
 -- Works at home and in a friend's world (it only uses !squad commands).
 local SLOT_KEY = { [0] = 'main', 'sub', 'range', 'ammo', 'head', 'body', 'hands', 'legs', 'feet', 'neck', 'waist', 'ear1', 'ear2', 'ring1', 'ring2', 'back' };
+-- (1.21) lockstyle: the slots a look can be locked in (the ones you see on a character)
+local LOOK_SLOTS = { [0] = true, [1] = true, [2] = true, [4] = true, [5] = true, [6] = true, [7] = true, [8] = true };
+local function lockstyleRow(slot, d)
+    colorText(C.gold, 'Lockstyle');
+    imgui.SameLine(0, 8);
+    local parts = {};
+    for i = 0, 8 do
+        local l = d and d.ls and d.ls[i];
+        if l then parts[#parts + 1] = SLOT_KEY[i] .. ': ' .. tostring(l.name); end
+    end
+    dimText(#parts > 0 and table.concat(parts, ', ') or 'off (shows the gear it wears)');
+    if button('Lock current look', 'lsset' .. slot, 0, 0) then
+        enqueue(string.format('/say !squad lockstyle %d set', slot));
+        askSheet(2);
+    end
+    tooltip('Keep the look it has now, whatever gear it wears later');
+    imgui.SameLine(0, 6);
+    if button('Lockstyle off', 'lsoff' .. slot, 0, 0) then
+        enqueue(string.format('/say !squad lockstyle %d off', slot));
+        askSheet(2);
+    end
+    tooltip('Show the gear it really wears');
+    imgui.SameLine(0, 6);
+    local looking = S.gearLook == true;
+    if button(looking and 'Picking: look' or 'Picking: gear', 'lsmode' .. slot, 0, 0, looking and 'selected' or nil) then
+        S.gearLook = not looking;
+    end
+    tooltip('Picking: gear = the items below are put on. Picking: look = they only change how the mate looks');
+    gap(2);
+end
+
 local function gearPicker(slot)
     if slot == nil then return; end
     if has('Separator') then imgui.Separator(); end
-    colorText(C.gold, 'Change gear');
+    lockstyleRow(slot, S.profile);
+    colorText(C.gold, S.gearLook and 'Choose the look' or 'Change gear');
     gap(2);
     local g = S.gear;
     if g == nil or g.slot ~= slot then g = { slot = slot, eq = nil, items = {}, done = false }; S.gear = g; end
@@ -2038,11 +2077,20 @@ local function gearPicker(slot)
     end
     gap(2);
     if not g.done then dimText('Looking...'); return; end
-    if button('Take off', 'gpoff' .. slot, 80, 0) then
-        enqueue(string.format('/say !squad unequip %d %s', slot, SLOT_KEY[g.eq]));
+    local look = S.gearLook == true;
+    if look and not LOOK_SLOTS[g.eq] then
+        dimText('This slot does not show on a character: pick main, sub, range, head, body, hands, legs or feet.');
+        return;
+    end
+    if button(look and 'Real gear' or 'Take off', 'gpoff' .. slot, 80, 0) then
+        if look then
+            enqueue(string.format('/say !squad lockstyle %d off %s', slot, SLOT_KEY[g.eq]));
+        else
+            enqueue(string.format('/say !squad unequip %d %s', slot, SLOT_KEY[g.eq]));
+        end
         askSheet(2);
     end
-    tooltip('Leave this slot empty');
+    tooltip(look and 'Show the gear it really wears in this slot' or 'Leave this slot empty');
     if #g.items == 0 then
         imgui.SameLine(0, 10);
         dimText('Nothing for this slot yet: trade a piece to a mate (or !squad give) first.');
@@ -2052,11 +2100,16 @@ local function gearPicker(slot)
         if k > 1 and (k - 1) % 2 ~= 0 then imgui.SameLine(0, 6); end
         local label = string.format('Lv%d %s', item.level, itemDisplayName(item.id, item.name));
         if button(label, 'gpi' .. slot .. '_' .. item.id .. '_' .. k, 0, 0) then
-            enqueue(string.format('/say !squad equip %d %d %s', slot, item.id, SLOT_KEY[g.eq]));
+            if look then
+                enqueue(string.format('/say !squad lockstyle %d %d %s', slot, item.id, SLOT_KEY[g.eq]));
+            else
+                enqueue(string.format('/say !squad equip %d %d %s', slot, item.id, SLOT_KEY[g.eq]));
+            end
             askSheet(2);
         end
         local stats = itemStatsText(item.id, item.name);
-        tooltip((stats and (stats .. '\n\n') or '') .. 'Click to put it on (call the mate again to see it on them)');
+        tooltip((stats and (stats .. '\n\n') or '') .. (look and 'Click to look like this (only the look; call the mate again to see it)'
+            or 'Click to put it on (call the mate again to see it on them)'));
     end
     if (g.total or 0) > #g.items then dimText(string.format('(%d more not shown)', g.total - #g.items)); end
 end

@@ -177,8 +177,8 @@
 391|r.yes|I'll wait at the meeting spot
 392|party|send a tell when the last person shows up
 393|party|make sure nobody gets left behind
-394|r.thanks|ty for explaining that
-395|r.thanks|appreciate the help, saved me a trip
+394|x|thanks for help; r.thanks only answers someone saying gz to the bot
+395|x|thanks for help; r.thanks only answers someone saying gz to the bot
 396|e.wb,r.greet|good to see you again! we should do another trip soon
 397|x|claims to remember the player's quest (only the AI's real memory may say this)
 398|r.help|if you need a hand later just send me a tell
@@ -195,7 +195,7 @@
 409|party|ok I'll admit, that was a clever pull
 410|e.levelup_react,@rival|don't get comfy, I'm still coming for you
 411|e.win_react,r.congrats|well played, can't even complain about that
-412|r.laugh|not saying I was right, but not saying I was wrong either
+412|x|odd as the answer to a plain lol (r.laugh has no other use)
 413|e.win_react,@rival|fine, you win this round
 414|e.gear_react|nice gear. might have to get one myself
 415|ls,@rival|friendly competition keeps it fun

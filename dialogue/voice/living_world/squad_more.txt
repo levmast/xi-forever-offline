@@ -1,0 +1,323 @@
+# Squad mates: our own lines and scenes, on top of the pack's (squad.txt). Read by build_dialogue.py, used by squad_pack.lua.
+#
+#   +id|tags|who|text          who: empty = any mate, or key=a/b;key=c  with keys
+#                                role   tank (PLD NIN)  healer (WHM)  hybrid (RDM)  support (BRD COR)  damage (the rest)
+#                                voice  bold calm cheerful gruff (the mate's voice from squad_dialogue.lua)
+#                                fam    new (below 20)  steady (20-49)  trusted (50+): how far the mate has levelled
+#                                race   Hume Elvaan Tarutaru Mithra Galka      gender  male female
+#   +scene:id|tag|cooldown     then one  role|text  per line (roles tank healer damage support; support = any non-healer)
+#
+# When each use plays (squad_pack.lua): s.battle at the pull, s.lowhp from the mate under 30% HP, s.lowmp from a healer
+# under 20% MP, s.after when a fight ends and s.reply from a second mate, s.idle_town / s.idle_field / s.banter in quiet
+# moments (fight and quiet lines only while the squad chat AI is quiet). On call: s.recruit s.wipe s.jobchange s.reunion
+# s.bond s.race. s.down when the mate is knocked out, s.ack_hold / s.ack_follow on !squad camp, s.bench on dismiss.
+# Keep lines true whatever happened: no counts of monsters, no who-pulled-what, no weather, no named city.
+# Plain ASCII, no contractions (the squad's voice), at most about 110 characters.
+
+# ---- the pull (s.battle): by role, then by voice ----
++pull_t1|s.battle|role=tank|Eyes on me. I will hold it.
++pull_t2|s.battle|role=tank|Let it come to me first.
++pull_t3|s.battle|role=tank|Give me a moment to get its attention.
++pull_t4|s.battle|role=tank|Stay behind me.
++pull_t5|s.battle|role=tank|Front line is mine.
++pull_t6|s.battle|role=tank|I will keep it facing me.
++pull_h1|s.battle|role=healer|I am watching everyone's health. Go.
++pull_h2|s.battle|role=healer|Stay where I can reach you.
++pull_h3|s.battle|role=healer|Cures are ready.
++pull_h4|s.battle|role=healer|Do not run too far ahead of me.
++pull_h5|s.battle|role=healer|I will keep you on your feet.
++pull_d1|s.battle|role=damage|Waiting for your mark.
++pull_d2|s.battle|role=damage|Let us make this one quick.
++pull_d3|s.battle|role=damage|I will hit it hard.
++pull_d4|s.battle|role=damage|Point me at it.
++pull_d5|s.battle|role=damage|Going in.
++pull_s1|s.battle|role=support|I will keep everyone sharp.
++pull_s2|s.battle|role=support|Stay close and I can help more of you at once.
++pull_s3|s.battle|role=support|Ready to back you up.
++pull_s4|s.battle|role=support|Let me know what you need from me.
++pull_r1|s.battle|role=hybrid|I can cure or fight. Tell me which.
++pull_r2|s.battle|role=hybrid|Blade in one hand, spells in the other. Ready.
++pull_r3|s.battle|role=hybrid|I will help wherever it is needed.
++pull_r4|s.battle|role=hybrid|I will watch the fight and fill the gaps.
++pull_b1|s.battle|voice=bold|To battle!
++pull_b2|s.battle|voice=bold|Another one. Good!
++pull_b3|s.battle|voice=bold|Stand firm, everyone!
++pull_c1|s.battle|voice=calm|Steady. One at a time.
++pull_c2|s.battle|voice=calm|Here it comes. Stay calm.
++pull_c3|s.battle|voice=calm|Breathe first. Then strike.
++pull_ch1|s.battle|voice=cheerful|Ooh, here we go!
++pull_ch2|s.battle|voice=cheerful|Let us do this!
++pull_ch3|s.battle|voice=cheerful|Fight time!
++pull_g1|s.battle|voice=gruff|Finally. Something to hit.
++pull_g2|s.battle|voice=gruff|Hmph. Here it comes.
++pull_g3|s.battle|voice=gruff|Get on with it.
+
+# ---- the mate itself is under 30% HP (s.lowhp) ----
++hp_t1|s.lowhp|role=tank|Still standing. Barely.
++hp_t2|s.lowhp|role=tank|It is getting through my guard.
++hp_t3|s.lowhp|role=tank|I cannot take many more of those.
++hp_h1|s.lowhp|role=healer|I need to cure myself. Hold on.
++hp_h2|s.lowhp|role=healer|Someone keep it off me!
++hp_r1|s.lowhp|role=hybrid|I am low. I may need to cure myself.
++hp_1|s.lowhp||That one hurt.
++hp_2|s.lowhp||I am in trouble here.
++hp_3|s.lowhp||I need a moment. I am badly hurt.
++hp_b1|s.lowhp|voice=bold|It will take more than that!
++hp_b2|s.lowhp|voice=bold|I am not finished yet!
++hp_c1|s.lowhp|voice=calm|I am hurt. A cure when you can, please.
++hp_c2|s.lowhp|voice=calm|I am weakening. Please be careful.
++hp_ch1|s.lowhp|voice=cheerful|Ow, ow, ow! Help!
++hp_ch2|s.lowhp|voice=cheerful|Ouch! That really hurt!
++hp_g1|s.lowhp|voice=gruff|Tch. Just a scratch. Mostly.
++hp_g2|s.lowhp|voice=gruff|Bah. I have had worse. Not much worse.
+
+# ---- a healer under 20% MP (s.lowmp) ----
++mp_1|s.lowmp|role=healer|My magic is running thin.
++mp_2|s.lowmp|role=healer|Low on MP. Make this one count.
++mp_3|s.lowmp|role=healer|Only a few cures left in me.
++mp_4|s.lowmp|role=healer|I will need to rest after this fight.
++mp_b|s.lowmp|role=healer;voice=bold|My magic wanes, but I am not done yet!
++mp_c|s.lowmp|role=healer;voice=calm|My MP is low. Let us rest after this one.
++mp_ch|s.lowmp|role=healer;voice=cheerful|Uh oh, I am almost out of magic!
++mp_g|s.lowmp|role=healer;voice=gruff|Running dry. Do not pull another.
+
+# ---- a fight just ended (s.after), and a second mate answers (s.reply) ----
++after_1|s.after||Good. Next one?
++after_2|s.after||Clean enough.
++after_3|s.after||That is done. Catch your breath if you need to.
++after_4|s.after||Nice work, everyone.
++after_5|s.after||Ready for the next one whenever you are.
++after_6|s.after||We work well together.
++after_7|s.after||Not bad at all.
++after_8|s.after||One down.
++after_t|s.after|role=tank|Send the next one my way.
++after_h|s.after|role=healer|Everyone all right? Tell me if you are hurt.
++after_d|s.after|role=damage|I am just getting started.
++after_s|s.after|role=support|Give me a word before the next pull.
++after_b1|s.after|voice=bold|Ha! Who is next?
++after_b2|s.after|voice=bold|That is how it is done!
++after_b3|s.after|voice=bold|Keep them coming!
++after_b4|s.after|voice=bold|Too easy. Bring me something tougher.
++after_c1|s.after|voice=calm|Well done. Take a moment if you need it.
++after_c2|s.after|voice=calm|Good. We kept our heads.
++after_c3|s.after|voice=calm|Good. Calm and steady.
++after_c4|s.after|voice=calm|Rest if you need to. I will wait.
++after_ch1|s.after|voice=cheerful|We did it! Yay!
++after_ch2|s.after|voice=cheerful|That was fun! Again!
++after_ch3|s.after|voice=cheerful|Great job, everyone!
++after_ch4|s.after|voice=cheerful|Woo! Another one down!
++after_g1|s.after|voice=gruff|Hmph. Done.
++after_g2|s.after|voice=gruff|Is that all it had?
++after_g3|s.after|voice=gruff|Next.
++after_g4|s.after|voice=gruff|Could have been faster.
++reply_1|s.reply||Agreed.
++reply_2|s.reply||Right.
++reply_3|s.reply||Fair enough.
++reply_4|s.reply||Lead the way.
++reply_5|s.reply||Mm. Same here.
++reply_b1|s.reply|voice=bold|Ha! Agreed.
++reply_b2|s.reply|voice=bold|Right behind you!
++reply_c1|s.reply|voice=calm|Mm. I think so too.
++reply_c2|s.reply|voice=calm|Yes. Let us keep it steady.
++reply_ch1|s.reply|voice=cheerful|Yep, yep!
++reply_ch2|s.reply|voice=cheerful|Totally!
++reply_g1|s.reply|voice=gruff|Hmph. If you say so.
++reply_g2|s.reply|voice=gruff|Whatever you say.
++reply_g3|s.reply|voice=gruff|Fine.
+
+# ---- quiet moments in town (s.idle_town) ----
++town_01|s.idle_town||Take your time. I am in no hurry.
++town_02|s.idle_town||Let me know when you want to head out.
++town_03|s.idle_town||Do not forget to restock before we go.
++town_04|s.idle_town||A quiet moment. I will take it.
++town_05|s.idle_town||I like towns. Walls, roofs, and no monsters.
++town_06|s.idle_town||We could use some food for the road.
++town_07|s.idle_town||No rush. The monsters will still be there.
++town_08|s.idle_town||I will check my gear while we wait.
++town_09|s.idle_town||Back in town. My feet thank you.
++town_10|s.idle_town||When we head out, where to?
++town_11|s.idle_town||If you need to sort your bags, now is the time.
++town_12|s.idle_town||It is nice to hear people talking again.
++town_13|s.idle_town||I could get used to sleeping in a real bed.
++town_14|s.idle_town||Should I wait at the gate, or stay with you?
++town_15|s.idle_town||Is there anything you want me to carry?
++town_h|s.idle_town|role=healer|I should pick up a few remedies while we are here.
++town_t|s.idle_town|role=tank|My armor could use some mending.
++town_b1|s.idle_town|voice=bold|Town is fine, but my weapon wants work.
++town_b2|s.idle_town|voice=bold|Let us not stay long. Adventure waits.
++town_b3|s.idle_town|voice=bold|Whenever you are ready. Soon, I hope.
++town_c1|s.idle_town|voice=calm|A little peace is welcome. Take your time.
++town_c2|s.idle_town|voice=calm|I will wait here. Do what you need to do.
++town_c3|s.idle_town|voice=calm|It is good to rest somewhere safe.
++town_ch1|s.idle_town|voice=cheerful|Ooh, so many people! I love town!
++town_ch2|s.idle_town|voice=cheerful|Can we get a snack before we go?
++town_ch3|s.idle_town|voice=cheerful|Shopping! Do we need anything? Can I look?
++town_g1|s.idle_town|voice=gruff|Hurry up. Towns make me itch.
++town_g2|s.idle_town|voice=gruff|Let us get moving. Standing around is dull.
++town_g3|s.idle_town|voice=gruff|Hmph. Waiting again.
+
+# ---- quiet moments out in the field (s.idle_field) ----
++field_01|s.idle_field||I will watch our backs.
++field_02|s.idle_field||Pick a target whenever you like.
++field_03|s.idle_field||Mind your footing out here.
++field_04|s.idle_field||Long way from town. Stay sharp.
++field_05|s.idle_field||Do you want to keep hunting here, or move on?
++field_06|s.idle_field||If you want to rest, now is a good time.
++field_07|s.idle_field||Good thing you know the way. I would be lost.
++field_08|s.idle_field||Watch for anything that sneaks up on us.
++field_09|s.idle_field||I like being out here with you.
++field_10|s.idle_field||Let me know if you want to try somewhere else.
++field_11|s.idle_field||Ready when you are. No rush.
++field_12|s.idle_field||Keep your eyes open. This place is not as empty as it looks.
++field_13|s.idle_field||I will stay close.
++field_14|s.idle_field||The best part of a long road is the company.
++field_15|s.idle_field||Remind me to mend my gear later.
++field_16|s.idle_field||We should not stray too far from the path.
++field_h|s.idle_field|role=healer|Stay near me out here. I cannot cure what I cannot reach.
++field_t|s.idle_field|role=tank|If anything charges us, I go first.
++field_d|s.idle_field|role=damage|I am itching for the next fight.
++field_b1|s.idle_field|voice=bold|Come on, let us find something worth fighting.
++field_b2|s.idle_field|voice=bold|I feel strong today. Let us push on.
++field_b3|s.idle_field|voice=bold|Nothing out here scares me. Well, almost nothing.
++field_c1|s.idle_field|voice=calm|It is peaceful out here, in its way.
++field_c2|s.idle_field|voice=calm|Let us keep a careful pace.
++field_c3|s.idle_field|voice=calm|I will keep watch. Rest your eyes a moment.
++field_ch1|s.idle_field|voice=cheerful|I love it out here!
++field_ch2|s.idle_field|voice=cheerful|Ooh, I wonder what is up ahead!
++field_ch3|s.idle_field|voice=cheerful|This is the best part. The walking and the talking!
++field_g1|s.idle_field|voice=gruff|Standing around will not make us any stronger.
++field_g2|s.idle_field|voice=gruff|Pick something and hit it already.
++field_g3|s.idle_field|voice=gruff|Hmph. Too quiet.
+
+# ---- out in the field with two or more mates (s.banter) ----
++banter_01|s.banter||Whose turn is it to carry the food?
++banter_02|s.banter||Do not stand so close. I need room to swing.
++banter_03|s.banter||Someone keeps humming. It is not me.
++banter_04|s.banter||If anyone sees a treasure chest, it is mine.
++banter_05|s.banter||I bet I land the last hit next fight.
++banter_06|s.banter||Try to keep up, everyone.
++banter_07|s.banter||Remind me again why I agreed to this.
++banter_08|s.banter||Quiet, all of you. I am listening.
++banter_b|s.banter|voice=bold|Next fight, I go first. No arguments.
++banter_c|s.banter|voice=calm|Save your strength for the monsters, everyone.
++banter_ch|s.banter|voice=cheerful|We make a great team, do we not?
++banter_g|s.banter|voice=gruff|Less talking, more walking.
+
+# ---- knocked out (s.down: now and then instead of the mate's voice line) ----
++down_1|s.down||I cannot... keep up...
++down_2|s.down||Finish it... for me...
++down_3|s.down||Do not stop... for me...
++down_b1|s.down|voice=bold|I fall... but you will win this...
++down_b2|s.down|voice=bold|Keep fighting... do not look back...
++down_c1|s.down|voice=calm|I am sorry... I am out of this one...
++down_c2|s.down|voice=calm|Stay safe... without me...
++down_ch1|s.down|voice=cheerful|Oof... down I go...
++down_ch2|s.down|voice=cheerful|I will just... lie here a bit...
++down_g1|s.down|voice=gruff|Bah... finish it...
++down_g2|s.down|voice=gruff|Tch... do not lose this...
+
+# ---- called again within 30 minutes of you being knocked out (s.wipe) ----
++wipe_1|s.wipe||Back on your feet? Good. We try again.
++wipe_2|s.wipe||We go again, more carefully this time.
++wipe_3|s.wipe||That one got the better of us. Not again.
++wipe_b1|s.wipe|voice=bold|We fell, so we rise. Let us go!
++wipe_b2|s.wipe|voice=bold|Round two. This time we win.
++wipe_c1|s.wipe|voice=calm|Let us slow down this time. One fight at a time.
++wipe_c2|s.wipe|voice=calm|Are you all right? Take your time.
++wipe_ch1|s.wipe|voice=cheerful|Okay! Fresh start!
++wipe_ch2|s.wipe|voice=cheerful|We got knocked down. We get back up!
++wipe_g1|s.wipe|voice=gruff|Hmph. Try not to fall this time.
++wipe_g2|s.wipe|voice=gruff|Again. And watch your back.
+
+# ---- !squad camp (s.ack_hold) and camp off (s.ack_follow) ----
++hold_1|s.ack_hold||I will hold this spot.
++hold_2|s.ack_hold||Staying right here.
++hold_3|s.ack_hold||Holding. Call me when you need me.
++hold_b|s.ack_hold|voice=bold|This ground is ours. Holding!
++hold_c|s.ack_hold|voice=calm|I will wait here.
++hold_ch|s.ack_hold|voice=cheerful|Okay! I will wait right here!
++hold_g|s.ack_hold|voice=gruff|Fine. Not moving.
++follow_1|s.ack_follow||On my way.
++follow_2|s.ack_follow||Coming.
++follow_3|s.ack_follow||With you.
++follow_b|s.ack_follow|voice=bold|Lead on!
++follow_c|s.ack_follow|voice=calm|I will follow your lead.
++follow_ch|s.ack_follow|voice=cheerful|Wait for me!
++follow_g|s.ack_follow|voice=gruff|Yeah, yeah. Coming.
+
+# ---- on call: how long you have been together (s.bond), back after 3+ days (s.reunion) ----
++bond_n1|s.bond|fam=new|I do not know you well yet. I will learn.
++bond_n2|s.bond|fam=new|Tell me how you like to fight. I will adapt.
++bond_n3|s.bond|fam=new|Still finding my footing with you.
++bond_n4|s.bond|fam=new|I will try not to get in your way.
++bond_s1|s.bond|fam=steady|We are getting good at this.
++bond_s2|s.bond|fam=steady|I know your timing now. It helps.
++bond_s3|s.bond|fam=steady|Same as always? Good.
++bond_s4|s.bond|fam=steady|You can count on me. You know that by now.
++bond_t1|s.bond|fam=trusted|I would follow you into any fight.
++bond_t2|s.bond|fam=trusted|There is nobody I would rather fight beside.
++bond_t3|s.bond|fam=trusted|I am glad you keep calling on me.
++bond_t4|s.bond|fam=trusted|Whatever comes, we handle it together.
++back_1|s.reunion|fam=trusted|Back again. I kept my gear ready.
++back_2|s.reunion|fam=trusted|It has been a few days. Good to see you.
++back_3|s.reunion|fam=trusted|I wondered when you would call.
++back_b|s.reunion|fam=trusted;voice=bold|At last! I was getting restless.
++back_c|s.reunion|fam=trusted;voice=calm|Welcome back. I hope you rested well.
++back_ch|s.reunion|fam=trusted;voice=cheerful|You are back! I missed this!
++back_g|s.reunion|fam=trusted;voice=gruff|Took you long enough.
+
+# ---- you changed jobs (s.jobchange; s.jobchange_whm when you became a white mage and the mate is not a healer) ----
++job_1|s.jobchange||New job? I will watch how you fight now.
++job_2|s.jobchange||Different job, same plan. I am with you.
++job_3|s.jobchange||Changed jobs again? I will keep up.
++job_b|s.jobchange|voice=bold|A change of job! Let us test it in a real fight.
++job_c|s.jobchange|voice=calm|A change of job. I will adjust to you.
++job_ch|s.jobchange|voice=cheerful|Ooh, a different job! Show me what it can do!
++job_g|s.jobchange|voice=gruff|Another job. Hmph. Just do not get us killed learning it.
++job_whm1|s.jobchange_whm||You are healing now? Then I will try not to need it.
++job_whm2|s.jobchange_whm||A healer. Good. I will keep them off you.
+
+# ---- !squad dismiss (s.bench) ----
++bench_b|s.bench|voice=bold|Rest is wasted on me, but very well.
++bench_c|s.bench|voice=calm|I understand. Good luck out there.
++bench_ch|s.bench|voice=cheerful|Aww. Okay! Call me soon!
++bench_g|s.bench|voice=gruff|Hmph. Fine.
+
+# ---- by race (s.race: on call and in quiet moments) ----
++race_hu1|s.race|race=Hume|Humes get along with almost anyone. It is our one great talent.
++race_hu2|s.race|race=Hume|My grandmother said Humes were made for walking. She was right.
++race_el1|s.race|race=Elvaan|An Elvaan keeps their word. I keep mine.
++race_el2|s.race|race=Elvaan|We Elvaan do not slouch. Not even when we are tired.
++race_ta1|s.race|race=Tarutaru|Being small has its uses. Monsters often look right past me.
++race_ta2|s.race|race=Tarutaru|Windurst taught me patience. The road is teaching me the rest.
++race_mi1|s.race|race=Mithra|My nose has never lied to me. Neither have my ears.
++race_mi2|s.race|race=Mithra|Windurst is home now, but I still dream of the southern seas.
++race_ga1|s.race|race=Galka|Galka do not remember being young. We remember almost everything else.
++race_ga2|s.race|race=Galka|People think Galka are slow. We are just careful.
+
+# ---- scenes (a few mates, one after another) ----
++scene:rest_hungry|s.scene_rest|90
+damage|Is anyone else hungry, or is it just me?
+support|You are always hungry.
+damage|Fighting is hard work.
++scene:rest_checkup|s.scene_rest|90
+healer|Sit still. Let me look you over.
+support|I am fine. Really.
+healer|You always say that.
++scene:rest_plan|s.scene_rest|90
+tank|When we go again, let me take the first hit.
+damage|Fine. I will wait for your call this time.
+tank|That is all I ask.
++scene:rest_quiet|s.scene_rest|90
+support|Nice to sit down for a moment.
+healer|Enjoy it. We will be moving again soon.
++scene:lowhp_hold|s.scene_lowhp|60
+tank|This one is strong. Keep the cures coming.
+healer|I am on it. Do not let it turn around.
++scene:wipe_regroup|s.scene_wipe|60
+damage|Everyone back on their feet? Good.
+healer|Next time, we wait for my magic before we pull.
+tank|Agreed. Slower and steadier.
++scene:return_wonder|s.scene_return|60
+healer|There you are. We were starting to wonder.
+tank|Wondering, not worrying. Mostly.

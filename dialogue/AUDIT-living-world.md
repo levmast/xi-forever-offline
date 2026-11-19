@@ -115,3 +115,38 @@ Written to our brief, and it shows: casual 2006 typing, our fill-ins (`{job}`, `
 - **Personality:** each speaker has its pack personality (from its name, the same one it has in tells), so polite speakers type the polite version and the very short typists drop capitals and full stops.
 - **Repeats:** a line does not come back until about half of the lines that fit have been used.
 - **AI on:** the crowd AI pool now gets crowd pack lines as style examples for its small talk, camp talk, replies, pairs and shouts.
+
+## Our second batch (2026-11-18): the thin spots
+
+Written by us, not the pack, for the two places players without the AI would hear repeats first. Same checks as the
+pack lines (truthful, era words, length, fill-ins), plus a builder check that reactions never show the speaker's own
+level or job.
+
+**Squad mates: 253 lines and 7 scenes** (`voice/living_world/squad_more.txt`), now 327 lines and 12 scenes in all.
+- **By role and voice:** each mate now has 7 to 10 lines at the pull, 6 to 10 at low HP, about 19 after a fight and
+  about 25 for each kind of quiet moment, from its role (tank, healer, red mage, bard/corsair, damage) and its voice.
+  A red mage had no pull line at all before, and each other role had one.
+- **Voices:** about a third of the lines are for one voice only (bold, calm, cheerful or gruff, the voice the mate
+  already has in squad_dialogue.lua), so a gruff mate says "Hmph. Done." and a cheerful one "We did it! Yay!". The
+  squad chat AI never gets voice lines as examples (they would fight the mate's AI personality).
+- **Also:** replies to an after-fight line, knock-outs, "we go again", hold/follow, bond and welcome-back lines,
+  job changes, the bench, and two more lines per race. Scenes: four rest scenes (two need no healer), one hard fight,
+  one after a wipe, one welcome back.
+- **Result:** in a simulated 3-hour session with the AI off, the most repeated squad line came up 3 to 4 times
+  instead of 10 to 18 ("I need a breath before the next pull."), and players hear 68 to 84 different lines
+  instead of about 32.
+
+**Bots: 136 lines** (`voice/living_world/voice_d.txt`), now 639 in all.
+- **Answers:** "where are you" 1 -> 10, "what are you doing" 3 -> 12, "what job" 3 -> 10, an answer to "gz" 2 -> 9,
+  to "lol" 2 -> 10, to "back" 1 -> 9, to news 3 -> 11, to thanks 4 -> 10, hello 6 -> 12, bye 6 -> 11, bad news
+  6 -> 12, and everything else (the most common answer) 6 -> 20.
+- **Linkshell events:** level-ups 4 -> 11 and their reactions 8 -> 14, knock-out reactions 3 -> 8, new gear 2 -> 6
+  (reactions 1 -> 5), job changes 4 -> 8, rank-ups 2 -> 5 (reactions 1 -> 4), win reactions 4 -> 7.
+
+**Fixed or left out:**
+- **A reaction showed the wrong level:** "grats on {lvl}!" filled in the level of the bot saying it, not the one who
+  levelled. Now "grats on the ding!", and the builder refuses any reaction with {lvl}, {job}, {sub} or {doing}.
+- **Wrong answers to a "gz" (2):** "ty for explaining that" and "appreciate the help, saved me a trip" were the only
+  thanks a bot gave when you said gz to it.
+- **Odd answers to a plain "lol" (2):** "not saying I was right, but not saying I was wrong either" and "that's going
+  in the stories we tell new members".

@@ -31,6 +31,17 @@ squad.txt (the pack's squad section, used by squad_pack.lua):
         scenes: s.scene_first s.scene_lowhp s.scene_wipe s.scene_rest s.scene_return
   Who may say a line (role, race, gender, familiarity) comes from the pack's own tags. Only {name} may be used.
 
+squad_more.txt (our own squad lines and scenes, on top of the pack's; same tags):
+  +id|tags|who|text          who: empty (any mate) or key=a/b;key=c   keys: role (tank healer hybrid support damage),
+                             voice (bold calm cheerful gruff: the mate's voice from squad_dialogue.lua), fam (new steady
+                             trusted), race (Hume Elvaan Tarutaru Mithra Galka), gender (male female)
+  +scene:id|tag|cooldown     then one  role|text  per line (roles tank healer damage support; support = any non-healer)
+  Written without contractions, like the rest of the squad's lines (the builder warns on "I'll", "don't" ...).
+
+voice_d.txt: our second batch of bot lines (+id records): answers players hear most when the AI is off, and lines for
+  the linkshell events that come up often. Reactions (*_react) must not use {lvl} {job} {sub} {doing}: those would be
+  the speaker's own, not the member's (the builder refuses it), and answers (r.*) have no {member}.
+
 crowd.txt (the pack's crowd section, used by crowds_pack.lua through crowds_chat.lua):
   Cnnn|ok                                        used as written
   Cnnn|ok|opts|casual override|polite override   opts: place=..., lvl=a-b, jobs=A/B, when=night|evening|morning

@@ -223,7 +223,7 @@
 +lvl_04|e.levelup|ding! {job}{lvl}
 +lvlr_01|e.levelup_react|gz!|Congratulations!
 +lvlr_02|e.levelup_react|gz {member}!|Congratulations, {member}.
-+lvlr_03|e.levelup_react|grats on {lvl}!
++lvlr_03|e.levelup_react|grats on the ding!|Congratulations on the level.
 +lvlr_04|e.levelup_react|gz gz
 +lvlr_05|e.levelup_react|nice, gz!
 +dead_r_01|e.death_react|ouch

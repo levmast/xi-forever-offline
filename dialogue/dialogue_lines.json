@@ -1066,19 +1066,6 @@
    "polite": "I have a plan. It is not a very good plan, but it is a plan."
   },
   {
-   "id": "social_and_humor_008_v1",
-   "src": [
-    "social_and_humor_008_v1"
-   ],
-   "cat": "social_and_humor",
-   "tags": [
-    "r.laugh"
-   ],
-   "conds": [],
-   "casual": "that's going in the stories we tell new members",
-   "polite": "That is going in the story we tell new members."
-  },
-  {
    "id": "social_and_humor_009_v1",
    "src": [
     "social_and_humor_009_v1"
@@ -4201,40 +4188,6 @@
    "polite": "We should make sure nobody is left behind."
   },
   {
-   "id": "exp2_transition_15_1",
-   "src": [
-    "exp2_transition_15_1",
-    "exp2_transition_15_2",
-    "exp2_transition_15_3",
-    "exp2_transition_15_4",
-    "exp2_transition_15_5"
-   ],
-   "cat": "conversation_flow",
-   "tags": [
-    "r.thanks"
-   ],
-   "conds": [],
-   "casual": "ty for explaining that",
-   "polite": "Thanks for taking the time to explain that."
-  },
-  {
-   "id": "exp2_transition_16_1",
-   "src": [
-    "exp2_transition_16_1",
-    "exp2_transition_16_2",
-    "exp2_transition_16_3",
-    "exp2_transition_16_4",
-    "exp2_transition_16_5"
-   ],
-   "cat": "conversation_flow",
-   "tags": [
-    "r.thanks"
-   ],
-   "conds": [],
-   "casual": "appreciate the help, saved me a trip",
-   "polite": "I appreciate the help. That saved me a trip."
-  },
-  {
    "id": "v030_friendship_001",
    "src": [
     "v030_friendship_001"
@@ -4399,19 +4352,6 @@
    "conds": [],
    "casual": "well played, can't even complain about that",
    "polite": "Well played. I cannot even complain about that one."
-  },
-  {
-   "id": "v030_rivalry_007",
-   "src": [
-    "v030_rivalry_007"
-   ],
-   "cat": "rivalry",
-   "tags": [
-    "r.laugh"
-   ],
-   "conds": [],
-   "casual": "not saying I was right, but not saying I was wrong either",
-   "polite": "I am not saying I was right, but I am also not saying I was wrong."
   },
   {
    "id": "v030_rivalry_008",
@@ -6403,8 +6343,8 @@
     "e.levelup_react"
    ],
    "conds": [],
-   "casual": "grats on {lvl}!",
-   "polite": "Grats on {lvl}!"
+   "casual": "grats on the ding!",
+   "polite": "Congratulations on the level."
   },
   {
    "id": "fo_lvlr_04",
@@ -6922,6 +6862,1502 @@
    "conds": [],
    "casual": "gotta go, cya all",
    "polite": "Gotta go, cya all"
+  },
+  {
+   "id": "fo_where_02",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.where"
+   ],
+   "conds": [],
+   "casual": "in {here} atm",
+   "polite": "I am in {here} right now."
+  },
+  {
+   "id": "fo_where_03",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.where"
+   ],
+   "conds": [],
+   "casual": "{here}",
+   "polite": "In {here}."
+  },
+  {
+   "id": "fo_where_04",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.where"
+   ],
+   "conds": [],
+   "casual": "{here}, why?",
+   "polite": "In {here}. Why do you ask?"
+  },
+  {
+   "id": "fo_where_05",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.where"
+   ],
+   "conds": [],
+   "casual": "{here} right now",
+   "polite": "Right now? {here}."
+  },
+  {
+   "id": "fo_where_06",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.where"
+   ],
+   "conds": [],
+   "casual": "over in {here}, need something?",
+   "polite": "I am over in {here}. Do you need something?"
+  },
+  {
+   "id": "fo_where_07",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.where"
+   ],
+   "conds": [],
+   "casual": "{here} :)",
+   "polite": "{here}, as it happens."
+  },
+  {
+   "id": "fo_where_08",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.where"
+   ],
+   "conds": [],
+   "casual": "in {here} rn",
+   "polite": "Currently in {here}."
+  },
+  {
+   "id": "fo_where_09",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.where"
+   ],
+   "conds": [],
+   "casual": "{here}, come by if you want",
+   "polite": "I am in {here}. Come by if you like."
+  },
+  {
+   "id": "fo_where_10",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.where"
+   ],
+   "conds": [],
+   "casual": "around {here}",
+   "polite": "Somewhere around {here}."
+  },
+  {
+   "id": "fo_doing_04",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.doing"
+   ],
+   "conds": [],
+   "casual": "oh just {doing}",
+   "polite": "Oh, just {doing}."
+  },
+  {
+   "id": "fo_doing_05",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.doing"
+   ],
+   "conds": [],
+   "casual": "not much, {doing}",
+   "polite": "Not much. I am {doing}."
+  },
+  {
+   "id": "fo_doing_06",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.doing"
+   ],
+   "conds": [],
+   "casual": "{doing} atm",
+   "polite": "At the moment I am {doing}."
+  },
+  {
+   "id": "fo_doing_07",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.doing"
+   ],
+   "conds": [],
+   "casual": "eh, {doing}",
+   "polite": "Nothing exciting. I am {doing}."
+  },
+  {
+   "id": "fo_doing_08",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.doing"
+   ],
+   "conds": [],
+   "casual": "{doing}, what about you?",
+   "polite": "I am {doing}. What about you?"
+  },
+  {
+   "id": "fo_doing_09",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.doing"
+   ],
+   "conds": [],
+   "casual": "{doing} lol",
+   "polite": "Honestly? {doing}."
+  },
+  {
+   "id": "fo_doing_10",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.doing"
+   ],
+   "conds": [],
+   "casual": "currently {doing}",
+   "polite": "Currently {doing}."
+  },
+  {
+   "id": "fo_doing_11",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.doing"
+   ],
+   "conds": [],
+   "casual": "{doing}, need something?",
+   "polite": "I am {doing}. Do you need something?"
+  },
+  {
+   "id": "fo_doing_12",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.doing"
+   ],
+   "conds": [],
+   "casual": "same old, {doing}",
+   "polite": "The usual. I am {doing}."
+  },
+  {
+   "id": "fo_job_r_04",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.job"
+   ],
+   "conds": [],
+   "casual": "{job} {lvl}, you?",
+   "polite": "I am a level {lvl} {job}. And you?"
+  },
+  {
+   "id": "fo_job_r_05",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.job"
+   ],
+   "conds": [],
+   "casual": "{job}/{sub}, {lvl}",
+   "polite": "{job} with {sub} support, level {lvl}."
+  },
+  {
+   "id": "fo_job_r_06",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.job"
+   ],
+   "conds": [],
+   "casual": "{lvl} {job} right now",
+   "polite": "Level {lvl} {job} at the moment."
+  },
+  {
+   "id": "fo_job_r_07",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.job"
+   ],
+   "conds": [],
+   "casual": "on {job} atm, {lvl}",
+   "polite": "I am on {job} right now, level {lvl}."
+  },
+  {
+   "id": "fo_job_r_08",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.job"
+   ],
+   "conds": [],
+   "casual": "{job}{lvl}, sub {sub}",
+   "polite": "{job}, level {lvl}, with {sub} as my support job."
+  },
+  {
+   "id": "fo_job_r_09",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.job"
+   ],
+   "conds": [],
+   "casual": "lvl {lvl} {job}",
+   "polite": "Level {lvl}, {job}."
+  },
+  {
+   "id": "fo_job_r_10",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.job"
+   ],
+   "conds": [],
+   "casual": "{job} at {lvl} :)",
+   "polite": "{job}, level {lvl}."
+  },
+  {
+   "id": "fo_gzty_01",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.thanks"
+   ],
+   "conds": [],
+   "casual": "ty!",
+   "polite": "Thank you!"
+  },
+  {
+   "id": "fo_gzty_02",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.thanks"
+   ],
+   "conds": [],
+   "casual": "thanks :)",
+   "polite": "Thank you, that is kind."
+  },
+  {
+   "id": "fo_gzty_03",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.thanks"
+   ],
+   "conds": [],
+   "casual": "ty ty",
+   "polite": "Thank you, thank you."
+  },
+  {
+   "id": "fo_gzty_04",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.thanks"
+   ],
+   "conds": [],
+   "casual": "thx!",
+   "polite": "Thanks very much."
+  },
+  {
+   "id": "fo_gzty_05",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.thanks"
+   ],
+   "conds": [],
+   "casual": "aw ty",
+   "polite": "Aw, thank you."
+  },
+  {
+   "id": "fo_gzty_06",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.thanks"
+   ],
+   "conds": [],
+   "casual": "haha ty",
+   "polite": "Ha, thank you."
+  },
+  {
+   "id": "fo_gzty_07",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.thanks"
+   ],
+   "conds": [],
+   "casual": "ty :D",
+   "polite": "Many thanks!"
+  },
+  {
+   "id": "fo_gzty_08",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.thanks"
+   ],
+   "conds": [],
+   "casual": "appreciate it!",
+   "polite": "I appreciate it!"
+  },
+  {
+   "id": "fo_gzty_09",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.thanks"
+   ],
+   "conds": [],
+   "casual": "ty, means a lot",
+   "polite": "Thank you. That means a lot."
+  },
+  {
+   "id": "fo_laugh_01",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.laugh"
+   ],
+   "conds": [],
+   "casual": "haha",
+   "polite": "Ha!"
+  },
+  {
+   "id": "fo_laugh_02",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.laugh"
+   ],
+   "conds": [],
+   "casual": "lol yeah",
+   "polite": "Ha, yes."
+  },
+  {
+   "id": "fo_laugh_03",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.laugh"
+   ],
+   "conds": [],
+   "casual": "hehe",
+   "polite": "Hehe."
+  },
+  {
+   "id": "fo_laugh_04",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.laugh"
+   ],
+   "conds": [],
+   "casual": ":D",
+   "polite": ":D"
+  },
+  {
+   "id": "fo_laugh_05",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.laugh"
+   ],
+   "conds": [],
+   "casual": "lmao",
+   "polite": "That is funny."
+  },
+  {
+   "id": "fo_laugh_06",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.laugh"
+   ],
+   "conds": [],
+   "casual": "haha right?",
+   "polite": "Ha, right?"
+  },
+  {
+   "id": "fo_laugh_07",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.laugh"
+   ],
+   "conds": [],
+   "casual": "lol true",
+   "polite": "Ha, true."
+  },
+  {
+   "id": "fo_laugh_08",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.laugh"
+   ],
+   "conds": [],
+   "casual": "hah",
+   "polite": "Hah."
+  },
+  {
+   "id": "fo_laugh_09",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.laugh"
+   ],
+   "conds": [],
+   "casual": "xD",
+   "polite": "That made me laugh."
+  },
+  {
+   "id": "fo_laugh_10",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.laugh"
+   ],
+   "conds": [],
+   "casual": "lol!",
+   "polite": "Heh, indeed."
+  },
+  {
+   "id": "fo_back_01",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.back"
+   ],
+   "conds": [],
+   "casual": "wb",
+   "polite": "Welcome back!"
+  },
+  {
+   "id": "fo_back_02",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.back"
+   ],
+   "conds": [],
+   "casual": "wb :)",
+   "polite": "Welcome back."
+  },
+  {
+   "id": "fo_back_03",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.back"
+   ],
+   "conds": [],
+   "casual": "wb {player}",
+   "polite": "Welcome back, {player}."
+  },
+  {
+   "id": "fo_back_04",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.back"
+   ],
+   "conds": [],
+   "casual": "ah wb",
+   "polite": "Ah, welcome back."
+  },
+  {
+   "id": "fo_back_05",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.back"
+   ],
+   "conds": [],
+   "casual": "re!",
+   "polite": "Hello again!"
+  },
+  {
+   "id": "fo_back_06",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.back"
+   ],
+   "conds": [],
+   "casual": "wb wb",
+   "polite": "Welcome back, welcome back."
+  },
+  {
+   "id": "fo_back_07",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.back"
+   ],
+   "conds": [],
+   "casual": "wb o/",
+   "polite": "Welcome back o/"
+  },
+  {
+   "id": "fo_back_08",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.back"
+   ],
+   "conds": [],
+   "casual": "oh hey, wb",
+   "polite": "Oh, there you are. Welcome back."
+  },
+  {
+   "id": "fo_gz_01",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.congrats"
+   ],
+   "conds": [],
+   "casual": "grats!",
+   "polite": "Congratulations!"
+  },
+  {
+   "id": "fo_gz_02",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.congrats"
+   ],
+   "conds": [],
+   "casual": "ooh gz",
+   "polite": "Oh, congratulations!"
+  },
+  {
+   "id": "fo_gz_03",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.congrats"
+   ],
+   "conds": [],
+   "casual": "woo, gz",
+   "polite": "Wonderful. Congratulations."
+  },
+  {
+   "id": "fo_gz_04",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.congrats"
+   ],
+   "conds": [],
+   "casual": "gz :D",
+   "polite": "Congratulations :D"
+  },
+  {
+   "id": "fo_gz_05",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.congrats"
+   ],
+   "conds": [],
+   "casual": "nice one, gz",
+   "polite": "Nicely done. Congratulations."
+  },
+  {
+   "id": "fo_gz_06",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.congrats"
+   ],
+   "conds": [],
+   "casual": "about time! gz",
+   "polite": "About time! Congratulations."
+  },
+  {
+   "id": "fo_gz_07",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.congrats"
+   ],
+   "conds": [],
+   "casual": "congrats!",
+   "polite": "Congratulations to you!"
+  },
+  {
+   "id": "fo_gz_08",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.congrats"
+   ],
+   "conds": [],
+   "casual": "grats, nice",
+   "polite": "Well done!"
+  },
+  {
+   "id": "fo_yw_01",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.yw"
+   ],
+   "conds": [],
+   "casual": "yw!",
+   "polite": "You are welcome!"
+  },
+  {
+   "id": "fo_yw_02",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.yw"
+   ],
+   "conds": [],
+   "casual": "no prob",
+   "polite": "No problem at all."
+  },
+  {
+   "id": "fo_yw_03",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.yw"
+   ],
+   "conds": [],
+   "casual": "np :)",
+   "polite": "No problem."
+  },
+  {
+   "id": "fo_yw_04",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.yw"
+   ],
+   "conds": [],
+   "casual": "sure thing",
+   "polite": "Sure thing."
+  },
+  {
+   "id": "fo_yw_05",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.yw"
+   ],
+   "conds": [],
+   "casual": "no worries",
+   "polite": "No worries."
+  },
+  {
+   "id": "fo_yw_06",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.yw"
+   ],
+   "conds": [],
+   "casual": "glad I could help",
+   "polite": "I am glad I could help."
+  },
+  {
+   "id": "fo_greet_05",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.greet"
+   ],
+   "conds": [],
+   "casual": "hey hey",
+   "polite": "Hey there."
+  },
+  {
+   "id": "fo_greet_06",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.greet"
+   ],
+   "conds": [],
+   "casual": "yo",
+   "polite": "Hello."
+  },
+  {
+   "id": "fo_greet_07",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.greet"
+   ],
+   "conds": [],
+   "casual": "hiya!",
+   "polite": "Hiya!"
+  },
+  {
+   "id": "fo_greet_08",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.greet"
+   ],
+   "conds": [],
+   "casual": "hi there",
+   "polite": "Hi there."
+  },
+  {
+   "id": "fo_greet_09",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.greet"
+   ],
+   "conds": [],
+   "casual": "hello!",
+   "polite": "Hello!"
+  },
+  {
+   "id": "fo_greet_10",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.greet"
+   ],
+   "conds": [],
+   "casual": "oh hey {player}",
+   "polite": "Oh, hello {player}."
+  },
+  {
+   "id": "fo_bye_04",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.bye"
+   ],
+   "conds": [],
+   "casual": "bye!",
+   "polite": "Goodbye!"
+  },
+  {
+   "id": "fo_bye_05",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.bye"
+   ],
+   "conds": [],
+   "casual": "see you around",
+   "polite": "See you around."
+  },
+  {
+   "id": "fo_bye_06",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.bye"
+   ],
+   "conds": [],
+   "casual": "later!",
+   "polite": "Until later!"
+  },
+  {
+   "id": "fo_bye_07",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.bye"
+   ],
+   "conds": [],
+   "casual": "safe travels",
+   "polite": "Safe travels."
+  },
+  {
+   "id": "fo_bye_08",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.bye"
+   ],
+   "conds": [],
+   "casual": "cya around {player}",
+   "polite": "See you around, {player}."
+  },
+  {
+   "id": "fo_sym_01",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.sympathy"
+   ],
+   "conds": [],
+   "casual": "oof, sorry",
+   "polite": "Oh no, I am sorry."
+  },
+  {
+   "id": "fo_sym_02",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.sympathy"
+   ],
+   "conds": [],
+   "casual": "aww no",
+   "polite": "Oh no."
+  },
+  {
+   "id": "fo_sym_03",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.sympathy"
+   ],
+   "conds": [],
+   "casual": "that's the worst",
+   "polite": "That is the worst."
+  },
+  {
+   "id": "fo_sym_04",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.sympathy"
+   ],
+   "conds": [],
+   "casual": "happens to the best of us",
+   "polite": "It happens to the best of us."
+  },
+  {
+   "id": "fo_sym_05",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.sympathy"
+   ],
+   "conds": [],
+   "casual": "hang in there",
+   "polite": "Hang in there."
+  },
+  {
+   "id": "fo_sym_06",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.sympathy"
+   ],
+   "conds": [],
+   "casual": "ouch :(",
+   "polite": "Ouch. Sorry to hear it."
+  },
+  {
+   "id": "fo_misc_07",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.misc"
+   ],
+   "conds": [],
+   "casual": "mhm",
+   "polite": "Mm-hm."
+  },
+  {
+   "id": "fo_misc_08",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.misc"
+   ],
+   "conds": [],
+   "casual": "ah ok",
+   "polite": "Ah, all right."
+  },
+  {
+   "id": "fo_misc_09",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.misc"
+   ],
+   "conds": [],
+   "casual": "gotcha",
+   "polite": "Got it."
+  },
+  {
+   "id": "fo_misc_10",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.misc"
+   ],
+   "conds": [],
+   "casual": "hm yeah",
+   "polite": "Hm, yes."
+  },
+  {
+   "id": "fo_misc_11",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.misc"
+   ],
+   "conds": [],
+   "casual": "fair enough",
+   "polite": "Fair enough."
+  },
+  {
+   "id": "fo_misc_12",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.misc"
+   ],
+   "conds": [],
+   "casual": "oh?",
+   "polite": "Oh?"
+  },
+  {
+   "id": "fo_misc_13",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.misc"
+   ],
+   "conds": [],
+   "casual": "makes sense",
+   "polite": "That makes sense."
+  },
+  {
+   "id": "fo_misc_14",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.misc"
+   ],
+   "conds": [],
+   "casual": "for sure",
+   "polite": "For sure."
+  },
+  {
+   "id": "fo_misc_15",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.misc"
+   ],
+   "conds": [],
+   "casual": "ya",
+   "polite": "Yes."
+  },
+  {
+   "id": "fo_misc_16",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.misc"
+   ],
+   "conds": [],
+   "casual": "ah nice",
+   "polite": "Ah, nice."
+  },
+  {
+   "id": "fo_misc_17",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.misc"
+   ],
+   "conds": [],
+   "casual": "interesting",
+   "polite": "Interesting."
+  },
+  {
+   "id": "fo_misc_18",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.misc"
+   ],
+   "conds": [],
+   "casual": "hmm",
+   "polite": "Hmm."
+  },
+  {
+   "id": "fo_misc_19",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.misc"
+   ],
+   "conds": [],
+   "casual": "oh really?",
+   "polite": "Oh, really?"
+  },
+  {
+   "id": "fo_misc_20",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.misc"
+   ],
+   "conds": [],
+   "casual": "yep",
+   "polite": "Yep."
+  },
+  {
+   "id": "fo_lvl_05",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.levelup"
+   ],
+   "conds": [],
+   "casual": "{lvl}! woo",
+   "polite": "Level {lvl}! Wonderful."
+  },
+  {
+   "id": "fo_lvl_06",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.levelup"
+   ],
+   "conds": [],
+   "casual": "ding {lvl}, slowly but surely",
+   "polite": "Level {lvl}. Slowly but surely."
+  },
+  {
+   "id": "fo_lvl_07",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.levelup"
+   ],
+   "conds": [],
+   "casual": "{job} hit {lvl} :D",
+   "polite": "My {job} reached level {lvl}!"
+  },
+  {
+   "id": "fo_lvl_08",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.levelup"
+   ],
+   "conds": [],
+   "casual": "{lvl} now, getting there",
+   "polite": "Level {lvl} now. Getting there."
+  },
+  {
+   "id": "fo_lvl_09",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.levelup"
+   ],
+   "conds": [],
+   "casual": "another level, {lvl} :)",
+   "polite": "Another level. {lvl} now."
+  },
+  {
+   "id": "fo_lvl_10",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.levelup"
+   ],
+   "conds": [],
+   "casual": "ding~ {job} {lvl}",
+   "polite": "{job} is now level {lvl}."
+  },
+  {
+   "id": "fo_lvl_11",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.levelup"
+   ],
+   "conds": [],
+   "casual": "{lvl} at last, that one took a while",
+   "polite": "Level {lvl} at last. That one took a while."
+  },
+  {
+   "id": "fo_lvlr_06",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.levelup_react"
+   ],
+   "conds": [],
+   "casual": "gz {member}! :D",
+   "polite": "Congratulations, {member}!"
+  },
+  {
+   "id": "fo_lvlr_07",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.levelup_react"
+   ],
+   "conds": [],
+   "casual": "woo gz",
+   "polite": "Wonderful, congratulations."
+  },
+  {
+   "id": "fo_lvlr_08",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.levelup_react"
+   ],
+   "conds": [],
+   "casual": "grats {member}",
+   "polite": "Well done, {member}."
+  },
+  {
+   "id": "fo_lvlr_09",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.levelup_react"
+   ],
+   "conds": [],
+   "casual": "nice ding!",
+   "polite": "A fine level. Congratulations."
+  },
+  {
+   "id": "fo_lvlr_10",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.levelup_react"
+   ],
+   "conds": [],
+   "casual": "gz, keep it up",
+   "polite": "Congratulations. Keep it up."
+  },
+  {
+   "id": "fo_lvlr_11",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.levelup_react"
+   ],
+   "conds": [],
+   "casual": "ding ding, gz",
+   "polite": "Congratulations on the new level."
+  },
+  {
+   "id": "fo_dead_r_04",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.death_react"
+   ],
+   "conds": [],
+   "casual": "oof",
+   "polite": "Oh no."
+  },
+  {
+   "id": "fo_dead_r_05",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.death_react"
+   ],
+   "conds": [],
+   "casual": "you ok {member}?",
+   "polite": "Are you all right, {member}?"
+  },
+  {
+   "id": "fo_dead_r_06",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.death_react"
+   ],
+   "conds": [],
+   "casual": "rip {member} :(",
+   "polite": "Oh no, {member}."
+  },
+  {
+   "id": "fo_dead_r_07",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.death_react"
+   ],
+   "conds": [],
+   "casual": "aw no",
+   "polite": "That is unfortunate."
+  },
+  {
+   "id": "fo_dead_r_08",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.death_react"
+   ],
+   "conds": [],
+   "casual": "ugh, sorry {member}",
+   "polite": "I am sorry, {member}."
+  },
+  {
+   "id": "fo_gear_02",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.gear"
+   ],
+   "conds": [],
+   "casual": "new gear day :)",
+   "polite": "I bought new gear today."
+  },
+  {
+   "id": "fo_gear_03",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.gear"
+   ],
+   "conds": [],
+   "casual": "finally upgraded my gear",
+   "polite": "I finally upgraded my equipment."
+  },
+  {
+   "id": "fo_gear_04",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.gear"
+   ],
+   "conds": [],
+   "casual": "bought some upgrades, feeling good",
+   "polite": "I bought some upgrades. I feel much better equipped."
+  },
+  {
+   "id": "fo_gear_05",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.gear"
+   ],
+   "conds": [],
+   "casual": "spent way too much on gear lol",
+   "polite": "I spent far too much on equipment today."
+  },
+  {
+   "id": "fo_gearr_01",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.gear_react"
+   ],
+   "conds": [],
+   "casual": "ooh nice",
+   "polite": "Oh, nice."
+  },
+  {
+   "id": "fo_gearr_02",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.gear_react"
+   ],
+   "conds": [],
+   "casual": "nice upgrade!",
+   "polite": "A good upgrade!"
+  },
+  {
+   "id": "fo_gearr_03",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.gear_react"
+   ],
+   "conds": [],
+   "casual": "nice, gz on the upgrade {member}",
+   "polite": "Congratulations on the upgrade, {member}."
+  },
+  {
+   "id": "fo_gearr_04",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.gear_react"
+   ],
+   "conds": [],
+   "casual": "gotta show it off sometime",
+   "polite": "You will have to show it off sometime."
+  },
+  {
+   "id": "fo_job_02",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.jobchange"
+   ],
+   "conds": [],
+   "casual": "trying out {job} today",
+   "polite": "I am trying {job} today."
+  },
+  {
+   "id": "fo_job_03",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.jobchange"
+   ],
+   "conds": [],
+   "casual": "{job} time",
+   "polite": "Time for some {job}."
+  },
+  {
+   "id": "fo_job_04",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.jobchange"
+   ],
+   "conds": [],
+   "casual": "giving {job} some love",
+   "polite": "Giving {job} some attention for a while."
+  },
+  {
+   "id": "fo_job_05",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.jobchange"
+   ],
+   "conds": [],
+   "casual": "on {job} for a bit now",
+   "polite": "On {job} for a while now."
+  },
+  {
+   "id": "fo_rank_02",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.rankup"
+   ],
+   "conds": [],
+   "casual": "rank up! :D",
+   "polite": "I ranked up!"
+  },
+  {
+   "id": "fo_rank_03",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.rankup"
+   ],
+   "conds": [],
+   "casual": "new rank, mission done",
+   "polite": "New rank. The mission is done."
+  },
+  {
+   "id": "fo_rank_04",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.rankup"
+   ],
+   "conds": [],
+   "casual": "finally ranked up, that mission was something",
+   "polite": "I finally ranked up. That mission was quite something."
+  },
+  {
+   "id": "fo_rank_r_02",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.rankup_react"
+   ],
+   "conds": [],
+   "casual": "gz on rank!",
+   "polite": "Congratulations on your new rank."
+  },
+  {
+   "id": "fo_rank_r_03",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.rankup_react"
+   ],
+   "conds": [],
+   "casual": "nice, gz {member}",
+   "polite": "Well done, {member}."
+  },
+  {
+   "id": "fo_rank_r_04",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.rankup_react"
+   ],
+   "conds": [],
+   "casual": "woo, rank up! gz",
+   "polite": "A rank up! Congratulations."
+  },
+  {
+   "id": "fo_win_r_03",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.win_react"
+   ],
+   "conds": [],
+   "casual": "nice job!",
+   "polite": "Nicely done!"
+  },
+  {
+   "id": "fo_win_r_04",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.win_react"
+   ],
+   "conds": [],
+   "casual": "gg!",
+   "polite": "Well fought!"
+  },
+  {
+   "id": "fo_win_r_05",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.win_react"
+   ],
+   "conds": [],
+   "casual": "well done {member}",
+   "polite": "Well done, {member}."
   }
  ],
  "scenes": [
@@ -8120,6 +9556,16 @@
  "dropped": [
   {
    "pack": "living_world",
+   "num": 78,
+   "cat": "social_and_humor",
+   "ids": [
+    "social_and_humor_008_v1"
+   ],
+   "text": "That is going in the story we tell new members.",
+   "why": "odd as the answer to a plain lol (r.laugh has no other use)"
+  },
+  {
+   "pack": "living_world",
    "num": 259,
    "cat": "crafting_economy",
    "ids": [
@@ -8627,6 +10073,34 @@
   },
   {
    "pack": "living_world",
+   "num": 394,
+   "cat": "conversation_flow",
+   "ids": [
+    "exp2_transition_15_1",
+    "exp2_transition_15_2",
+    "exp2_transition_15_3",
+    "exp2_transition_15_4",
+    "exp2_transition_15_5"
+   ],
+   "text": "Thanks for taking the time to explain that.",
+   "why": "thanks for help; r.thanks only answers someone saying gz to the bot"
+  },
+  {
+   "pack": "living_world",
+   "num": 395,
+   "cat": "conversation_flow",
+   "ids": [
+    "exp2_transition_16_1",
+    "exp2_transition_16_2",
+    "exp2_transition_16_3",
+    "exp2_transition_16_4",
+    "exp2_transition_16_5"
+   ],
+   "text": "I appreciate the help. That saved me a trip.",
+   "why": "thanks for help; r.thanks only answers someone saying gz to the bot"
+  },
+  {
+   "pack": "living_world",
    "num": 397,
    "cat": "friendship",
    "ids": [
@@ -8664,6 +10138,16 @@
    ],
    "text": "I still owe you for helping me with that mission.",
    "why": "claims the player helped with a mission"
+  },
+  {
+   "pack": "living_world",
+   "num": 412,
+   "cat": "rivalry",
+   "ids": [
+    "v030_rivalry_007"
+   ],
+   "text": "I am not saying I was right, but I am also not saying I was wrong.",
+   "why": "odd as the answer to a plain lol (r.laugh has no other use)"
   },
   {
    "pack": "living_world",
@@ -10551,6 +12035,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "So I am on your roster now. Where do you want me?",
     "pack_text": "So I am on your roster now. Where do you want me?"
    },
@@ -10563,6 +12048,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Name is {name}. I will follow your lead until you give me a reason not to.",
     "pack_text": "Name is {name}. I will follow your lead until you give me a reason not to."
    },
@@ -10575,6 +12061,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "You picked me for this. I will try to be worth the slot.",
     "pack_text": "You picked me for this. I will try to be worth the slot."
    },
@@ -10587,6 +12074,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Before we go: do you want me up front, in the back, or wherever the fight starts?",
     "pack_text": "Before we go: do you want me up front, in the back, or wherever the fight starts?"
    },
@@ -10599,6 +12087,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "One rule from me: tell me when to hold and when to move. I will do the rest.",
     "pack_text": "One rule from me: tell me when to hold and when to move. I will do the rest."
    },
@@ -10613,6 +12102,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "I will keep you standing. Try to make that easy for me.",
     "pack_text": "I will keep you standing. Try to make that easy for me."
    },
@@ -10627,6 +12117,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Put me where the hits land. I will keep them off you.",
     "pack_text": "Put me where the hits land. I will keep them off you."
    },
@@ -10641,6 +12132,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "I hit what you mark. Nothing clever unless you ask.",
     "pack_text": "I hit what you mark. Nothing clever unless you ask."
    },
@@ -10653,6 +12145,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "On it.",
     "pack_text": "On it."
    },
@@ -10665,6 +12158,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Following.",
     "pack_text": "Following."
    },
@@ -10677,6 +12171,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Holding here.",
     "pack_text": "Holding here."
    },
@@ -10689,6 +12184,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "I will stay put until you call.",
     "pack_text": "I will stay put until you call."
    },
@@ -10701,6 +12197,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Understood. Regrouping.",
     "pack_text": "Understood. Regrouping."
    },
@@ -10715,6 +12212,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "I have the first one. Let it come to me.",
     "pack_text": "I have the first one. Let it come to me."
    },
@@ -10729,6 +12227,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Casting. Stay in range.",
     "pack_text": "Casting. Stay in range."
    },
@@ -10743,6 +12242,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "I need a breath before the next pull.",
     "pack_text": "I need a breath before the next pull."
    },
@@ -10757,6 +12257,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Ready when you are.",
     "pack_text": "Ready when you are."
    },
@@ -10771,6 +12272,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Buff is up. Say when you want the next.",
     "pack_text": "Buff is up. Say when you want the next."
    },
@@ -10785,6 +12287,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "I am low. Cover me for a moment.",
     "pack_text": "I am low. Cover me for a moment."
    },
@@ -10797,6 +12300,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Taking a beating here. A cure would be welcome.",
     "pack_text": "Taking a beating here. A cure would be welcome."
    },
@@ -10811,6 +12315,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Armor is holding, but I could use a hand.",
     "pack_text": "Armor is holding, but I could use a hand."
    },
@@ -10823,6 +12328,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "That went better than it had any right to.",
     "pack_text": "That went better than it had any right to."
    },
@@ -10835,6 +12341,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Check your supplies before we move.",
     "pack_text": "Check your supplies before we move."
    },
@@ -10847,6 +12354,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "If we keep pulling like that, we will run out of luck before we run out of targets.",
     "pack_text": "If we keep pulling like that, we will run out of luck before we run out of targets."
    },
@@ -10859,6 +12367,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "I am fine. Check the others first.",
     "pack_text": "I am fine. Check the others first."
    },
@@ -10871,6 +12380,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Good pace. I can keep this up for a while.",
     "pack_text": "Good pace. I can keep this up for a while."
    },
@@ -10883,6 +12393,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "I am down. Keep going without me.",
     "pack_text": "I am down. Do not spend the whole fight on me."
    },
@@ -10895,6 +12406,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "We lost that one. Regroup and talk it through.",
     "pack_text": "We lost that one. Regroup and talk it through."
    },
@@ -10907,6 +12419,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "No shame in a retreat. I would rather try again than argue.",
     "pack_text": "No shame in a retreat. I would rather try again than argue."
    },
@@ -10919,6 +12432,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Take a minute. Then we go again.",
     "pack_text": "Take a minute. Then we go again."
    },
@@ -10931,6 +12445,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "I will check the shops while you sort your gear.",
     "pack_text": "I will check the shops while you sort your gear."
    },
@@ -10943,6 +12458,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "This city is louder than I remembered.",
     "pack_text": "This city is louder than I remembered."
    },
@@ -10955,6 +12471,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Do you need anything before we leave? I would rather ask now.",
     "pack_text": "Do you need anything before we leave? I would rather ask now."
    },
@@ -10967,6 +12484,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "If you are changing jobs, tell me. I will adjust.",
     "pack_text": "If you are changing jobs, tell me. I will adjust."
    },
@@ -10979,6 +12497,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "The guards keep looking at me. Probably the weapon.",
     "pack_text": "The guards keep looking at me. Probably the weapon."
    },
@@ -10991,6 +12510,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "I will be at the gate when you are ready.",
     "pack_text": "I will be at the gate when you are ready."
    },
@@ -11003,6 +12523,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Quiet out here. I prefer it that way.",
     "pack_text": "Quiet out here. I prefer it that way."
    },
@@ -11015,6 +12536,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Want me to scout ahead a little?",
     "pack_text": "The road bends east. Want me to scout ahead?"
    },
@@ -11027,6 +12549,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Something moved over there. Probably nothing.",
     "pack_text": "Something moved in the grass. Probably nothing."
    },
@@ -11039,6 +12562,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Good ground here. We could rest if you need it.",
     "pack_text": "Good ground here. We could rest if you need it."
    },
@@ -11051,6 +12575,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "I will keep watch while you check the map.",
     "pack_text": "I will keep watch while you check the map."
    },
@@ -11063,6 +12588,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Nothing on the horizon. That usually means something is hiding.",
     "pack_text": "Nothing on the horizon. That usually means something is hiding."
    },
@@ -11075,6 +12601,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "You are standing in my light.",
     "pack_text": "You are standing in my light."
    },
@@ -11087,6 +12614,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Next time, warn me before you do that.",
     "pack_text": "Next time, warn me before you do that."
    },
@@ -11099,6 +12627,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "You always say that, and then it works.",
     "pack_text": "You always say that, and then it works."
    },
@@ -11111,6 +12640,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Keep your voice down. Something is listening.",
     "pack_text": "Keep your voice down. Something is listening."
    },
@@ -11125,6 +12655,7 @@
     "fam": [
      "new"
     ],
+    "voices": [],
     "text": "I am still learning how you work. Give me time.",
     "pack_text": "I am still learning how you work. Give me time."
    },
@@ -11139,6 +12670,7 @@
     "fam": [
      "new"
     ],
+    "voices": [],
     "text": "You do not have to explain everything. Just tell me what you need.",
     "pack_text": "You do not have to explain everything. Just tell me what you need."
    },
@@ -11153,6 +12685,7 @@
     "fam": [
      "steady"
     ],
+    "voices": [],
     "text": "You call, I move. That is how this works now.",
     "pack_text": "You call, I move. That is how this works now."
    },
@@ -11167,6 +12700,7 @@
     "fam": [
      "steady"
     ],
+    "voices": [],
     "text": "I have seen enough to know you will not waste us.",
     "pack_text": "I have seen enough to know you will not waste us."
    },
@@ -11181,6 +12715,7 @@
     "fam": [
      "trusted"
     ],
+    "voices": [],
     "text": "We have been through a lot together. I remember that.",
     "pack_text": "You have never left me on the ground. I remember that."
    },
@@ -11195,6 +12730,7 @@
     "fam": [
      "trusted"
     ],
+    "voices": [],
     "text": "Whatever we are walking into, I am with you.",
     "pack_text": "Whatever we are walking into, I am with you."
    },
@@ -11207,6 +12743,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "You changed jobs. I will adjust my place in the line.",
     "pack_text": "You changed jobs. I will adjust my place in the line."
    },
@@ -11219,6 +12756,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "If you are switching to healer, I am moving to the front.",
     "pack_text": "If you are switching to healer, I am moving to the front."
    },
@@ -11231,6 +12769,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Tell me the plan before you change your mind again.",
     "pack_text": "Tell me the plan before you change your mind again."
    },
@@ -11243,6 +12782,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Benched, not gone. Call me when you need me.",
     "pack_text": "Benched, not gone. Call me when you need me."
    },
@@ -11255,6 +12795,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Take someone who fits the job. I will be here.",
     "pack_text": "Take someone who fits the job. I will be here."
    },
@@ -11267,6 +12808,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Do not apologize. It is a roster, not a verdict.",
     "pack_text": "Do not apologize. It is a roster, not a verdict."
    },
@@ -11279,6 +12821,7 @@
     "races": [],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "I will be at the usual place. You know where to find me.",
     "pack_text": "I will be at the usual place. You know where to find me."
    },
@@ -11293,6 +12836,7 @@
     "fam": [
      "trusted"
     ],
+    "voices": [],
     "text": "There you are. I was starting to think you found a better squad.",
     "pack_text": "There you are. I was starting to think you found a better squad."
    },
@@ -11307,6 +12851,7 @@
     "fam": [
      "trusted"
     ],
+    "voices": [],
     "text": "It has been a while. You look like you have stories.",
     "pack_text": "It has been a while. You look like you have stories."
    },
@@ -11321,6 +12866,7 @@
     "fam": [
      "trusted"
     ],
+    "voices": [],
     "text": "Welcome back. Same formation as before?",
     "pack_text": "Welcome back. Same formation as before?"
    },
@@ -11335,6 +12881,7 @@
     ],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "No grand destiny in my family. Just a road, a job, and a reason to keep walking.",
     "pack_text": "No grand destiny in my family. Just a road, a job, and a reason to keep walking."
    },
@@ -11349,6 +12896,7 @@
     ],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Hume towns are all the same at night. One lamp, one argument, one open door.",
     "pack_text": "Hume towns are all the same at night. One lamp, one argument, one open door."
    },
@@ -11363,6 +12911,7 @@
     ],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "San d'Oria taught me to stand straight. The road taught me to duck.",
     "pack_text": "San d'Oria taught me to stand straight. The road taught me to duck."
    },
@@ -11377,6 +12926,7 @@
     ],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "We are a proud people. It gets in the way of asking for directions.",
     "pack_text": "We are a proud people. It gets in the way of asking for directions."
    },
@@ -11391,6 +12941,7 @@
     ],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "The grass is taller than I am out here. I can still see the road.",
     "pack_text": "The grass is taller than I am out here. I can still see the road."
    },
@@ -11405,6 +12956,7 @@
     ],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Everyone pats my head in town. I have started charging for it.",
     "pack_text": "Everyone pats my head in town. I have started charging for it."
    },
@@ -11419,6 +12971,7 @@
     ],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "The wind carries smoke from the east. Probably someone's dinner, not trouble.",
     "pack_text": "The wind carries smoke from the east. Probably someone's dinner, not trouble."
    },
@@ -11433,6 +12986,7 @@
     ],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "People expect me to be quiet. I am quiet because I am listening.",
     "pack_text": "People expect me to be quiet. I am quiet because I am listening."
    },
@@ -11447,6 +13001,7 @@
     ],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "Mind the doorway. I keep forgetting how low they build them.",
     "pack_text": "Mind the doorway. I keep forgetting how low they build them."
    },
@@ -11461,6 +13016,7 @@
     ],
     "genders": [],
     "fam": [],
+    "voices": [],
     "text": "I have been many places. None of them had a chair that fit.",
     "pack_text": "I have been many places. None of them had a chair that fit."
    },
@@ -11475,6 +13031,7 @@
      "female"
     ],
     "fam": [],
+    "voices": [],
     "text": "I answer to {name}. 'Miss' is fine if you are being formal.",
     "pack_text": "I answer to {name}. 'Miss' is fine if you are being formal."
    },
@@ -11489,8 +13046,3676 @@
      "male"
     ],
     "fam": [],
+    "voices": [],
     "text": "I answer to {name}. 'Sir' only if you are being formal.",
     "pack_text": "I answer to {name}. 'Sir' only if you are being formal."
+   },
+   {
+    "id": "fo_sq_pull_t1",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "tank"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Eyes on me. I will hold it.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_t2",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "tank"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Let it come to me first.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_t3",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "tank"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Give me a moment to get its attention.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_t4",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "tank"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Stay behind me.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_t5",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "tank"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Front line is mine.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_t6",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "tank"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I will keep it facing me.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_h1",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I am watching everyone's health. Go.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_h2",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Stay where I can reach you.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_h3",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Cures are ready.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_h4",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Do not run too far ahead of me.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_h5",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I will keep you on your feet.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_d1",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "damage"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Waiting for your mark.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_d2",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "damage"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Let us make this one quick.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_d3",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "damage"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I will hit it hard.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_d4",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "damage"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Point me at it.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_d5",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "damage"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Going in.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_s1",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "support"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I will keep everyone sharp.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_s2",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "support"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Stay close and I can help more of you at once.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_s3",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "support"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Ready to back you up.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_s4",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "support"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Let me know what you need from me.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_r1",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "hybrid"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I can cure or fight. Tell me which.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_r2",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "hybrid"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Blade in one hand, spells in the other. Ready.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_r3",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "hybrid"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I will help wherever it is needed.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_r4",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [
+     "hybrid"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I will watch the fight and fill the gaps.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_b1",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "To battle!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_b2",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Another one. Good!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_b3",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Stand firm, everyone!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_c1",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "Steady. One at a time.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_c2",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "Here it comes. Stay calm.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_c3",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "Breathe first. Then strike.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_ch1",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Ooh, here we go!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_ch2",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Let us do this!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_ch3",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Fight time!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_g1",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Finally. Something to hit.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_g2",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Hmph. Here it comes.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_pull_g3",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Get on with it.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hp_t1",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [
+     "tank"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Still standing. Barely.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hp_t2",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [
+     "tank"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "It is getting through my guard.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hp_t3",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [
+     "tank"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I cannot take many more of those.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hp_h1",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I need to cure myself. Hold on.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hp_h2",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Someone keep it off me!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hp_r1",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [
+     "hybrid"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I am low. I may need to cure myself.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hp_1",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "That one hurt.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hp_2",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I am in trouble here.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hp_3",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I need a moment. I am badly hurt.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hp_b1",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "It will take more than that!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hp_b2",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "I am not finished yet!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hp_c1",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "I am hurt. A cure when you can, please.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hp_c2",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "I am weakening. Please be careful.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hp_ch1",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Ow, ow, ow! Help!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hp_ch2",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Ouch! That really hurt!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hp_g1",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Tch. Just a scratch. Mostly.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hp_g2",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Bah. I have had worse. Not much worse.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_mp_1",
+    "tags": [
+     "s.lowmp"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "My magic is running thin.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_mp_2",
+    "tags": [
+     "s.lowmp"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Low on MP. Make this one count.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_mp_3",
+    "tags": [
+     "s.lowmp"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Only a few cures left in me.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_mp_4",
+    "tags": [
+     "s.lowmp"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I will need to rest after this fight.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_mp_b",
+    "tags": [
+     "s.lowmp"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "My magic wanes, but I am not done yet!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_mp_c",
+    "tags": [
+     "s.lowmp"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "My MP is low. Let us rest after this one.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_mp_ch",
+    "tags": [
+     "s.lowmp"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Uh oh, I am almost out of magic!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_mp_g",
+    "tags": [
+     "s.lowmp"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Running dry. Do not pull another.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_1",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Good. Next one?",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_2",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Clean enough.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_3",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "That is done. Catch your breath if you need to.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_4",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Nice work, everyone.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_5",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Ready for the next one whenever you are.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_6",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "We work well together.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_7",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Not bad at all.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_8",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "One down.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_t",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [
+     "tank"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Send the next one my way.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_h",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Everyone all right? Tell me if you are hurt.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_d",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [
+     "damage"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I am just getting started.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_s",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [
+     "support"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Give me a word before the next pull.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_b1",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Ha! Who is next?",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_b2",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "That is how it is done!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_b3",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Keep them coming!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_b4",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Too easy. Bring me something tougher.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_c1",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "Well done. Take a moment if you need it.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_c2",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "Good. We kept our heads.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_c3",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "Good. Calm and steady.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_c4",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "Rest if you need to. I will wait.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_ch1",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "We did it! Yay!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_ch2",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "That was fun! Again!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_ch3",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Great job, everyone!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_ch4",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Woo! Another one down!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_g1",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Hmph. Done.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_g2",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Is that all it had?",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_g3",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Next.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_after_g4",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Could have been faster.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_reply_1",
+    "tags": [
+     "s.reply"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Agreed.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_reply_2",
+    "tags": [
+     "s.reply"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Right.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_reply_3",
+    "tags": [
+     "s.reply"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Fair enough.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_reply_4",
+    "tags": [
+     "s.reply"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Lead the way.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_reply_5",
+    "tags": [
+     "s.reply"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Mm. Same here.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_reply_b1",
+    "tags": [
+     "s.reply"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Ha! Agreed.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_reply_b2",
+    "tags": [
+     "s.reply"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Right behind you!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_reply_c1",
+    "tags": [
+     "s.reply"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "Mm. I think so too.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_reply_c2",
+    "tags": [
+     "s.reply"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "Yes. Let us keep it steady.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_reply_ch1",
+    "tags": [
+     "s.reply"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Yep, yep!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_reply_ch2",
+    "tags": [
+     "s.reply"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Totally!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_reply_g1",
+    "tags": [
+     "s.reply"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Hmph. If you say so.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_reply_g2",
+    "tags": [
+     "s.reply"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Whatever you say.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_reply_g3",
+    "tags": [
+     "s.reply"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Fine.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_01",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Take your time. I am in no hurry.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_02",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Let me know when you want to head out.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_03",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Do not forget to restock before we go.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_04",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "A quiet moment. I will take it.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_05",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I like towns. Walls, roofs, and no monsters.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_06",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "We could use some food for the road.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_07",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "No rush. The monsters will still be there.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_08",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I will check my gear while we wait.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_09",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Back in town. My feet thank you.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_10",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "When we head out, where to?",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_11",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "If you need to sort your bags, now is the time.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_12",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "It is nice to hear people talking again.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_13",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I could get used to sleeping in a real bed.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_14",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Should I wait at the gate, or stay with you?",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_15",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Is there anything you want me to carry?",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_h",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I should pick up a few remedies while we are here.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_t",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [
+     "tank"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "My armor could use some mending.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_b1",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Town is fine, but my weapon wants work.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_b2",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Let us not stay long. Adventure waits.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_b3",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Whenever you are ready. Soon, I hope.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_c1",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "A little peace is welcome. Take your time.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_c2",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "I will wait here. Do what you need to do.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_c3",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "It is good to rest somewhere safe.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_ch1",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Ooh, so many people! I love town!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_ch2",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Can we get a snack before we go?",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_ch3",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Shopping! Do we need anything? Can I look?",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_g1",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Hurry up. Towns make me itch.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_g2",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Let us get moving. Standing around is dull.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_town_g3",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Hmph. Waiting again.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_01",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I will watch our backs.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_02",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Pick a target whenever you like.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_03",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Mind your footing out here.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_04",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Long way from town. Stay sharp.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_05",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Do you want to keep hunting here, or move on?",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_06",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "If you want to rest, now is a good time.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_07",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Good thing you know the way. I would be lost.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_08",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Watch for anything that sneaks up on us.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_09",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I like being out here with you.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_10",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Let me know if you want to try somewhere else.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_11",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Ready when you are. No rush.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_12",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Keep your eyes open. This place is not as empty as it looks.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_13",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I will stay close.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_14",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "The best part of a long road is the company.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_15",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Remind me to mend my gear later.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_16",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "We should not stray too far from the path.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_h",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [
+     "healer"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Stay near me out here. I cannot cure what I cannot reach.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_t",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [
+     "tank"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "If anything charges us, I go first.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_d",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [
+     "damage"
+    ],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I am itching for the next fight.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_b1",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Come on, let us find something worth fighting.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_b2",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "I feel strong today. Let us push on.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_b3",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Nothing out here scares me. Well, almost nothing.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_c1",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "It is peaceful out here, in its way.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_c2",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "Let us keep a careful pace.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_c3",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "I will keep watch. Rest your eyes a moment.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_ch1",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "I love it out here!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_ch2",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Ooh, I wonder what is up ahead!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_ch3",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "This is the best part. The walking and the talking!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_g1",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Standing around will not make us any stronger.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_g2",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Pick something and hit it already.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_field_g3",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Hmph. Too quiet.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_banter_01",
+    "tags": [
+     "s.banter"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Whose turn is it to carry the food?",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_banter_02",
+    "tags": [
+     "s.banter"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Do not stand so close. I need room to swing.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_banter_03",
+    "tags": [
+     "s.banter"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Someone keeps humming. It is not me.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_banter_04",
+    "tags": [
+     "s.banter"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "If anyone sees a treasure chest, it is mine.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_banter_05",
+    "tags": [
+     "s.banter"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I bet I land the last hit next fight.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_banter_06",
+    "tags": [
+     "s.banter"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Try to keep up, everyone.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_banter_07",
+    "tags": [
+     "s.banter"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Remind me again why I agreed to this.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_banter_08",
+    "tags": [
+     "s.banter"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Quiet, all of you. I am listening.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_banter_b",
+    "tags": [
+     "s.banter"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Next fight, I go first. No arguments.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_banter_c",
+    "tags": [
+     "s.banter"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "Save your strength for the monsters, everyone.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_banter_ch",
+    "tags": [
+     "s.banter"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "We make a great team, do we not?",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_banter_g",
+    "tags": [
+     "s.banter"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Less talking, more walking.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_down_1",
+    "tags": [
+     "s.down"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I cannot... keep up...",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_down_2",
+    "tags": [
+     "s.down"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Finish it... for me...",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_down_3",
+    "tags": [
+     "s.down"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Do not stop... for me...",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_down_b1",
+    "tags": [
+     "s.down"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "I fall... but you will win this...",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_down_b2",
+    "tags": [
+     "s.down"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Keep fighting... do not look back...",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_down_c1",
+    "tags": [
+     "s.down"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "I am sorry... I am out of this one...",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_down_c2",
+    "tags": [
+     "s.down"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "Stay safe... without me...",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_down_ch1",
+    "tags": [
+     "s.down"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Oof... down I go...",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_down_ch2",
+    "tags": [
+     "s.down"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "I will just... lie here a bit...",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_down_g1",
+    "tags": [
+     "s.down"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Bah... finish it...",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_down_g2",
+    "tags": [
+     "s.down"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Tch... do not lose this...",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_wipe_1",
+    "tags": [
+     "s.wipe"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Back on your feet? Good. We try again.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_wipe_2",
+    "tags": [
+     "s.wipe"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "We go again, more carefully this time.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_wipe_3",
+    "tags": [
+     "s.wipe"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "That one got the better of us. Not again.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_wipe_b1",
+    "tags": [
+     "s.wipe"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "We fell, so we rise. Let us go!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_wipe_b2",
+    "tags": [
+     "s.wipe"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Round two. This time we win.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_wipe_c1",
+    "tags": [
+     "s.wipe"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "Let us slow down this time. One fight at a time.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_wipe_c2",
+    "tags": [
+     "s.wipe"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "Are you all right? Take your time.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_wipe_ch1",
+    "tags": [
+     "s.wipe"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Okay! Fresh start!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_wipe_ch2",
+    "tags": [
+     "s.wipe"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "We got knocked down. We get back up!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_wipe_g1",
+    "tags": [
+     "s.wipe"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Hmph. Try not to fall this time.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_wipe_g2",
+    "tags": [
+     "s.wipe"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Again. And watch your back.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hold_1",
+    "tags": [
+     "s.ack_hold"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "I will hold this spot.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hold_2",
+    "tags": [
+     "s.ack_hold"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Staying right here.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hold_3",
+    "tags": [
+     "s.ack_hold"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Holding. Call me when you need me.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hold_b",
+    "tags": [
+     "s.ack_hold"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "This ground is ours. Holding!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hold_c",
+    "tags": [
+     "s.ack_hold"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "I will wait here.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hold_ch",
+    "tags": [
+     "s.ack_hold"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Okay! I will wait right here!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_hold_g",
+    "tags": [
+     "s.ack_hold"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Fine. Not moving.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_follow_1",
+    "tags": [
+     "s.ack_follow"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "On my way.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_follow_2",
+    "tags": [
+     "s.ack_follow"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Coming.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_follow_3",
+    "tags": [
+     "s.ack_follow"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "With you.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_follow_b",
+    "tags": [
+     "s.ack_follow"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Lead on!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_follow_c",
+    "tags": [
+     "s.ack_follow"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "I will follow your lead.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_follow_ch",
+    "tags": [
+     "s.ack_follow"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Wait for me!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_follow_g",
+    "tags": [
+     "s.ack_follow"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Yeah, yeah. Coming.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_bond_n1",
+    "tags": [
+     "s.bond"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "new"
+    ],
+    "voices": [],
+    "text": "I do not know you well yet. I will learn.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_bond_n2",
+    "tags": [
+     "s.bond"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "new"
+    ],
+    "voices": [],
+    "text": "Tell me how you like to fight. I will adapt.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_bond_n3",
+    "tags": [
+     "s.bond"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "new"
+    ],
+    "voices": [],
+    "text": "Still finding my footing with you.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_bond_n4",
+    "tags": [
+     "s.bond"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "new"
+    ],
+    "voices": [],
+    "text": "I will try not to get in your way.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_bond_s1",
+    "tags": [
+     "s.bond"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "steady"
+    ],
+    "voices": [],
+    "text": "We are getting good at this.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_bond_s2",
+    "tags": [
+     "s.bond"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "steady"
+    ],
+    "voices": [],
+    "text": "I know your timing now. It helps.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_bond_s3",
+    "tags": [
+     "s.bond"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "steady"
+    ],
+    "voices": [],
+    "text": "Same as always? Good.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_bond_s4",
+    "tags": [
+     "s.bond"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "steady"
+    ],
+    "voices": [],
+    "text": "You can count on me. You know that by now.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_bond_t1",
+    "tags": [
+     "s.bond"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "trusted"
+    ],
+    "voices": [],
+    "text": "I would follow you into any fight.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_bond_t2",
+    "tags": [
+     "s.bond"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "trusted"
+    ],
+    "voices": [],
+    "text": "There is nobody I would rather fight beside.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_bond_t3",
+    "tags": [
+     "s.bond"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "trusted"
+    ],
+    "voices": [],
+    "text": "I am glad you keep calling on me.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_bond_t4",
+    "tags": [
+     "s.bond"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "trusted"
+    ],
+    "voices": [],
+    "text": "Whatever comes, we handle it together.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_back_1",
+    "tags": [
+     "s.reunion"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "trusted"
+    ],
+    "voices": [],
+    "text": "Back again. I kept my gear ready.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_back_2",
+    "tags": [
+     "s.reunion"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "trusted"
+    ],
+    "voices": [],
+    "text": "It has been a few days. Good to see you.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_back_3",
+    "tags": [
+     "s.reunion"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "trusted"
+    ],
+    "voices": [],
+    "text": "I wondered when you would call.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_back_b",
+    "tags": [
+     "s.reunion"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "trusted"
+    ],
+    "voices": [
+     "bold"
+    ],
+    "text": "At last! I was getting restless.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_back_c",
+    "tags": [
+     "s.reunion"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "trusted"
+    ],
+    "voices": [
+     "calm"
+    ],
+    "text": "Welcome back. I hope you rested well.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_back_ch",
+    "tags": [
+     "s.reunion"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "trusted"
+    ],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "You are back! I missed this!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_back_g",
+    "tags": [
+     "s.reunion"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [
+     "trusted"
+    ],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Took you long enough.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_job_1",
+    "tags": [
+     "s.jobchange"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "New job? I will watch how you fight now.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_job_2",
+    "tags": [
+     "s.jobchange"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Different job, same plan. I am with you.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_job_3",
+    "tags": [
+     "s.jobchange"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Changed jobs again? I will keep up.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_job_b",
+    "tags": [
+     "s.jobchange"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "A change of job! Let us test it in a real fight.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_job_c",
+    "tags": [
+     "s.jobchange"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "A change of job. I will adjust to you.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_job_ch",
+    "tags": [
+     "s.jobchange"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Ooh, a different job! Show me what it can do!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_job_g",
+    "tags": [
+     "s.jobchange"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Another job. Hmph. Just do not get us killed learning it.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_job_whm1",
+    "tags": [
+     "s.jobchange_whm"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "You are healing now? Then I will try not to need it.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_job_whm2",
+    "tags": [
+     "s.jobchange_whm"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "A healer. Good. I will keep them off you.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_bench_b",
+    "tags": [
+     "s.bench"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Rest is wasted on me, but very well.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_bench_c",
+    "tags": [
+     "s.bench"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "I understand. Good luck out there.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_bench_ch",
+    "tags": [
+     "s.bench"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Aww. Okay! Call me soon!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_bench_g",
+    "tags": [
+     "s.bench"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Hmph. Fine.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_race_hu1",
+    "tags": [
+     "s.race"
+    ],
+    "roles": [],
+    "races": [
+     "Hume"
+    ],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Humes get along with almost anyone. It is our one great talent.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_race_hu2",
+    "tags": [
+     "s.race"
+    ],
+    "roles": [],
+    "races": [
+     "Hume"
+    ],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "My grandmother said Humes were made for walking. She was right.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_race_el1",
+    "tags": [
+     "s.race"
+    ],
+    "roles": [],
+    "races": [
+     "Elvaan"
+    ],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "An Elvaan keeps their word. I keep mine.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_race_el2",
+    "tags": [
+     "s.race"
+    ],
+    "roles": [],
+    "races": [
+     "Elvaan"
+    ],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "We Elvaan do not slouch. Not even when we are tired.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_race_ta1",
+    "tags": [
+     "s.race"
+    ],
+    "roles": [],
+    "races": [
+     "Tarutaru"
+    ],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Being small has its uses. Monsters often look right past me.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_race_ta2",
+    "tags": [
+     "s.race"
+    ],
+    "roles": [],
+    "races": [
+     "Tarutaru"
+    ],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Windurst taught me patience. The road is teaching me the rest.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_race_mi1",
+    "tags": [
+     "s.race"
+    ],
+    "roles": [],
+    "races": [
+     "Mithra"
+    ],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "My nose has never lied to me. Neither have my ears.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_race_mi2",
+    "tags": [
+     "s.race"
+    ],
+    "roles": [],
+    "races": [
+     "Mithra"
+    ],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Windurst is home now, but I still dream of the southern seas.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_race_ga1",
+    "tags": [
+     "s.race"
+    ],
+    "roles": [],
+    "races": [
+     "Galka"
+    ],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "Galka do not remember being young. We remember almost everything else.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_race_ga2",
+    "tags": [
+     "s.race"
+    ],
+    "roles": [],
+    "races": [
+     "Galka"
+    ],
+    "genders": [],
+    "fam": [],
+    "voices": [],
+    "text": "People think Galka are slow. We are just careful.",
+    "pack_text": ""
    }
   ],
   "scenes": [
@@ -11623,6 +16848,170 @@
      {
       "role": "tank",
       "text": "Same formation, then. I will take the front."
+     }
+    ]
+   },
+   {
+    "id": "fo_sqs_rest_hungry",
+    "tags": [
+     "s.scene_rest"
+    ],
+    "cooldown": 90,
+    "roles": [
+     "damage",
+     "support"
+    ],
+    "lines": [
+     {
+      "role": "damage",
+      "text": "Is anyone else hungry, or is it just me?"
+     },
+     {
+      "role": "support",
+      "text": "You are always hungry."
+     },
+     {
+      "role": "damage",
+      "text": "Fighting is hard work."
+     }
+    ]
+   },
+   {
+    "id": "fo_sqs_rest_checkup",
+    "tags": [
+     "s.scene_rest"
+    ],
+    "cooldown": 90,
+    "roles": [
+     "healer",
+     "support"
+    ],
+    "lines": [
+     {
+      "role": "healer",
+      "text": "Sit still. Let me look you over."
+     },
+     {
+      "role": "support",
+      "text": "I am fine. Really."
+     },
+     {
+      "role": "healer",
+      "text": "You always say that."
+     }
+    ]
+   },
+   {
+    "id": "fo_sqs_rest_plan",
+    "tags": [
+     "s.scene_rest"
+    ],
+    "cooldown": 90,
+    "roles": [
+     "damage",
+     "tank"
+    ],
+    "lines": [
+     {
+      "role": "tank",
+      "text": "When we go again, let me take the first hit."
+     },
+     {
+      "role": "damage",
+      "text": "Fine. I will wait for your call this time."
+     },
+     {
+      "role": "tank",
+      "text": "That is all I ask."
+     }
+    ]
+   },
+   {
+    "id": "fo_sqs_rest_quiet",
+    "tags": [
+     "s.scene_rest"
+    ],
+    "cooldown": 90,
+    "roles": [
+     "healer",
+     "support"
+    ],
+    "lines": [
+     {
+      "role": "support",
+      "text": "Nice to sit down for a moment."
+     },
+     {
+      "role": "healer",
+      "text": "Enjoy it. We will be moving again soon."
+     }
+    ]
+   },
+   {
+    "id": "fo_sqs_lowhp_hold",
+    "tags": [
+     "s.scene_lowhp"
+    ],
+    "cooldown": 60,
+    "roles": [
+     "healer",
+     "tank"
+    ],
+    "lines": [
+     {
+      "role": "tank",
+      "text": "This one is strong. Keep the cures coming."
+     },
+     {
+      "role": "healer",
+      "text": "I am on it. Do not let it turn around."
+     }
+    ]
+   },
+   {
+    "id": "fo_sqs_wipe_regroup",
+    "tags": [
+     "s.scene_wipe"
+    ],
+    "cooldown": 60,
+    "roles": [
+     "damage",
+     "healer",
+     "tank"
+    ],
+    "lines": [
+     {
+      "role": "damage",
+      "text": "Everyone back on their feet? Good."
+     },
+     {
+      "role": "healer",
+      "text": "Next time, we wait for my magic before we pull."
+     },
+     {
+      "role": "tank",
+      "text": "Agreed. Slower and steadier."
+     }
+    ]
+   },
+   {
+    "id": "fo_sqs_return_wonder",
+    "tags": [
+     "s.scene_return"
+    ],
+    "cooldown": 60,
+    "roles": [
+     "healer",
+     "tank"
+    ],
+    "lines": [
+     {
+      "role": "healer",
+      "text": "There you are. We were starting to wonder."
+     },
+     {
+      "role": "tank",
+      "text": "Wondering, not worrying. Mostly."
      }
     ]
    }

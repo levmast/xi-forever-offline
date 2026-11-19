@@ -30,3 +30,8 @@ Then STOP and PLAY. No rebuild is needed (Lua only).
 3. Write `voice\<name>\*.txt` (see `voice\living_world\README.txt` for the format) until the check passes.
 
 A pack with no voice folder is reported and left out, so nothing gets in unchecked.
+
+## Our own lines
+
+Lines we write ourselves go in the voice folder too: `+id` records in `voice_d.txt` (bots) and `squad_more.txt`
+(squad mates, with who may say each one: role, voice, familiarity, race, gender). Same build, same checks.

@@ -46,6 +46,12 @@ SQUAD_TAGS = {"s.recruit", "s.ack_pull", "s.ack_follow", "s.ack_hold", "s.battle
               "s.bench", "s.reunion", "s.race", "s.gender", "s.scene_first", "s.scene_lowhp", "s.scene_wipe", "s.scene_rest",
               "s.scene_return"}
 SQUAD_SLOTS = {"name"}
+SQUAD_SCENE_TAGS = {t for t in SQUAD_TAGS if t.startswith("s.scene_")}
+# who may say one of our squad lines (squad_more.txt): role from the mate's job, voice as in squad_dialogue.lua
+SQUAD_WHO = {"role": {"tank", "healer", "damage", "support", "hybrid"}, "voice": {"bold", "calm", "cheerful", "gruff"},
+             "fam": {"new", "steady", "trusted"}, "race": {"Hume", "Elvaan", "Tarutaru", "Mithra", "Galka"},
+             "gender": {"male", "female"}}
+SQUAD_SCENE_ROLES = {"tank", "healer", "damage", "support"}
 # crowd chatter (a pack's "crowd" section, voice file crowd.txt): the fields crowds_chat.lua fills
 CROWD_SLOTS = {"job", "lvl", "sub", "sublvl", "camp", "range", "need", "item", "price", "ls", "nation", "mission", "endgame",
                "self", "name"}
@@ -149,7 +155,8 @@ def templates(pack):
 
 def read_voice(b, vdir, name):
     voice, new_lines, scene_recs = {}, [], []
-    files = sorted(f for f in os.listdir(vdir) if f.endswith(".txt") and f not in ("scenes.txt", "README.txt", "squad.txt", "crowd.txt"))
+    files = sorted(f for f in os.listdir(vdir) if f.endswith(".txt") and f not in ("scenes.txt", "README.txt", "crowd.txt")
+                   and not f.startswith("squad"))
     for part in files:
         for ln, raw in enumerate(open(os.path.join(vdir, part), encoding="utf-8"), 1):
             raw = raw.rstrip("\n")
@@ -414,12 +421,106 @@ def build_squad(b, name, pack, vdir):
     """A pack's squad section: lines and scenes for the squad mates, each with its use (squad.txt) or why it is out."""
     sq = pack.get("squad")
     out = {"lines": [], "scenes": [], "dropped": [], "scenes_dropped": []}
-    if not sq:
-        return out
+    if sq:
+        build_squad_pack(b, name, sq, vdir, out)
+    build_squad_ours(b, name, vdir, out)
+    return out
+
+
+def squad_check(b, text, where):
+    b.check_text(re.sub(r"{name}", "Abcdefghijklmno", text), where)
+    for slot in re.findall(r"{(\w+)}", text):
+        if slot not in SQUAD_SLOTS:
+            b.err(f"{where}: squad lines may only use {{name}}: {text}")
+
+
+def squad_tags(b, tagstr, where, scene=False):
+    tags = [t.strip() for t in tagstr.split(",")]
+    for t in tags:
+        if t not in SQUAD_TAGS:
+            b.err(f"{where}: unknown squad tag {t}")
+        elif (t in SQUAD_SCENE_TAGS) != scene:
+            b.err(f"{where}: {t} is a {'line' if scene else 'scene'} tag")
+    return tags
+
+
+def build_squad_ours(b, name, vdir, out):
+    """Our own squad lines and scenes (voice/<pack>/squad_more.txt):
+         +id|tags|who|text          who: empty (anyone) or key=a/b;key=c  with keys role voice fam race gender
+         +scene:id|tag|cooldown     then one  role|text  per line (roles: tank healer damage support)"""
+    path = os.path.join(vdir, "squad_more.txt")
+    if not os.path.exists(path):
+        return
+    seen, texts, scene = set(), {l["text"].lower() for l in out["lines"]}, None
+    for ln, raw in enumerate(open(path, encoding="utf-8"), 1):
+        raw = raw.rstrip("\n")
+        where = f"{name}/squad_more.txt:{ln}"
+        if not raw.strip() or raw.startswith("#"):
+            continue
+        f = raw.split("|")
+        if f[0].startswith("+scene:"):
+            sid = "fo_sqs_" + f[0][7:]
+            if sid in seen:
+                b.err(f"{where}: {sid} is used twice")
+            seen.add(sid)
+            try:
+                cd = int(f[2]) if len(f) > 2 and f[2] else 60
+            except ValueError:
+                cd = 60
+                b.err(f"{where}: bad cooldown {f[2]}")
+            scene = {"id": sid, "tags": squad_tags(b, f[1] if len(f) > 1 else "", where, scene=True), "cooldown": cd,
+                     "roles": [], "lines": [], "where": where}
+            out["scenes"].append(scene)
+            continue
+        if f[0].startswith("+"):
+            scene = None
+            lid = "fo_sq_" + f[0][1:]
+            if lid in seen:
+                b.err(f"{where}: {lid} is used twice")
+            seen.add(lid)
+            if len(f) != 4:
+                b.err(f"{where}: needs +id|tags|who|text: {raw}")
+                continue
+            who = {"role": [], "voice": [], "fam": [], "race": [], "gender": []}
+            for part in filter(None, (p.strip() for p in f[2].split(";"))):
+                key, _, vals = part.partition("=")
+                if key not in SQUAD_WHO:
+                    b.err(f"{where}: unknown who key {key}")
+                    continue
+                for v in vals.split("/"):
+                    if v not in SQUAD_WHO[key]:
+                        b.err(f"{where}: unknown {key} {v}")
+                    who[key].append(v)
+            text = f[3]
+            squad_check(b, text, where)
+            if re.search(r"(n't|'re|'ll|'m|'ve|'d)\b", text, re.I):
+                b.warn(f"{where}: squad lines are written without contractions: {text}")
+            if text.lower() in texts:
+                b.warn(f"{where}: squad line used twice: {text}")
+            texts.add(text.lower())
+            out["lines"].append({"id": lid, "tags": squad_tags(b, f[1], where), "roles": who["role"], "races": who["race"],
+                                 "genders": who["gender"], "fam": who["fam"], "voices": who["voice"], "text": text,
+                                 "pack_text": ""})
+            continue
+        if scene is None or len(f) != 2:
+            b.err(f"{where}: a scene line (role|text) outside a scene, or a bad record: {raw}")
+            continue
+        if f[0] not in SQUAD_SCENE_ROLES:
+            b.err(f"{where}: unknown scene role {f[0]}")
+        squad_check(b, f[1], where)
+        scene["lines"].append({"role": f[0], "text": f[1]})
+        scene["roles"] = sorted({l["role"] for l in scene["lines"]})
+    for sc in out["scenes"]:
+        where = sc.pop("where", None)
+        if where and (len(sc["lines"]) < 2 or len(sc["roles"]) < 2):
+            b.err(f"{where}: a scene needs at least two lines by two different roles")
+
+
+def build_squad_pack(b, name, sq, vdir, out):
     path = os.path.join(vdir, "squad.txt")
     if not os.path.exists(path):
         b.err(f"{name}: the pack has squad lines but voice/{name}/squad.txt is missing")
-        return out
+        return
     recs = {}
     for ln, raw in enumerate(open(path, encoding="utf-8"), 1):
         raw = raw.rstrip("\n")
@@ -431,17 +532,10 @@ def build_squad(b, name, pack, vdir):
         recs[f[0]] = (f[1:], f"{name}/squad.txt:{ln}")
 
     def tags_of(tagstr, where):
-        tags = [t.strip() for t in tagstr.split(",")]
-        for t in tags:
-            if t not in SQUAD_TAGS:
-                b.err(f"{where}: unknown squad tag {t}")
-        return tags
+        return squad_tags(b, tagstr, where, scene=any(t.strip() in SQUAD_SCENE_TAGS for t in tagstr.split(",")))
 
     def check(text, where):
-        b.check_text(re.sub(r"{name}", "Abcdefghijklmno", text), where)
-        for slot in re.findall(r"{(\w+)}", text):
-            if slot not in SQUAD_SLOTS:
-                b.err(f"{where}: squad lines may only use {{name}}: {text}")
+        squad_check(b, text, where)
 
     for i, e in enumerate(sq.get("entries", []), 1):
         key = f"Q{i:02d}"
@@ -457,7 +551,7 @@ def build_squad(b, name, pack, vdir):
         any_ = lambda v: [x for x in (v or ["any"]) if x != "any"]
         out["lines"].append({"id": e["id"], "tags": tags_of(f[0], where), "roles": any_(e.get("roles")),
                              "races": any_(e.get("races")), "genders": any_(e.get("genders")),
-                             "fam": any_(e.get("familiarity")), "text": text, "pack_text": e["text"]})
+                             "fam": any_(e.get("familiarity")), "voices": [], "text": text, "pack_text": e["text"]})
     for i, sc in enumerate(sq.get("scenarios", []), 1):
         key = f"QS{i}"
         if key not in recs:
@@ -475,7 +569,6 @@ def build_squad(b, name, pack, vdir):
                               "lines": [{"role": l["role"], "text": l["text"]} for l in sc["lines"]]})
     for key, (_, where) in recs.items():
         b.err(f"{where}: {key} is not in the pack's squad section")
-    return out
 
 
 def lua_str(s):
@@ -519,7 +612,7 @@ def write_lua(out, path, stamp):
     for l in out["squad"]["lines"]:
         rows.append(f"            {{ id = {lua_str(l['id'])}, t = {lua_list(l['tags'])}, roles = {lua_list(l['roles'])}, "
                     f"races = {lua_list(l['races'])}, genders = {lua_list(l['genders'])}, fam = {lua_list(l['fam'])}, "
-                    f"text = {lua_str(l['text'])} }},")
+                    f"voices = {lua_list(l.get('voices', []))}, text = {lua_str(l['text'])} }},")
     rows.append("        },")
     rows.append("        scenes = {")
     for sc in out["squad"]["scenes"]:
@@ -595,6 +688,12 @@ def main():
     for i, c in ids.items():
         if c > 1:
             b.err(f"line id {i} is used {c} times")
+    for l in merged["lines"]:
+        slots = set(re.findall(r"{(\w+)}", l["casual"] + l["polite"]))
+        if any(t.endswith("_react") for t in l["tags"]) and slots & {"job", "lvl", "sub", "doing"}:
+            b.err(f"line {l['id']}: a reaction would show the speaker's own job/level (only {{member}} is the other bot): {l['casual']}")
+        if any(t.startswith("r.") for t in l["tags"]) and "member" in slots:
+            b.err(f"line {l['id']}: answers have no {{member}}: {l['casual']}")
     texts = collections.Counter(l["casual"].lower() for l in merged["lines"])
     for t, c in texts.items():
         if c > 1:

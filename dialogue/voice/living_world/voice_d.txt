@@ -1,0 +1,166 @@
+# Our own bot lines, second batch (2026-11-18): more written answers for the replies players hear most when the AI is
+# off or slow, and more lines for the linkshell events that come up often. Format: see README.txt.
+#   +id|tags|casual|polite (optional: the casual line with a capital letter)
+# Answers (r.*) follow what the player just said (bots_dialogue.lua D.replyKind). Reactions (*_react) are said by a
+# different bot from the one it happened to: {member} is that bot; {lvl} and {job} would be the speaker's own, so
+# reactions never use them.
+
+# ---- "where are you?" ----
++where_02|r.where|in {here} atm|I am in {here} right now.
++where_03|r.where|{here}|In {here}.
++where_04|r.where|{here}, why?|In {here}. Why do you ask?
++where_05|r.where|{here} right now|Right now? {here}.
++where_06|r.where|over in {here}, need something?|I am over in {here}. Do you need something?
++where_07|r.where|{here} :)|{here}, as it happens.
++where_08|r.where|in {here} rn|Currently in {here}.
++where_09|r.where|{here}, come by if you want|I am in {here}. Come by if you like.
++where_10|r.where|around {here}|Somewhere around {here}.
+
+# ---- "what are you doing?" ({doing} already says where) ----
++doing_04|r.doing|oh just {doing}|Oh, just {doing}.
++doing_05|r.doing|not much, {doing}|Not much. I am {doing}.
++doing_06|r.doing|{doing} atm|At the moment I am {doing}.
++doing_07|r.doing|eh, {doing}|Nothing exciting. I am {doing}.
++doing_08|r.doing|{doing}, what about you?|I am {doing}. What about you?
++doing_09|r.doing|{doing} lol|Honestly? {doing}.
++doing_10|r.doing|currently {doing}|Currently {doing}.
++doing_11|r.doing|{doing}, need something?|I am {doing}. Do you need something?
++doing_12|r.doing|same old, {doing}|The usual. I am {doing}.
+
+# ---- "what job / level?" ----
++job_r_04|r.job|{job} {lvl}, you?|I am a level {lvl} {job}. And you?
++job_r_05|r.job|{job}/{sub}, {lvl}|{job} with {sub} support, level {lvl}.
++job_r_06|r.job|{lvl} {job} right now|Level {lvl} {job} at the moment.
++job_r_07|r.job|on {job} atm, {lvl}|I am on {job} right now, level {lvl}.
++job_r_08|r.job|{job}{lvl}, sub {sub}|{job}, level {lvl}, with {sub} as my support job.
++job_r_09|r.job|lvl {lvl} {job}|Level {lvl}, {job}.
++job_r_10|r.job|{job} at {lvl} :)|{job}, level {lvl}.
+
+# ---- the player said gz / grats to the bot ----
++gzty_01|r.thanks|ty!|Thank you!
++gzty_02|r.thanks|thanks :)|Thank you, that is kind.
++gzty_03|r.thanks|ty ty|Thank you, thank you.
++gzty_04|r.thanks|thx!|Thanks very much.
++gzty_05|r.thanks|aw ty|Aw, thank you.
++gzty_06|r.thanks|haha ty|Ha, thank you.
++gzty_07|r.thanks|ty :D|Many thanks!
++gzty_08|r.thanks|appreciate it!|I appreciate it!
++gzty_09|r.thanks|ty, means a lot|Thank you. That means a lot.
+
+# ---- the player laughed (lol, haha) ----
++laugh_01|r.laugh|haha|Ha!
++laugh_02|r.laugh|lol yeah|Ha, yes.
++laugh_03|r.laugh|hehe|Hehe.
++laugh_04|r.laugh|:D|:D
++laugh_05|r.laugh|lmao|That is funny.
++laugh_06|r.laugh|haha right?|Ha, right?
++laugh_07|r.laugh|lol true|Ha, true.
++laugh_08|r.laugh|hah|Hah.
++laugh_09|r.laugh|xD|That made me laugh.
++laugh_10|r.laugh|lol!|Heh, indeed.
+
+# ---- the player is back (back, re) ----
++back_01|r.back|wb|Welcome back!
++back_02|r.back|wb :)|Welcome back.
++back_03|r.back|wb {player}|Welcome back, {player}.
++back_04|r.back|ah wb|Ah, welcome back.
++back_05|r.back|re!|Hello again!
++back_06|r.back|wb wb|Welcome back, welcome back.
++back_07|r.back|wb o/|Welcome back o/
++back_08|r.back|oh hey, wb|Oh, there you are. Welcome back.
+
+# ---- the player has news (ding, finally, got it, dropped) ----
++gz_01|r.congrats|grats!|Congratulations!
++gz_02|r.congrats|ooh gz|Oh, congratulations!
++gz_03|r.congrats|woo, gz|Wonderful. Congratulations.
++gz_04|r.congrats|gz :D|Congratulations :D
++gz_05|r.congrats|nice one, gz|Nicely done. Congratulations.
++gz_06|r.congrats|about time! gz|About time! Congratulations.
++gz_07|r.congrats|congrats!|Congratulations to you!
++gz_08|r.congrats|grats, nice|Well done!
+
+# ---- the player said thanks ----
++yw_01|r.yw|yw!|You are welcome!
++yw_02|r.yw|no prob|No problem at all.
++yw_03|r.yw|np :)|No problem.
++yw_04|r.yw|sure thing|Sure thing.
++yw_05|r.yw|no worries|No worries.
++yw_06|r.yw|glad I could help|I am glad I could help.
+
+# ---- hello / bye ----
++greet_05|r.greet|hey hey|Hey there.
++greet_06|r.greet|yo|Hello.
++greet_07|r.greet|hiya!|Hiya!
++greet_08|r.greet|hi there|Hi there.
++greet_09|r.greet|hello!|Hello!
++greet_10|r.greet|oh hey {player}|Oh, hello {player}.
++bye_04|r.bye|bye!|Goodbye!
++bye_05|r.bye|see you around|See you around.
++bye_06|r.bye|later!|Until later!
++bye_07|r.bye|safe travels|Safe travels.
++bye_08|r.bye|cya around {player}|See you around, {player}.
+
+# ---- bad news (died, wiped, no drop, ugh) ----
++sym_01|r.sympathy|oof, sorry|Oh no, I am sorry.
++sym_02|r.sympathy|aww no|Oh no.
++sym_03|r.sympathy|that's the worst|That is the worst.
++sym_04|r.sympathy|happens to the best of us|It happens to the best of us.
++sym_05|r.sympathy|hang in there|Hang in there.
++sym_06|r.sympathy|ouch :(|Ouch. Sorry to hear it.
+
+# ---- anything else (the most common answer of all) ----
++misc_07|r.misc|mhm|Mm-hm.
++misc_08|r.misc|ah ok|Ah, all right.
++misc_09|r.misc|gotcha|Got it.
++misc_10|r.misc|hm yeah|Hm, yes.
++misc_11|r.misc|fair enough|Fair enough.
++misc_12|r.misc|oh?|Oh?
++misc_13|r.misc|makes sense|That makes sense.
++misc_14|r.misc|for sure|For sure.
++misc_15|r.misc|ya|Yes.
++misc_16|r.misc|ah nice|Ah, nice.
++misc_17|r.misc|interesting|Interesting.
++misc_18|r.misc|hmm|Hmm.
++misc_19|r.misc|oh really?|Oh, really?
++misc_20|r.misc|yep|Yep.
+
+# ---- linkshell events that come up often ----
++lvl_05|e.levelup|{lvl}! woo|Level {lvl}! Wonderful.
++lvl_06|e.levelup|ding {lvl}, slowly but surely|Level {lvl}. Slowly but surely.
++lvl_07|e.levelup|{job} hit {lvl} :D|My {job} reached level {lvl}!
++lvl_08|e.levelup|{lvl} now, getting there|Level {lvl} now. Getting there.
++lvl_09|e.levelup|another level, {lvl} :)|Another level. {lvl} now.
++lvl_10|e.levelup|ding~ {job} {lvl}|{job} is now level {lvl}.
++lvl_11|e.levelup|{lvl} at last, that one took a while|Level {lvl} at last. That one took a while.
++lvlr_06|e.levelup_react|gz {member}! :D|Congratulations, {member}!
++lvlr_07|e.levelup_react|woo gz|Wonderful, congratulations.
++lvlr_08|e.levelup_react|grats {member}|Well done, {member}.
++lvlr_09|e.levelup_react|nice ding!|A fine level. Congratulations.
++lvlr_10|e.levelup_react|gz, keep it up|Congratulations. Keep it up.
++lvlr_11|e.levelup_react|ding ding, gz|Congratulations on the new level.
++dead_r_04|e.death_react|oof|Oh no.
++dead_r_05|e.death_react|you ok {member}?|Are you all right, {member}?
++dead_r_06|e.death_react|rip {member} :(|Oh no, {member}.
++dead_r_07|e.death_react|aw no|That is unfortunate.
++dead_r_08|e.death_react|ugh, sorry {member}|I am sorry, {member}.
++gear_02|e.gear|new gear day :)|I bought new gear today.
++gear_03|e.gear|finally upgraded my gear|I finally upgraded my equipment.
++gear_04|e.gear|bought some upgrades, feeling good|I bought some upgrades. I feel much better equipped.
++gear_05|e.gear|spent way too much on gear lol|I spent far too much on equipment today.
++gearr_01|e.gear_react|ooh nice|Oh, nice.
++gearr_02|e.gear_react|nice upgrade!|A good upgrade!
++gearr_03|e.gear_react|nice, gz on the upgrade {member}|Congratulations on the upgrade, {member}.
++gearr_04|e.gear_react|gotta show it off sometime|You will have to show it off sometime.
++job_02|e.jobchange|trying out {job} today|I am trying {job} today.
++job_03|e.jobchange|{job} time|Time for some {job}.
++job_04|e.jobchange|giving {job} some love|Giving {job} some attention for a while.
++job_05|e.jobchange|on {job} for a bit now|On {job} for a while now.
++rank_02|e.rankup|rank up! :D|I ranked up!
++rank_03|e.rankup|new rank, mission done|New rank. The mission is done.
++rank_04|e.rankup|finally ranked up, that mission was something|I finally ranked up. That mission was quite something.
++rank_r_02|e.rankup_react|gz on rank!|Congratulations on your new rank.
++rank_r_03|e.rankup_react|nice, gz {member}|Well done, {member}.
++rank_r_04|e.rankup_react|woo, rank up! gz|A rank up! Congratulations.
++win_r_03|e.win_react|nice job!|Nicely done!
++win_r_04|e.win_react|gg!|Well fought!
++win_r_05|e.win_react|well done {member}|Well done, {member}.
