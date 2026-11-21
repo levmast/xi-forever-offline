@@ -35,6 +35,12 @@
 !/launcher_coop_gui.py
 !/launcher_coop.py
 !/launcher_passport.py
+# (2026-11-21) used by the launcher but never shipped before: item stacks (Egon's report), character transfer, patch notes page
+!/stack_mode.py
+!/char_import.py
+!/PATCH-NOTES.md
+# (2026-11-21) Forever Beta Shirt: builds its look and item entry from the player's own game files (launcher_client step 5)
+!/forever_beta_shirt.py
 # Linux / Steam Deck: Proton, the game's own prefix, the menu entry; the Linux build and its GitHub workflow
 !/launcher_linux.py
 !/build_release.sh
@@ -92,6 +98,14 @@
 !/crystalboy-games/
 !/crystalboy-server/
 !/thirdparty-bundled/
+
+# ---- Tetra Master (art and sounds: Nalfey) ----
+!/install_tetramaster.py
+!/tetramaster/
+# not used by the addon (it plays the .wav sound effects and the .mp3 music): kept out of git and the kit
+/tetramaster/assets/sound/wav/mus_quadmist.wav
+/tetramaster/assets/sound/snd_*.mp3
+/tetramaster/assets/screenshots/
 
 # ---- addons (our own only; third-party ones are downloaded at install) ----
 !/addons-src/

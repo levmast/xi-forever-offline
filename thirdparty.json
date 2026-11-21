@@ -91,6 +91,7 @@
     },
     {
       "id": "xiui",
+      "refresh_if_installed": true,
       "name": "XIUI",
       "author": "Team XIUI",
       "license": "GPL-3.0",
@@ -100,7 +101,7 @@
       "source": {
         "type": "github_release",
         "repo": "tirem/XIUI",
-        "tag": "v1.8.4",
+        "tag": "v1.8.5",
         "asset": "^XIUI-[0-9.]+\\.zip$"
       },
       "files": [
@@ -250,6 +251,7 @@
     },
     {
       "id": "ffxiport",
+      "refresh_if_installed": true,
       "name": "FFXIPort",
       "author": "wildthing (wildcabbagepatch)",
       "license": "GPL-3.0",
@@ -259,16 +261,58 @@
       "source": {
         "type": "github_release",
         "repo": "wildcabbagepatch/FFXIPort",
-        "tag": "v1.1.0",
+        "tag": "v1.2.0",
         "asset": "^FFXIPort-[0-9.]+\\.zip$"
       },
       "files": [
         [
-          "FFXIPort-1.1.0/client/FFXIPort/",
+          "FFXIPort-1.2.0/client/FFXIPort/",
           "addons/FFXIPort/"
         ]
       ],
       "check": "addons/FFXIPort/FFXIPort.lua"
+    },
+    {
+      "id": "vanafish",
+      "name": "VanaFish",
+      "author": "VanaDreams",
+      "license": "used with the authors' permission (no licence file published)",
+      "homepage": "https://github.com/VanaDreams/vanadreams-launcher/tree/main/addons/vanafish",
+      "into": "ashita",
+      "note": "A fishing bot from the VanaDreams team, shared with XI: Forever Offline with their permission: casts, waits for the bite and lands or releases by your rules, and stops itself when bags fill, you move, or a tell arrives. Installed switched off (tick it in the Addons list to load it); /vanafish opens its window.",
+      "source": {
+        "type": "github_archive",
+        "repo": "VanaDreams/vanadreams-launcher",
+        "ref": "24bf06c9c77b60a50568a2feb4e6ae1f747ad951"
+      },
+      "files": [
+        [
+          "*/addons/vanafish/",
+          "addons/vanafish/"
+        ]
+      ],
+      "check": "addons/vanafish/vanafish.lua"
+    },
+    {
+      "id": "vanacam",
+      "name": "VanaCam",
+      "author": "VanaDreams (camera core from XICamera, BSD)",
+      "license": "used with the authors' permission; XICamera core BSD (LICENSE.xicamera.txt ships with it)",
+      "homepage": "https://github.com/VanaDreams/vanadreams-launcher/tree/main/addons/vanacam",
+      "into": "ashita",
+      "note": "Camera presets (close, adventure, far), a separate distance in combat, zoom in tight spaces and screen-aspect correction. From the VanaDreams team, shared with their permission. Installed switched off (tick it in the Addons list to load it); /vc ui opens its panel.",
+      "source": {
+        "type": "github_archive",
+        "repo": "VanaDreams/vanadreams-launcher",
+        "ref": "24bf06c9c77b60a50568a2feb4e6ae1f747ad951"
+      },
+      "files": [
+        [
+          "*/addons/vanacam/",
+          "addons/vanacam/"
+        ]
+      ],
+      "check": "addons/vanacam/vanacam.lua"
     },
     {
       "id": "chains",

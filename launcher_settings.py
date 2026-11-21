@@ -100,6 +100,9 @@ S("fast_travel", "rules", "Travel", SWITCH, "Fast travel", keys=("main.HOMEPOINT
       "Off = classic travel: walk, chocobos, airships and Teleport spells.")
 S("map.BASE_SPEED", "rules", "Travel", NUMBER, "Run speed", step=5, tip="50 = retail.")
 S("map.MOUNT_SPEED", "rules", "Travel", NUMBER, "Mount speed", step=5, tip="Chocobos and other mounts. 80 = retail.")
+S("main.SNEAK_INVIS_DURATION_MULTIPLIER", "rules", "Travel", RATE, "Sneak and Invisible duration",
+  tip="How long Sneak, Invisible and Deodorize last. 1x = the era's (a random 30 seconds to 5 minutes), "
+      "2x = twice as long. (Yache)")
 S("map.SKILLUP_CHANCE_MULTIPLIER", "rules", "Skills and crafting", RATE, "Combat and magic skills",
   tip="How often combat and magic skills go up.")
 S("map.BLUE_LEARN_MULTIPLIER", "rules", "Skills and crafting", RATE, "Learning blue magic",
@@ -122,6 +125,17 @@ S("short_quest_waits", "rules", "Comforts", SWITCH, "Short quest waits",
       "(era: three game days), Aht Urhgan missions about 1 minute between missions (era: a game day or Japanese "
       "midnight). Off = the era waits.")
 S("main.NEW_CHARACTER_CUTSCENE", "rules", "Comforts", FLAG, "New-character cutscenes")
+
+# ---------------------------------------------------------------- Rules > Tetra Master (2026-11-21)
+S("main.TM_CARD_DROP_RATE", "rules", "Tetra Master", RATE, "Cards from monsters",
+  tip="How often monsters and notorious monsters drop their Tetra Master card. 1x = about 1 in 50 kills for a common "
+      "card, 0x = no cards from monsters.")
+S("main.TM_CASKET_CARD_RATE", "rules", "Tetra Master", RATE, "Cards from caskets",
+  tip="How often a treasure casket holds a Tetra Master card. 1x = about 1 in 7 caskets, 0x = none.")
+S("main.TM_GIL_RATE", "rules", "Tetra Master", RATE, "Gil for a win",
+  tip="Gil for beating the computer. 1x = 100 / 300 / 800 gil on Easy / Normal / Hard (double for a perfect game).")
+S("main.TM_PRICE_RATE", "rules", "Tetra Master", RATE, "Card prices",
+  tip="What card traders like Luto Mewrilah charge. 1x = 150 to about 1,100 gil a card.")
 
 # ---------------------------------------------------------------- Rules > Squad: rules for the whole squad
 # (2026-11-21, Hurami: moved from the Squad page's top line to the Rules page, in a Squad section)
@@ -167,7 +181,7 @@ S("main.SPARKS_RATE", "era", "Out-of-era content", RATE, "RoE sparks", dev=True,
 LAYOUT = {
     "world": (("Town crowds", "Field parties"), ("Bot players", "Auction house", "Conquest"), ("AI chat", "Seasonal events")),
     "rules": (("Experience and fame", "Notorious monsters", "Expansions"), ("Loot and gil", "Travel", "Squad"),
-              ("Skills and crafting", "Comforts")),
+              ("Skills and crafting", "Comforts", "Tetra Master")),
     "squad": (("Squad rules",),),
     "era": (("Era",), ("Later expansions",), ("Out-of-era content",)),
 }

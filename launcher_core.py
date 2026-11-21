@@ -256,7 +256,7 @@ def list_plugins(ashita_dir):
 
 
 # ---------- what an addon or plugin is (for the Addons page) ----------
-OWN_ADDONS = {"gambits", "autobox", "followme", "servermenu", "squadpanel", "crystalboy"}
+OWN_ADDONS = {"gambits", "autobox", "followme", "servermenu", "squadpanel", "crystalboy", "tetramaster"}
 PLUGIN_NOTES = {"addons": "Runs Lua addons (keep this on).", "thirdparty": "Lets third-party plugins load.",
                 "screenshot": "Screenshots without the interface.", "minimap": "A minimap on screen.",
                 "hardwaremouse": "Hardware mouse cursor.", "toon": "Cel-shaded look.", "winefix": "Fixes for Wine (Linux).",
@@ -497,8 +497,16 @@ RATE_FIELDS = [
     ("main.TABS_RATE",                  "main.lua", "TABS_RATE",                   "Tabs from Fields of Valor",             1.0, 0.0, 100.0, "float"),
     ("main.SPARKS_RATE",                "main.lua", "SPARKS_RATE",                 "Sparks from Records of Eminence",       1.0, 0.0, 100.0, "float"),
     ("main.CASKET_DROP_RATE",           "main.lua", "CASKET_DROP_RATE",            "Treasure casket chance (0.1 = 10%)",    0.1, 0.0, 1.0,   "float"),
+    # (2026-11-21) Tetra Master (modules/custom/lua/tetramaster.lua): multipliers on tetramaster_data.lua's chances and
+    # prices. The keys are ours, in the server's settings/default/main.lua (an older server skips them: 1x).
+    ("main.TM_CARD_DROP_RATE",          "main.lua", "TM_CARD_DROP_RATE",           "Tetra Master cards from monsters",      1.0, 0.0, 20.0,  "float"),
+    ("main.TM_CASKET_CARD_RATE",        "main.lua", "TM_CASKET_CARD_RATE",         "Tetra Master cards from caskets",       1.0, 0.0, 6.0,   "float"),
+    ("main.TM_GIL_RATE",                "main.lua", "TM_GIL_RATE",                 "Tetra Master gil for a win",            1.0, 0.0, 10.0,  "float"),
+    ("main.TM_PRICE_RATE",              "main.lua", "TM_PRICE_RATE",               "Tetra Master card prices",              1.0, 0.1, 5.0,   "float"),
     ("map.SKILLUP_CHANCE_MULTIPLIER",   "map.lua",  "SKILLUP_CHANCE_MULTIPLIER",   "Combat and magic skill-up chance",      1.0, 0.0, 20.0,  "float"),
     ("map.BLUE_LEARN_MULTIPLIER",       "map.lua",  "BLUE_LEARN_MULTIPLIER",       "Blue magic learning chance",            1.0, 0.0, 3.0,   "float"),
+    # (2026-11-21, Yache) Sneak / Invisible / Deodorize spells (modules/custom/late/sneak_invis_duration.lua)
+    ("main.SNEAK_INVIS_DURATION_MULTIPLIER", "main.lua", "SNEAK_INVIS_DURATION_MULTIPLIER", "Sneak and Invisible duration", 1.0, 0.5, 5.0, "float"),
     ("map.CRAFT_CHANCE_MULTIPLIER",     "map.lua",  "CRAFT_CHANCE_MULTIPLIER",     "Crafting skill-up chance",              1.0, 0.0, 20.0,  "float"),
     ("map.CRAFT_HQ_CHANCE_MULTIPLIER",  "map.lua",  "CRAFT_HQ_CHANCE_MULTIPLIER",  "Crafting high-quality chance",          1.0, 0.0, 20.0,  "float"),
     ("map.FISHING_SKILL_MULTIPLIER",    "map.lua",  "FISHING_SKILL_MULTIPLIER",    "Fishing skill-up chance",               1.0, 0.0, 20.0,  "float"),

@@ -1,6 +1,6 @@
 addon.name    = 'crystalboy'
 addon.author  = 'XI: Forever Offline'
-addon.version = '1.7'
+addon.version = '1.8'
 addon.desc    = 'Crystal Boy: play your Game Boy cartridges inside FFXI.'
 addon.link    = ''
 
@@ -759,7 +759,21 @@ end
 local function register(event, alias, f) ashita.events.register(event, alias, guarded(event, f)) end
 
 register('key', 'cb_key', function(e)
-    if captured() then e.blocked = true end -- window messages (chat, menus)
+    if not captured() then return end
+    -- (1.8, Ricc: Enter still did nothing) some keys, Enter among them, only ever arrive as window messages on some
+    -- setups. The message carries the key's scan code (lParam bits 16-23, bit 24 = extended), which is the same
+    -- number the keyboard table uses, so the key counts as pressed from here too. Bit 31 set = released.
+    local lp = tonumber(e.lparam)
+    if lp then
+        local scan = bit.band(bit.rshift(lp, 16), 0xFF)
+        if bit.band(lp, 0x01000000) ~= 0 then scan = bit.bor(scan, 0x80) end
+        local down = bit.band(lp, 0x80000000) == 0
+        if scan > 0 then
+            trace.log('key msg ' .. scan .. ' ' .. tostring(down), 'km', 20)
+            input.key_data(scan, down)
+        end
+    end
+    e.blocked = true -- window messages (chat, menus)
 end)
 
 -- (1.7) Ricc: arrows moved the character too and Enter never reached the Crystal Boy. FFXI also reads the keyboard's

@@ -421,3 +421,183 @@ class ScrollPage(tk.Frame):
             self.canvas.yview_scroll(step * 2, "units")
         except tk.TclError:
             pass                        # the page is gone
+
+
+class _WaveLoader(tk.Canvas):
+    """Fallback (no Pillow or no assets/ui/loader_crystals.png): a row of small diamonds that light up in a slow golden wave,
+    with a brighter glint running through it. Same start(ms) / stop() as the ttk progress bar it replaces."""
+
+    def __init__(self, parent, bg=BG, height=22, count=15, **kw):
+        super().__init__(parent, bg=bg, height=height, highlightthickness=0, bd=0, **kw)
+        self.count, self.phase, self.job, self.items = count, 0.0, None, []
+        self.bind("<Configure>", lambda e: self._layout())
+
+    @staticmethod
+    def _mix(a, b, t):
+        a, b = a.lstrip("#"), b.lstrip("#")
+        rgb = [int(int(a[i:i + 2], 16) * (1 - t) + int(b[i:i + 2], 16) * t) for i in (0, 2, 4)]
+        return "#%02x%02x%02x" % tuple(rgb)
+
+    def _layout(self):
+        self.delete("all")
+        width, height = max(self.winfo_width(), 60), int(self.cget("height"))
+        step = width / self.count
+        r = min(step * 0.32, height * 0.42)
+        mid = height / 2
+        self.items = []
+        for i in range(self.count):
+            x = step * (i + 0.5)
+            shape = self.create_polygon(x, mid - r, x + r * 0.62, mid, x, mid + r, x - r * 0.62, mid,
+                                        fill=GOLD_DIM, outline=BORDER, width=1)
+            shine = self.create_line(x - r * 0.25, mid - r * 0.35, x, mid - r * 0.75, fill=BG, width=1)
+            self.items.append((shape, shine))
+        self._paint()
+
+    def _paint(self):
+        import math
+        for i, (shape, shine) in enumerate(self.items):
+            wave = (math.sin(self.phase - i * 0.55) + 1) / 2            # 0..1, a slow wave down the row
+            glint = max(0.0, math.cos(self.phase * 0.5 - i * 0.42)) ** 12  # a narrow bright run now and then
+            fill = self._mix(GOLD_DIM, GOLD, wave)
+            if glint > 0.05:
+                fill = self._mix(fill, PARCH, min(1.0, glint))
+            self.itemconfigure(shape, fill=fill, outline=self._mix(BORDER, GOLD_LIT, wave * 0.7))
+            self.itemconfigure(shine, fill=self._mix(fill, PARCH, 0.6 + 0.4 * glint))
+
+    def _tick(self, ms):
+        self.phase += 0.18
+        if getattr(self, "ready", False):
+            for shape, shine in self.items:
+                self.itemconfigure(shape, fill="#46dc6e", outline="#9ff0b4")
+                self.itemconfigure(shine, fill="#d8ffe4")
+        else:
+            self._paint()
+        self.job = self.after(ms, self._tick, ms)
+
+    def success(self):
+        self.ready = True
+
+    def start(self, ms=40):
+        if self.job is None:
+            if not self.items:
+                self._layout()
+            self._tick(max(30, int(ms) * 3))
+
+    def stop(self):
+        if self.job is not None:
+            self.after_cancel(self.job)
+            self.job = None
+        self.phase = 0.0
+        self.ready = False
+        if self.items:
+            for shape, shine in self.items:
+                self.itemconfigure(shape, fill=GOLD_DIM, outline=BORDER)
+                self.itemconfigure(shine, fill=BG)
+
+
+class CrystalLoader(tk.Canvas):
+    """The loading animation while the world starts: the eight elemental crystals (fire, ice, wind, earth, lightning,
+    water, light, dark) glow up one after another in a slow wave, bob a little, and now and then catch a glint.
+    The crystals are drawn ahead of time (dev/launcher-tests/make_loader_crystals.py -> assets/ui/loader_crystals.png:
+    8 rows, 10 glow levels, then the same 10 with a glint), so this only swaps pictures. start(ms) / stop() as before;
+    without Pillow or the picture it falls back to the plain diamond wave."""
+
+    CELL = (32, 50)
+    LEVELS = 10
+
+    def __new__(cls, parent, bg=BG, **kw):
+        frames = cls._load_frames(parent)
+        if frames is None:
+            return _WaveLoader(parent, bg=bg, **{k: v for k, v in kw.items() if k in ("width", "height", "count")})
+        self = super().__new__(cls)
+        self._frames = frames
+        return self
+
+    @classmethod
+    def _load_frames(cls, parent):
+        try:
+            import os
+            from PIL import Image, ImageTk
+            here = os.path.dirname(os.path.abspath(__file__))
+            sheet = Image.open(os.path.join(here, "assets", "ui", "loader_crystals.png")).convert("RGB")
+            cw, ch = cls.CELL
+            rows = sheet.height // ch
+            frames = []
+            for r in range(rows):
+                row = []
+                for c in range(cls.LEVELS * 2):
+                    row.append(ImageTk.PhotoImage(sheet.crop((c * cw, r * ch, (c + 1) * cw, (r + 1) * ch)), master=parent))
+                frames.append(row)
+            return frames
+        except Exception:
+            return None
+
+    def __init__(self, parent, bg=BG, width=380, height=None, **_kw):
+        cw, ch = self.CELL
+        super().__init__(parent, bg=bg, width=width, height=height or ch + 4, highlightthickness=0, bd=0)
+        self.phase, self.job, self.items = 0.0, None, []
+        # the sheet's 9th row is green: success() turns the crystals green one by one once the game has started
+        self.count = min(8, len(self._frames))
+        self.green = self._frames[8] if len(self._frames) > 8 else None
+        self.ready_at = None
+        self.bind("<Configure>", lambda e: self._layout())
+
+    def _layout(self):
+        self.delete("all")
+        count = self.count
+        width = max(self.winfo_width(), int(self.cget("width")))
+        step = width / count
+        self.items = [self.create_image(step * (i + 0.5), int(self.cget("height")) / 2, image=self._frames[i][0]) for i in range(count)]
+        self.base_y = int(self.cget("height")) / 2
+        self._paint()
+
+    def _paint(self):
+        import math
+        for i, item in enumerate(self.items):
+            if self.ready_at is not None and self.green is not None:
+                since = self.phase - self.ready_at - i * 0.55        # each crystal turns a moment after the one before it
+                if since >= 0:
+                    pulse = (math.sin(self.phase * 0.6 - i * 0.5) + 1) / 2
+                    level = 6 + int(round(pulse * (self.LEVELS - 7)))    # a calm bright green, gently breathing
+                    flash = since < 0.6                                   # the glint as it turns
+                    self.itemconfigure(item, image=self.green[level + (self.LEVELS if flash else 0)])
+                    self.coords(item, self.coords(item)[0], self.base_y)
+                    continue
+            wave = (math.sin(self.phase - i * 0.7) + 1) / 2
+            glint = max(0.0, math.cos(self.phase * 0.5 - i * 0.6)) ** 14
+            level = min(self.LEVELS - 1, int(round(wave * (self.LEVELS - 1))))
+            frame = self._frames[i][level + (self.LEVELS if glint > 0.45 else 0)]
+            self.itemconfigure(item, image=frame)
+            x = self.coords(item)[0]
+            self.coords(item, x, self.base_y - round(math.sin(self.phase - i * 0.7) * 2) if self.job else self.base_y)
+
+    def _tick(self, ms):
+        self.phase += 0.16
+        self._paint()
+        self.job = self.after(ms, self._tick, ms)
+
+    def success(self):
+        """The game has started: the crystals turn green, left to right, and stay green until stop()."""
+        if self.ready_at is None:
+            if self.job is None:
+                self.start()
+            self.ready_at = self.phase
+
+    def start(self, ms=40):
+        if self.job is None:
+            self.ready_at = None
+            if not self.items:
+                self._layout()
+            self.job = True
+            self._tick(max(40, int(ms) * 4))
+
+    def stop(self):
+        if self.job is not None and self.job is not True:
+            self.after_cancel(self.job)
+        self.job = None
+        self.phase = 0.0
+        self.ready_at = None
+        if self.items:
+            for i, item in enumerate(self.items):
+                self.itemconfigure(item, image=self._frames[i][0])
+                self.coords(item, self.coords(item)[0], self.base_y)

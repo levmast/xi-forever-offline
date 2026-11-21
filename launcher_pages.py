@@ -14,12 +14,13 @@ import launcher_core as core
 import launcher_settings as st
 import launcher_widgets as w
 from launcher_widgets import BG, BORDER, DIM, FG, GOLD, GOLD_LIT, PANEL, PANEL2, UI_FONT
+from launcher_widgets import LINE as LINE_COLOUR
 
 # the page buttons along the bottom: (picture in assets\ui, name, the pages it opens)
 NAV_BUTTONS = (("home", "HOME", ("Play",)), ("world", "WORLD", ("World",)), ("rules", "RULES", ("Rules",)),
                ("squad", "SQUADS", ("Squad",)),
                ("options", "OPTIONS", ("Graphics", "Shaders", "Addons", "Plugins", "Other")),
-               ("coop", "CO-OP", ("Co-op",)), ("system", "SYSTEM", ("Settings", "Characters", "Era", "About")))
+               ("coop", "CO-OP", ("Co-op",)), ("system", "SYSTEM", ("Settings", "Patch notes", "Characters", "Era", "About")))
 WINDOW = (1100, 810)            # one size for every page
 BANNER = (800, 320)             # the Play page's picture (the classic page: 920 x 368)
 DISCORD = "https://discord.gg/2bh3QYPptz"       # the invite in README.md
@@ -54,6 +55,16 @@ def prepare(app, names):
     """Called before the launcher builds its pages, with launcher_gui's globals()."""
     global G
     G = _Gui(names)
+    # (2026-11-21) a taller picture fills the Play page (it left empty bands above and below). Not on a short screen
+    # (the Steam Deck's 800 lines, or a laptop): there the window is shorter and the classic height fits.
+    global BANNER
+    try:
+        tall = names.get("linux") is None and app.winfo_screenheight() >= 900
+    except Exception:
+        tall = False
+    if tall:
+        width = 1056 if names.get("coopgui") is not None else 936      # (launcher_gui.fit_window: 1100 / 980 wide)
+        BANNER = (width, round(width / 2.5))
     G.GALLERY_W, G.GALLERY_H = BANNER      # the press and loading pictures are cut to this when they are loaded
     G.ACCENT = GOLD                         # one highlight colour: what the older pages drew in cyan is gold too
     if "CheckList" in names:                # the "download" tag in the addon and plugin lists was cyan as well
@@ -467,20 +478,25 @@ class PlayPage:
         for widget in (app.stage, self.strip, self.buttons, self.actions):
             widget.pack_forget()
         self.build_notice()
+        # (2026-11-21) the picture across the whole page at its own shape (2.5 : 1, nothing cut off), PLAY under it,
+        # and the newest patch notes in a strip filling the rest. The World / Rules / Squad summary tiles are gone:
+        # the same pages are one click away in the bar below.
+        try:
+            self.box.pack_configure(fill="both", expand=True)
+        except tk.TclError:
+            pass
         top = self.frame(self.box)
-        top.pack(fill="x", pady=(0, 16))
+        top.pack(fill="x", pady=(4, 14))
         self.top = top
         app.stage.configure(width=BANNER[0] + 2, height=BANNER[1] + 2)
-        app.stage.pack(in_=top, side="left")
+        app.stage.pack(in_=top)
         app.stage.lift()
-        side = self.frame(top)
-        side.pack(side="left", fill="both", expand=True, padx=(12, 0))
         self.tiles = {}
-        for index, (name, page) in enumerate((("World", "World"), ("Rules", "Rules"), ("Squad", "Squad"))):
-            self.tiles[name] = self.tile(side, name, page)
-            self.tiles[name]["frame"].pack(fill="both", expand=True, pady=(0 if index == 0 else 10, 0))
         row = self.frame(self.box)
         row.pack(fill="x")
+        notes = self.frame(self.box)
+        notes.pack(side="bottom", fill="both", expand=True, pady=(14, 4))
+        self.build_notes(notes)
         self.buttons.pack(in_=row, side="left")
         self.buttons.lift()
         app.stop_btn.pack_forget()
@@ -571,7 +587,103 @@ class PlayPage:
         except tk.TclError:
             pass                    # the window is closing
 
+    # ----- the newest patch notes, beside the picture -----
+    @staticmethod
+    def latest_notes():
+        """(title, [(kind, text)]) of the newest version in PATCH-NOTES.md; kind is 'head' or 'item'."""
+        try:
+            with open(os.path.join(G.HERE, "PATCH-NOTES.md"), "r", encoding="utf-8") as handle:
+                text = handle.read()
+        except OSError:
+            return None, []
+        title, lines = None, []
+        for raw in text.splitlines():
+            line = raw.strip()
+            if line.startswith("## "):
+                if title is not None:
+                    break
+                title = line[3:].strip()
+            elif title is None or not line or line.startswith("# "):
+                continue
+            elif line.startswith("### "):
+                lines.append(("head", line[4:].strip()))
+            elif line.startswith(("\u2022", "- ", "* ")):
+                lines.append(("item", line.lstrip("\u2022-* ").strip()))
+            else:
+                lines.append(("item", line))
+        return title, lines
+
+    def build_notes(self, parent):
+        outer = self.frame(parent, bg=BORDER)
+        outer.pack(fill="both", expand=True)
+        inner = tk.Frame(outer, bg=PANEL)
+        inner.pack(fill="both", expand=True, padx=1, pady=1)
+        tk.Frame(inner, bg=GOLD, width=3).pack(side="left", fill="y")       # a thin gold edge on the left
+        left = tk.Frame(inner, bg=PANEL, width=210)
+        left.pack(side="left", fill="y", padx=(16, 0), pady=(10, 10))
+        left.pack_propagate(False)
+        tk.Label(left, text="PATCH NOTES", bg=PANEL, fg=GOLD, font=(UI_FONT, 8, "bold"), anchor="w").pack(fill="x")
+
+        title, lines = self.latest_notes()
+        version, when = "", ""
+        if title:
+            parts = [p.strip() for p in title.split("\u00b7")]
+            version, when = parts[0], (parts[1] if len(parts) > 1 else "")
+        mine = ""
+        try:
+            import launcher_update as lu
+            mine = (lu.installed_version(G.HERE) or "").lstrip("v")
+        except Exception:
+            pass
+        tk.Label(left, text=("Version " + version.lstrip("v")) if version else "Patch notes", bg=PANEL, fg=FG,
+                 font=(UI_FONT, 14, "bold"), anchor="w").pack(fill="x", pady=(2, 0))
+        sub = [x for x in (when, "your version" if mine and version.lstrip("v") == mine else "") if x]
+        if sub:
+            tk.Label(left, text="  \u00b7  ".join(sub), bg=PANEL, fg=DIM, font=(UI_FONT, 9), anchor="w").pack(fill="x")
+        more = tk.Label(left, text="All patch notes  \u203a", bg=PANEL, fg=DIM, font=(UI_FONT, 9), cursor="hand2", anchor="w")
+        more.pack(side="bottom", fill="x")
+        more.bind("<Button-1>", lambda e: self.app.go("Patch notes"))
+        more.bind("<Enter>", lambda e: more.configure(fg=GOLD_LIT))
+        more.bind("<Leave>", lambda e: more.configure(fg=DIM))
+        tk.Frame(inner, bg=LINE_COLOUR, width=1).pack(side="left", fill="y", pady=12)
+
+        text = tk.Text(inner, bg=PANEL, fg=FG, relief="flat", bd=0, highlightthickness=0, wrap="word", height=1,
+                       font=(UI_FONT, 9), cursor="arrow", padx=16, pady=2, spacing1=1, spacing3=3,
+                       selectbackground=PANEL, inactiveselectbackground=PANEL)
+        text.tag_configure("head", foreground=GOLD_LIT, font=(UI_FONT, 9, "bold"), spacing1=8, spacing3=3)
+        text.tag_configure("item", lmargin1=0, lmargin2=13)
+        text.tag_configure("dot", foreground=GOLD)
+        text.tag_configure("dim", foreground=DIM)
+        if lines:
+            first = True
+            for kind, words in lines:
+                if kind == "head":
+                    text.insert("end", words.upper() + "\n", "head")
+                else:
+                    # the card shows the first sentence of each note (the full text is one click away)
+                    short = words.split(". ")[0].rstrip(".")
+                    credit = words[words.rfind(" ("):] if words.endswith(")") and " (" in words and short != words else ""
+                    credit = credit if len(credit) <= 30 else ""        # (a name or two, not a long remark)
+                    if len(short) > 120:
+                        short = short[:117].rsplit(" ", 1)[0] + "..."
+                    text.insert("end", "\u2022  ", ("item", "dot"))
+                    text.insert("end", short + ("." if not short.endswith(("...", ")", "!", "?")) else ""), "item")
+                    text.insert("end", (credit.rstrip(".") if credit else "") + "\n", ("item", "dim"))
+                first = False
+        else:
+            text.insert("end", "No patch notes in this install yet. They come with the next update.", "dim")
+        text.configure(state="disabled")
+        text.pack(side="left", fill="both", expand=True, pady=(8, 8))
+        # the wheel scrolls the notes (there is no scroll bar: it would crowd the card)
+        text.bind("<MouseWheel>", lambda e: (text.yview_scroll(int(-e.delta / 40) or (-1 if e.delta > 0 else 1), "units"), "break")[1])
+        text.bind("<Button-4>", lambda e: (text.yview_scroll(-2, "units"), "break")[1])
+        text.bind("<Button-5>", lambda e: (text.yview_scroll(2, "units"), "break")[1])
+        text.bind("<Double-Button-1>", lambda e: self.app.go("Patch notes"))
+        self.notes_text = text
+
     def refresh_summary(self):
+        if not self.tiles:
+            return                  # (the summary tiles were replaced by the patch notes)
         app, tab = self.app, self.app.rates_tab
         rates = tab.collect()
         world, population = core.world_of(rates), core.population_of(rates)
@@ -692,6 +804,7 @@ def system_chips(app):
         section("Updates", "updates")
     else:
         section("Team", "team")
+    page("Patch notes")
     page("Characters")
     section("GM and testing", "gm")
     section("Steam Deck" if G.linux is not None and G.linux.is_steam_deck() else "Linux", "linux")
@@ -770,9 +883,92 @@ class CharactersPage(w.ScrollPage):
         w.button(bar, "Folder...", coop.carry_pick_folder, small=True).pack(side="left")
         tk.Label(bar, textvariable=coop.carry_folder_text, bg=PANEL, fg=DIM, font=(UI_FONT, 9), anchor="w", justify="left",
                  wraplength=380).pack(side="left", padx=10)
+        # (2026-11-20) character transfer: charcapture (VanaDreams, with permission) on the other game, char_import.py here
+        bring = w.Card(grid, "Bring a character from another server")
+        bring.grid(row=2, column=0, columnspan=2, sticky="new", pady=(10, 0))
+        bring.note("From retail or another private server: 1) Get the capture add-on into that game's Ashita folder, "
+                   "2) there: /addon load charcapture, zone once, then /capture, 3) make a character here in the lobby and log "
+                   "out, 4) pick it above and Import. Jobs, skills, spells, key items, gil and bags come across (capped at this "
+                   "world's level cap); quests, missions and fame don't. The character here is backed up first.", wrap=960)
+        bar = tk.Frame(bring.body, bg=PANEL)
+        bar.pack(fill="x", pady=(6, 2))
+        w.button(bar, "Get the capture add-on...", self.get_capture).pack(side="left")
+        w.button(bar, "Import a snapshot...", self.import_snapshot, primary=True).pack(side="left", padx=8)
         tk.Label(self.body, textvariable=coop.note_text, bg=BG, fg=GOLD, font=(UI_FONT, 9), anchor="w", justify="left",
                  wraplength=1000).pack(fill="x", pady=(12, 0))
         self.bind("<Map>", lambda e: self.load(), add="+")
+
+    def get_capture(self):
+        """Puts VanaDreams' charcapture add-on into the Ashita folder of the game the character is coming from."""
+        from tkinter import filedialog
+        folder = filedialog.askdirectory(title="The Ashita folder of the game you're bringing the character from", parent=self)
+        if not folder:
+            return
+        import char_import as ci
+        self.coop.job(lambda: ci.install_capture(folder, log=lambda _t: None),
+                      lambda target: self.coop.note(f"charcapture is in {target}. In that game: /addon load charcapture, "
+                                                    "zone once, then /capture. The file lands in its config\\charcapture folder."),
+                      "Downloading charcapture...")
+
+    def import_snapshot(self):
+        """Reads a /capture file and puts it onto the character picked above (after a backup and a yes)."""
+        from tkinter import filedialog
+        import char_import as ci
+        name = self.choice.get()
+        if not name:
+            messagebox.showinfo("Import", "Make the character in the lobby first, log out, then pick it above.", parent=self)
+            return
+        if getattr(self.app, "running", False):
+            messagebox.showinfo("Import", "Press STOP first: a character is imported while the game is closed.", parent=self)
+            return
+        path = filedialog.askopenfilename(title="A snapshot made with /capture (config\\charcapture\\<Name>.json)",
+                                          filetypes=[("Character snapshot", "*.json")], parent=self)
+        if not path:
+            return
+        try:
+            snap = ci.load_snapshot(path)
+        except ci.ImportError_ as e:
+            messagebox.showwarning("Import", str(e), parent=self)
+            return
+        max_level = ci.server_max_level(self.app.cfg.get("server_dir"))
+        coop = self.coop
+
+        def look():
+            conn = coop.connect()
+            try:
+                charid = ci.find_character(conn, name)
+                return charid, ci.plan(conn, snap, charid, max_level)
+            finally:
+                conn.close()
+
+        def ask(result):
+            charid, plan = result
+            if not messagebox.askyesno("Import", ci.describe(plan) + f"\n\nPut this onto {name}? Its jobs, skills, spells, key "
+                                       "items and bags here are replaced (a backup is made first).", icon="warning", parent=self):
+                return
+
+            def write():
+                conn = coop.connect()
+                try:
+                    saved = ci.backup_first(conn, charid, name)
+                    ci.apply(conn, plan)
+                    return saved
+                finally:
+                    conn.close()
+
+            coop.job(write, lambda saved: coop.note(f"{plan['name']} came across as {name}. The old {name} is backed up in "
+                                                    f"{saved} (Restore from a backup puts it back)."), "Importing...")
+
+        def failed(e):
+            messagebox.showwarning("Import", str(e), parent=self)
+
+        def guarded():
+            try:
+                return ("ok", look())
+            except ci.ImportError_ as e:
+                return ("err", e)
+
+        coop.job(guarded, lambda r: ask(r[1]) if r[0] == "ok" else failed(r[1]), "Reading the snapshot...")
 
     def load(self):
         """Read the characters that are at home in this world (in the background: the database may be slow to answer)."""
@@ -809,6 +1005,56 @@ class CharactersPage(w.ScrollPage):
     def backup_database(self):
         open_system(self.app, "gm")             # its result is printed in the output box there
         self.app.updates_tab.run_script("setup_gm.py", ["backup"])
+
+
+class PatchNotesPage(w.ScrollPage):
+    """What changed in each update, from PATCH-NOTES.md in the kit (newest first; the same notes as #patch-notes)."""
+
+    def __init__(self, parent, app):
+        super().__init__(parent)
+        self.app = app
+        w.page_header(self.body, "Patch notes", "What changed in each update.", note="").pack(fill="x")
+        path = os.path.join(G.HERE, "PATCH-NOTES.md")
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                text = handle.read()
+        except OSError:
+            text = ""
+        mine = ""
+        try:
+            import launcher_update as lu
+            mine = (lu.installed_version(G.HERE) or "").lstrip("v")
+        except Exception:
+            pass
+        bar = tk.Frame(self.body, bg=BG)
+        bar.pack(fill="x", pady=(10, 0))
+        w.button(bar, "All releases on GitHub", lambda: app.open_url(f"https://github.com/{G.KIT_REPO_NAME}/releases"),
+                 small=True).pack(side="left")
+        w.button(bar, "Discord", lambda: app.open_url(DISCORD), small=True).pack(side="left", padx=8)
+        if not text.strip():
+            tk.Label(self.body, text="No patch notes in this install yet.", bg=BG, fg=DIM, font=(UI_FONT, 10)).pack(anchor="w", pady=14)
+            return
+        card = None
+        for raw in text.splitlines():
+            line = raw.rstrip()
+            if line.startswith("## "):
+                title = line[3:].strip()
+                version = title.split()[0].lstrip("v") if title else ""
+                card = w.Card(self.body, title + ("   ·   your version" if mine and version == mine else ""))
+                card.pack(fill="x", pady=(12, 0))
+            elif card is None or not line.strip() or line.startswith("# "):
+                continue
+            elif line.startswith("### "):
+                tk.Label(card.body, text=line[4:].strip(), bg=PANEL, fg=GOLD_LIT, font=(UI_FONT, 10, "bold"),
+                         anchor="w").pack(fill="x", pady=(8, 2))
+            elif line.lstrip().startswith(("•", "- ", "* ")):
+                row = tk.Frame(card.body, bg=PANEL)
+                row.pack(fill="x", pady=1)
+                tk.Label(row, text="•", bg=PANEL, fg=GOLD, font=(UI_FONT, 10)).pack(side="left", anchor="n", padx=(4, 6))
+                tk.Label(row, text=line.lstrip().lstrip("•-* ").strip(), bg=PANEL, fg=FG, font=(UI_FONT, 10), anchor="w",
+                         justify="left", wraplength=940).pack(side="left", fill="x")
+            else:
+                card.note(line.strip(), wrap=960)
 
 
 class AboutPage(w.ScrollPage):
@@ -1216,6 +1462,7 @@ def build(app, tabs):
             app.era_page = EraPage(tabs, app)
             tabs.add(app.era_page, text="  Era  ")
         tabs.add(AboutPage(tabs, app), text="  About  ")
+        tabs.add(PatchNotesPage(tabs, app), text="  Patch notes  ")
         app.system_sections = SystemSections(app.updates_tab, "updates" if player_install(app) else "team")
     except Exception:                   # the Settings page stays whole, as in the classic look
         log_problem("The System pages could not be made")

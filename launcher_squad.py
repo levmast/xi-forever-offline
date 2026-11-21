@@ -209,13 +209,31 @@ def job_level(mate, job):
     return mate["jobs"].get(job, (1, 0))[0]
 
 
+# (2026-11-21, Bob Roberts) the server's map.SUBJOB_RATIO, as squad.lua uses it: 0 none, 1 half, 2 two thirds, 3 equal
+SUBJOB_RATIO = 1
+
+
+def read_subjob_ratio(server_dir):
+    """Reads SUBJOB_RATIO from the server's settings/map.lua (1, half, if it can't be read)."""
+    global SUBJOB_RATIO
+    try:
+        with open(os.path.join(server_dir, "settings", "map.lua"), encoding="utf-8", errors="replace") as f:
+            m = re.search(r"^\s*SUBJOB_RATIO\s*=\s*(\d+)", f.read(), re.M)
+        SUBJOB_RATIO = int(m.group(1)) if m else 1
+    except (OSError, TypeError, ValueError):
+        SUBJOB_RATIO = 1
+    return SUBJOB_RATIO
+
+
 def effective_levels(mate):
     """Main level, sub job and sub level, using the same rules as the game side."""
     main = job_level(mate, mate["mjob"])
     sub, sub_level = 0, 0
-    if mate["sjob"] and mate["sjob"] != mate["mjob"] and main >= 18:
+    ratio = SUBJOB_RATIO
+    cap = main if ratio == 3 else main * 2 // 3 if ratio == 2 else 0 if ratio == 0 else main // 2
+    if mate["sjob"] and mate["sjob"] != mate["mjob"] and main >= 18 and cap > 0:
         sub = mate["sjob"]
-        sub_level = max(1, min(job_level(mate, sub), main // 2))
+        sub_level = max(1, min(job_level(mate, sub), cap))
     return main, sub, sub_level
 
 

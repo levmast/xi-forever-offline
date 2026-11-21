@@ -16,6 +16,8 @@ and Ashita addons.
   sell on the auction house, join linkshells and can be invited to your party. Optional local AI chat through Ollama.
 - **Gambits**: ordered combat rules for your own character.
 - **Crystal Boy**: a Game Boy you earn in game and play inside FFXI (bring your own ROMs; none are included).
+- **Tetra Master**: the PlayOnline card game inside FFXI, with art by Nalfey. Collect 250 cards from card traders,
+  monsters and treasure caskets, and play the computer for gil (`/tm`; start with Luto Mewrilah in Upper Jeuno).
 - A simulated auction house, a living conquest map, era-accurate experience, treasure caskets, fast travel and more.
 - A launcher with rates, graphics and shader options, squad setup, addon switches and one-click server updates.
 

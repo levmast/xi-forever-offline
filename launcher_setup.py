@@ -599,6 +599,11 @@ OWN_ADDONS = ("Gambits", "autobox", "followme", "servermenu", "squadpanel")
 STOCK_ADDONS = ("distance", "fps", "move", "timestamp", "tparty", "checker", "drawdistance", "allmaps")
 STOCK_PLUGINS = ("minimap",)
 START_ADDONS = ("Gambits", "servermenu", "crystalboy")          # loaded at startup on a new install
+# (2026-11-21) Tetra Master (art: Nalfey): <kit>\tetramaster is copied into Ashita when the kit has it, and turned on
+# at startup once (new installs and existing ones). Only the files the addon uses are copied: the sound effects as .wav,
+# the music as .mp3 (the .wav music and the .mp3 sound effects in Nalfey's asset pack are left out).
+TM_ADDON = "tetramaster"
+TM_SKIP = ("*.before-*", "*.bak", "mus_quadmist.wav", "snd_*.mp3", "screenshots")
 
 
 def migrate_gambits_names(kit, ashita_dir, log=print):
@@ -694,6 +699,31 @@ def install_own_addons(kit, ashita_dir):
         if not os.path.exists(rewards) and os.path.exists(os.path.join(src, "rewards_default.lua")):
             shutil.copy2(os.path.join(src, "rewards_default.lua"), rewards)
         install_free_games(kit, cfg)
+    src = os.path.join(kit, TM_ADDON)
+    if os.path.isfile(os.path.join(src, TM_ADDON + ".lua")):
+        shutil.copytree(src, os.path.join(addons, TM_ADDON), dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns(*TM_SKIP))
+
+
+def enable_new_addons(kit, ashita_dir, boot_name, log=print):
+    """Turns Tetra Master on for the main window ONCE per install, when the kit has it: an existing install gets it
+    with the update, and a player who switches it off later (OPTIONS > Addons) keeps it off. The marker file
+    <Ashita>\config\addons\tetramaster\enabled-once.txt remembers that it was done."""
+    if not os.path.isfile(os.path.join(kit, TM_ADDON, TM_ADDON + ".lua")):
+        return False
+    import launcher_core as core
+    marker = os.path.join(ashita_dir, "config", "addons", TM_ADDON, "enabled-once.txt")
+    if os.path.exists(marker) or not os.path.isdir(os.path.join(ashita_dir, "addons", TM_ADDON)):
+        return False
+    manager = core.ScriptManager(ashita_dir, boot_name)
+    manager.prepare()
+    if TM_ADDON not in {a.lower() for a in manager.enabled("addon")}:
+        manager.set("addon", TM_ADDON, True)
+        log("Tetra Master is now on (type /tm in game; turn it off in OPTIONS > Addons).")
+    os.makedirs(os.path.dirname(marker), exist_ok=True)
+    with open(marker, "w", encoding="utf-8") as handle:
+        handle.write(time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
+    return True
 
 
 # The free games this loader copied into <Ashita>\config\addons\crystalboy\roms, one file name per line, so the

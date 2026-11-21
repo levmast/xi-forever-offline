@@ -6,6 +6,7 @@
      (ROM\\175\\35.DAT) and the Anniversary Ring made stackable (ROM\\118\\109.DAT) (install_crystalboy_items.py).
   3. Chariot Band: its description (+75%, 720 min, 4000), 3 charges and a 15-hour recast (client-patches\\chariot_band.json).
   4. Item stacks: today's stack sizes or the era's, to match the server (the "Modern item stacks" switch; stack_mode.py).
+  5. Forever Beta Shirt (item 25725): its look (body model 399) and its item entry in ROM\\286\\73.DAT (forever_beta_shirt.py).
 
 Every step checks first and only writes what is missing, so this runs at the end of first-run setup and again on
 every PLAY of a player install (an update or a reinstalled era pack is caught the next time). A step that cannot be
@@ -182,13 +183,21 @@ def item_stacks(kit, game, server, log=print):
         (" (%d left alone)" % skipped) if skipped else "")
 
 
+# ----- 5. Forever Beta Shirt -----
+def forever_beta_shirt(kit, game, log=print):
+    """Its own look and item entry. Checks first; rebuilds only what an update or the era pack replaced."""
+    fbs = _kit_module(kit, "forever_beta_shirt")
+    return fbs.apply(game, log=log)
+
+
 def apply_all(kit, game, server, log=print):
-    """Runs the four steps; returns the messages. Never raises."""
+    """Runs the five steps; returns the messages. Never raises."""
     messages = []
     for name, step in (("Home Points", lambda: homepoints(kit, game, server, log)),
                        ("Crystal Boy", lambda: crystalboy(kit, game, log)),
                        ("Chariot Band", lambda: chariot_band(kit, game, log)),
-                       ("Item stacks", lambda: item_stacks(kit, game, server, log))):
+                       ("Item stacks", lambda: item_stacks(kit, game, server, log)),
+                       ("Forever Beta Shirt", lambda: forever_beta_shirt(kit, game, log))):
         try:
             message = step()
         except PermissionError:

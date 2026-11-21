@@ -76,10 +76,22 @@ function M.take_keyboard(ptr, block)
 end
 
 --- XInput state. Read it from `state`, and empty `modified` (what the game gets) when given.
+-- (1.8, krazy: EXCEPTION_ACCESS_VIOLATION in 'xinput_state', then every add-on unloaded) the state can come as a plain
+-- Lua string (a copy), and writing through a pointer cast from a string scribbles over Lua's own memory: harmless for a
+-- while, then a crash somewhere else. Strings are only read now, and only real pointers (cdata, light userdata or an
+-- address) are written to.
+local function writable(p)
+    local t = type(p)
+    if t == 'cdata' or t == 'userdata' then return true end
+    return t == 'number' and p ~= 0
+end
+
 function M.take_xinput(state, modified)
-    local g = ffi.cast('CB_XINPUT_STATE *', state).Gamepad
+    if state == nil or (type(state) == 'string' and #state < ffi.sizeof('CB_XINPUT_STATE')) then return end
+    if type(state) == 'number' and state == 0 then return end
+    local g = ffi.cast('const CB_XINPUT_STATE *', state).Gamepad
     M.s.xb, M.s.lt, M.s.rt, M.s.lx, M.s.ly = g.wButtons, g.bLeftTrigger, g.bRightTrigger, g.sThumbLX, g.sThumbLY
-    if modified ~= nil then
+    if modified ~= nil and writable(modified) then
         local m = ffi.cast('CB_XINPUT_STATE *', modified).Gamepad
         m.wButtons, m.bLeftTrigger, m.bRightTrigger, m.sThumbLX, m.sThumbLY, m.sThumbRX, m.sThumbRY = 0, 0, 0, 0, 0, 0, 0
     end

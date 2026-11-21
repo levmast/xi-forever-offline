@@ -800,6 +800,10 @@ class SquadTab(tk.Frame):
         self.require_unlock = bool(cfg.get("squad_require_unlock", True)) and not core.load_rates(HERE).get("squad_all_gear", False)
         # player installs: mates start at level 1 and level up in game, and a look is picked once (as in squad.lua)
         self.player = bool(cfg.get("mariadb_dir"))
+        try:
+            sq.read_subjob_ratio(cfg.get("server_dir", ""))    # (Bob Roberts) sub levels as the server's SUBJOB_RATIO
+        except Exception:
+            pass
         self.level_vars, self.gear_vars, self.level_spins = {}, {}, {}
         self.gear_icons, self.gear_items = {}, {}
         self.icon_loader = itemicons.ItemIcons(self, ASSETS) if itemicons else None
@@ -1479,7 +1483,10 @@ class SquadTab(tk.Frame):
         def chosen(item_id):
             self.guard(lambda: (sq.set_equip(self.conn, m["id"], m["mjob"], slot, item_id), self.reload()))
 
-        ItemPicker(self, self.conn, slot, label, m["mjob"], main, self.charid(), self.require_unlock, chosen,
+        # (2026-11-21, Tasou) the Rules page's "Squad gets all gear" counts as soon as it is ticked, not only after PLAY
+        live = getattr(self, "all_gear_var", None)
+        need_unlock = self.require_unlock and not (live is not None and bool(live.get()))
+        ItemPicker(self, self.conn, slot, label, m["mjob"], main, self.charid(), need_unlock, chosen,
                    icon_loader=self.icon_loader)
 
     def clear_item(self, slot):
@@ -3135,10 +3142,8 @@ class App(tk.Tk):
         inner.pack(fill="x", padx=20, pady=7)
         self.summary_dot = tk.Label(inner, text="\u25cf", bg=PANEL, fg=GREY, font=(UI_FONT, 11))
         self.summary_dot.pack(side="left")
-        self.summary = tk.StringVar(value="Servers offline")
+        self.summary = tk.StringVar(value="World asleep")
         tk.Label(inner, textvariable=self.summary, bg=PANEL, fg=FG, font=(UI_FONT, 9, "bold")).pack(side="left", padx=(4, 18))
-        tk.Label(inner, text="Offline single-player  \u00b7  Level 75 era", bg=PANEL, fg=DIM,
-                 font=(UI_FONT, 9)).pack(side="left")
         tk.Label(inner, text=f"Launcher v{VERSION}", bg=PANEL, fg=DIM, font=(UI_FONT, 9)).pack(side="right")
 
         # the page buttons: along the bottom of every page, just above the status bar (filled in by build_nav once every page exists)
@@ -3212,7 +3217,8 @@ class App(tk.Tk):
         strip.pack(fill="x", padx=2, pady=(10, 6))
         self.status = tk.StringVar(value=PRESS_NOTE or "Ready when you are.")
         tk.Label(strip, textvariable=self.status, bg=BG, fg=FG, font=(UI_FONT, 11), anchor="w").pack(side="left", fill="x", expand=True)
-        self.progress = ttk.Progressbar(strip, mode="indeterminate", length=380, style="Solo.Horizontal.TProgressbar")
+        from launcher_widgets import CrystalLoader
+        self.progress = CrystalLoader(strip, width=380)   # (2026-11-21) a crystal wave instead of the sliding bar
         self.progress.pack(side="right")
 
         # PLAY, STOP and DUALBOX, then UPDATE and LOGS (pictures in assets\\ui; plain text buttons if they are missing)
@@ -3249,6 +3255,8 @@ class App(tk.Tk):
 
         # Rates tab
         self.rates_tab = RatesTab(tabs, self.rates, player=bool(self.cfg.get("mariadb_dir")))
+        if self.squad_tab is not None:
+            self.squad_tab.all_gear_var = self.rates_tab.squad_all_gear
         if not self.new_ui:                    # the newer World and Rules pages show these settings instead (launcher_pages.py)
             tabs.add(self.rates_tab, text="  Rates  ")
 
@@ -3719,6 +3727,8 @@ class App(tk.Tk):
                     self.status.set(val)
                 elif kind == "log":
                     self.status.set(val)
+                    if str(val).startswith("Game is running") and hasattr(self.progress, "success"):
+                        self.progress.success()          # (2026-11-21) the loading crystals turn green
                     self.log.configure(state="normal")
                     self.log.insert("end", time.strftime("%H:%M:%S  ") + val + "\n")
                     self.log.see("end")
@@ -3745,13 +3755,13 @@ class App(tk.Tk):
                 up += alive
                 d.configure(fg=GREEN if alive else RED)
         if up == len(self.dots):
-            self.summary.set("Servers online")
+            self.summary.set("World awake")
             self.summary_dot.configure(fg=GREEN)
         elif up:
-            self.summary.set(f"{up} of {len(self.dots)} servers running")
+            self.summary.set("Crystallizing world...")
             self.summary_dot.configure(fg="#e0a030")
         else:
-            self.summary.set("Servers offline")
+            self.summary.set("World asleep")
             self.summary_dot.configure(fg=GREY)
         self.after(1000, self.lights)
 
@@ -3879,6 +3889,12 @@ class App(tk.Tk):
             if not self.coop_tab.may_close():      # visitors' characters are still in this world
                 return
             self.coop_tab.shutdown()
+        # (2026-11-21, Tasou: "Squad gets all gear" was unticked again after a restart) the Rules page is kept on quit too,
+        # not only when PLAY is pressed
+        try:
+            core.save_rates(HERE, self.rates_tab.collect())
+        except Exception:
+            pass
         self.stop_requested = True
         self.cleanup()
         if getattr(self, "db_proc", None) is not None:      # the kit's MariaDB, if this launcher started it
@@ -3947,6 +3963,11 @@ class App(tk.Tk):
                 launcher_setup.install_own_addons(HERE, cfg["ashita_dir"])
             except Exception as e:
                 self.say(f"Could not refresh the addons ({e}) - starting anyway.")
+            try:                              # (2026-11-21) Tetra Master: switched on once when an update brings it
+                launcher_setup.enable_new_addons(HERE, cfg["ashita_dir"], cfg.get("ashita_boot", "phoenixsolo.ini"),
+                                                 log=self.say)
+            except Exception as e:
+                self.say(f"Could not turn Tetra Master on ({e}) - starting anyway.")
             try:                              # era game files an FFXI update wrote over (Yumainai, Altair 2026-11-19)
                 for line in launcher_setup.check_era_dats(HERE, cfg.get("ffxi_client_dir", ""), log=self.say):
                     self.say(line)
@@ -4688,7 +4709,7 @@ class SetupWizard(tk.Tk):
               ("cadence", "Cadence: auto-attack and resting timers (loads switched off)", False),
               ("checkmate", "Checkmate: detailed monster check (loads switched off)", False),
               ("momentum", "Momentum: EXP and merit tracking (loads switched off)", False),
-              ("ffxiport", "FFXIPort: a teleport window, /port (loads switched off)", False), ("autobot", "AutoBot: for a second (dualbox) character", False))
+              ("ffxiport", "FFXIPort: a teleport window, /port (loads switched off)", False), ("vanafish", "VanaFish: fishing bot, /vanafish (loads switched off)", False), ("vanacam", "VanaCam: camera presets and combat distance (loads switched off)", False), ("autobot", "AutoBot: for a second (dualbox) character", False))
 
     def __init__(self):
         super().__init__()
