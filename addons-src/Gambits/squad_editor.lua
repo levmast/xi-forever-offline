@@ -153,6 +153,39 @@ end
 -- rule's target)
 M.ENEMY_CONDS = { CASTING_MA = true, READYING_WS = true, READYING_MS = true, READYING_JA = true }
 
+-- (job expansion) the modifiers MOD_LT can name (the same list as squad_rulesets.lua R.MODS): name -> low, high, label.
+-- Each one counts down as it absorbs a hit: Utsusemi shadows, Blink images.
+M.MODS = {
+    UTSUSEMI  = { 1, 7, 'Utsusemi shadows' },
+    BLINK     = { 1, 3, 'Blink images' },
+}
+M.MOD_ORDER = { 'UTSUSEMI', 'BLINK' }
+
+-- "UTSUSEMI.2" -> 'UTSUSEMI', 2 (nil for anything else)
+function M.mod_parse(arg)
+    local name, n = string.match(tostring(arg or ''), '^([A-Z]+)%.(%d+)$')
+    if name == nil or M.MODS[name] == nil then
+        return nil
+    end
+
+    return name, tonumber(n)
+end
+
+-- why a MOD_LT value is wrong, or nil
+function M.mod_problem(arg)
+    local name, n = M.mod_parse(arg)
+    if name == nil then
+        return 'needs Utsusemi shadows or Blink images and a number'
+    end
+
+    local m = M.MODS[name]
+    if n < m[1] or n > m[2] then
+        return string.format('needs a number %d-%d for %s', m[1], m[2], m[3])
+    end
+
+    return nil
+end
+
 -- a row the editor may not change: "?" from the server (kept exactly as it is), or a condition the server's catalog
 -- does not describe (its value cannot be checked here). Returns why, or nil.
 function M.protected(r, cat)
@@ -236,6 +269,11 @@ function M.check_draft(d, cat)
             elseif c and c.kind == 'j' then
                 if not pair[2] or not string.match(pair[2], '^[A-Z][A-Z0-9_]*$') then
                     return string.format('rule %d: %s needs a job ability', i, M.cond_label(pair[1]))
+                end
+            elseif c and c.kind == 'm' then
+                local why = M.mod_problem(pair[2])
+                if why then
+                    return string.format('rule %d: %s %s', i, M.cond_label(pair[1]), why)
                 end
             elseif c and c.kind == 'n' and pair[2] ~= nil and pair[2] ~= '' then
                 return string.format('rule %d: %s takes no value', i, M.cond_label(pair[1]))
@@ -623,7 +661,8 @@ M.CAT_KINDS  = { 't', 'c', 'f', 'j', 's' }
 M.CATM_KINDS = { 't', 'c', 'f', 'j', 's', 'u' } -- (version 4, one mate's catalog: u = allowed by job and level, not confirmed)
 local CAT_ENTRY = {
     t = '^[A-Z][A-Z_]*$',
-    c = '^[A-Z][A-Z0-9_]*:[nrej][:%d]*$', -- (j: a job ability argument, server version 5 when asked for with catm "j")
+    c = '^[A-Z][A-Z0-9_]*:[nrejm][:%d]*$', -- (j: a job ability argument, server version 5 when asked for with catm "j";
+                                           --  m: a modifier and a number, MOD_LT, server version 6 with catm "jm")
     f = '^[A-Z][A-Z0-9_]*$',
     j = '^[A-Z][A-Z0-9_]*:%d+s?$',
     s = '^[A-Z][A-Z0-9_]*:%d+s?$',
@@ -742,8 +781,11 @@ function M.load_catalog_for(m)
 
     local key = M.catalog_key(m)
     -- (version 5) "j": this editor reads conditions with a job ability argument (JA_ON_COOLDOWN)
+    -- (version 6, job expansion) "jm": modifier arguments too (MOD_LT)
     local words = { 'catm', tostring(m.slot) }
-    if (S.server.version or 0) >= 5 then
+    if (S.server.version or 0) >= 6 then
+        words[3] = 'jm'
+    elseif (S.server.version or 0) >= 5 then
         words[3] = 'j'
     end
 
@@ -1012,14 +1054,180 @@ M.TEMPLATES = {
             { on = true, target = 'TARGET', cond = 'NOT_STATUS', arg = 'PARALYSIS', kind = 'family', name = 'PARALYZE', retry = '30' },
         },
     } },
+
+    -- ------------------------------------------------------------ (job expansion 2026-11-21) the other jobs
+    -- Levels from sql/abilities.sql and sql/spell_list.sql (v0.1.55); test_gambits_jobexp.lua checks every name and level
+    -- against the server's tables. Rules a mate cannot use yet (level, sub job, expansion switched off) are left out by
+    -- the server when it is called; the others still work.
+    MNK = { {
+        name = 'Basic Monk',
+        about = 'Chakra when HP is below 40 % (level 35); Dodge while the MNK has the enemy\'s attention (15); Focus when it '
+            .. 'is not on (25); Boost while it has not got the enemy\'s attention, at most every 30 s (5).',
+        rules = {
+            { on = true, target = 'SELF', cond = 'HPP_LT', arg = '40', kind = 'ja', name = 'CHAKRA' },
+            { on = true, target = 'SELF', cond = 'HAS_TOP_ENMITY', cond2 = 'NOT_STATUS', arg2 = 'DODGE', kind = 'ja', name = 'DODGE' },
+            { on = true, target = 'SELF', cond = 'NOT_STATUS', arg = 'FOCUS', kind = 'ja', name = 'FOCUS' },
+            { on = true, target = 'SELF', cond = 'NOT_HAS_TOP_ENMITY', cond2 = 'NOT_STATUS', arg2 = 'BOOST', kind = 'ja', name = 'BOOST',
+              retry = '30' },
+        },
+    } },
+    BLM = { {
+        name = 'Basic Black Mage',
+        about = 'Magic burst: when a skillchain opens a burst window, the best spell that fits it (element, the enemy\'s '
+            .. 'resistance, MP, recast, a cast that ends in time). Aspir the enemy when MP is below 30 % (level 25); Bio an '
+            .. 'enemy without it (10, every 60 s at most); else nuke with the element the enemy is weakest to while MP is at '
+            .. 'least 50 % and the BLM does not have the enemy\'s attention.',
+        rules = {
+            { on = true, target = 'TARGET', cond = 'MB_AVAILABLE', kind = 'burst' },
+            { on = true, target = 'TRIGGER_SELF_ACTION_TARGET', cond = 'MPP_LT', arg = '30', kind = 'spell', name = 'ASPIR' },
+            { on = true, target = 'TARGET', cond = 'NOT_STATUS', arg = 'BIO', kind = 'family', name = 'BIO', retry = '60' },
+            { on = true, target = 'TRIGGER_SELF_ACTION_TARGET', cond = 'MPP_GTE', arg = '50', cond2 = 'NOT_HAS_TOP_ENMITY', kind = 'nuke' },
+        },
+    } },
+    THF = { {
+        name = 'Basic Thief',
+        about = 'Sneak Attack (level 15) and Trick Attack (30) whenever they are ready: the squad moves the THF behind the '
+            .. 'enemy (Sneak Attack) or behind the tank (Trick Attack) first, and gives up after 8 s (then waits 10 s). Steal '
+            .. 'from the enemy (5). The weapon skill does not wait for them.',
+        rules = {
+            { on = true, target = 'SELF', cond = 'NOT_STATUS', arg = 'SNEAK_ATTACK', kind = 'ja', name = 'SNEAK_ATTACK' },
+            { on = true, target = 'SELF', cond = 'NOT_STATUS', arg = 'TRICK_ATTACK', kind = 'ja', name = 'TRICK_ATTACK' },
+            { on = true, target = 'TARGET', cond = 'ALWAYS', kind = 'ja', name = 'STEAL' },
+        },
+    }, {
+        name = 'Thief SATA Weapon Skill',
+        about = 'Sneak Attack (level 15) and Trick Attack (30) once the THF has 1000 TP, for the weapon skill: the weapon '
+            .. 'skill waits up to 8 s for the THF to get into place (never at 3000 TP, never while it has the enemy\'s '
+            .. 'attention, never when it could close a skillchain). Steal from the enemy (5).',
+        rules = {
+            { on = true, target = 'SELF', cond = 'TP_GTE', arg = '1000', cond2 = 'NOT_STATUS', arg2 = 'SNEAK_ATTACK', kind = 'ja',
+              name = 'SNEAK_ATTACK' },
+            { on = true, target = 'SELF', cond = 'TP_GTE', arg = '1000', cond2 = 'NOT_STATUS', arg2 = 'TRICK_ATTACK', kind = 'ja',
+              name = 'TRICK_ATTACK' },
+            { on = true, target = 'TARGET', cond = 'ALWAYS', kind = 'ja', name = 'STEAL' },
+        },
+    } },
+    DRK = { {
+        name = 'Basic Dark Knight',
+        about = 'Stun an enemy that is casting (level 37, Rise of the Zilart); Drain the enemy when HP is below 50 % (10) '
+            .. 'and Aspir it when MP is below 30 % (20) - checked on the DRK, cast on the enemy; Last Resort while the DRK '
+            .. 'does not have the enemy\'s attention (15); Bio an enemy without it (15, every 60 s at most).',
+        rules = {
+            { on = true, target = 'TARGET', cond = 'CASTING_MA', kind = 'spell', name = 'STUN' },
+            { on = true, target = 'TRIGGER_SELF_ACTION_TARGET', cond = 'HPP_LT', arg = '50', kind = 'spell', name = 'DRAIN' },
+            { on = true, target = 'TRIGGER_SELF_ACTION_TARGET', cond = 'MPP_LT', arg = '30', kind = 'spell', name = 'ASPIR' },
+            { on = true, target = 'SELF', cond = 'NOT_HAS_TOP_ENMITY', cond2 = 'NOT_STATUS', arg2 = 'LAST_RESORT', kind = 'ja',
+              name = 'LAST_RESORT' },
+            { on = true, target = 'TARGET', cond = 'NOT_STATUS', arg = 'BIO', kind = 'family', name = 'BIO', retry = '60' },
+        },
+    } },
+    BST = { {
+        name = 'Basic Beastmaster',
+        about = 'The jug pet is the squad\'s: called by level, it fights what the BST fights and is tended below 50 % HP. '
+            .. 'These rules are for the BST itself and depend on its sub job: Cure itself below 50 % (/WHM or /RDM), '
+            .. 'Berserk while it does not have the enemy\'s attention (/WAR 15). Without such a sub job they are left out.',
+        rules = {
+            { on = true, target = 'SELF', cond = 'HPP_LT', arg = '50', kind = 'family', name = 'CURE' },
+            { on = true, target = 'SELF', cond = 'NOT_HAS_TOP_ENMITY', cond2 = 'NOT_STATUS', arg2 = 'BERSERK', kind = 'ja', name = 'BERSERK' },
+        },
+    } },
+    BRD = { {
+        name = 'Basic Bard',
+        about = 'Songs by party role (each song reaches only that role; you can change who is what with !squad partyrole): '
+            .. 'Valor Minuet (level 3) and March (29) for the melee, Mage\'s Ballad (25) for the mages, Knight\'s Minne (1) '
+            .. 'for the tank. Elegy (39) on an enemy without it, Foe Requiem (7) every 60 s at most. A Bard gives at most '
+            .. 'two songs to one member: a third replaces the oldest.',
+        rules = {
+            { on = true, target = 'MELEE', cond = 'NOT_STATUS', arg = 'MINUET', kind = 'family', name = 'VALOR_MINUET' },
+            { on = true, target = 'MELEE', cond = 'NOT_STATUS', arg = 'MARCH', kind = 'family', name = 'MARCH' },
+            { on = true, target = 'CASTER', cond = 'NOT_STATUS', arg = 'BALLAD', kind = 'family', name = 'MAGES_BALLAD' },
+            { on = true, target = 'TANK', cond = 'NOT_STATUS', arg = 'MINNE', kind = 'family', name = 'KNIGHTS_MINNE' },
+            { on = true, target = 'TARGET', cond = 'NOT_STATUS', arg = 'ELEGY', kind = 'family', name = 'ELEGY' },
+            { on = true, target = 'TARGET', cond = 'NOT_STATUS', arg = 'REQUIEM', kind = 'family', name = 'FOE_REQUIEM', retry = '60' },
+        },
+    } },
+    RNG = { {
+        name = 'Basic Ranger',
+        about = 'Sharpshot (level 1) and Barrage (30) while the RNG does not have the enemy\'s attention, then ranged attacks. '
+            .. 'A Rule Set replaces the squad\'s automatic ranged attacks, so the ranged attack rule must stay in it.',
+        rules = {
+            { on = true, target = 'SELF', cond = 'NOT_HAS_TOP_ENMITY', cond2 = 'NOT_STATUS', arg2 = 'SHARPSHOT', kind = 'ja', name = 'SHARPSHOT' },
+            { on = true, target = 'SELF', cond = 'NOT_HAS_TOP_ENMITY', cond2 = 'NOT_STATUS', arg2 = 'BARRAGE', kind = 'ja', name = 'BARRAGE' },
+            { on = true, target = 'TARGET', cond = 'ALWAYS', kind = 'ranged' },
+        },
+    } },
+    SAM = { {
+        name = 'Basic Samurai',
+        about = 'Hasso while the SAM does not have the enemy\'s attention (level 25), Seigan and Third Eye while it has '
+            .. '(35 and 15); Meditate below 1000 TP (30) for the next weapon skill (the squad\'s weapon skill settings decide '
+            .. 'which one). Hasso and Seigan cancel each other.',
+        rules = {
+            { on = true, target = 'SELF', cond = 'NOT_HAS_TOP_ENMITY', cond2 = 'NOT_STATUS', arg2 = 'HASSO', kind = 'ja', name = 'HASSO' },
+            { on = true, target = 'SELF', cond = 'HAS_TOP_ENMITY', cond2 = 'NOT_STATUS', arg2 = 'SEIGAN', kind = 'ja', name = 'SEIGAN' },
+            { on = true, target = 'SELF', cond = 'HAS_TOP_ENMITY', cond2 = 'NOT_STATUS', arg2 = 'THIRD_EYE', kind = 'ja', name = 'THIRD_EYE' },
+            { on = true, target = 'SELF', cond = 'TP_LT', arg = '1000', kind = 'ja', name = 'MEDITATE' },
+        },
+    } },
+    NIN = { {
+        name = 'Basic Ninja',
+        about = 'Utsusemi: Ni (level 37) when fewer than 2 shadows are left, Ichi (12) when none are left. Kurayami (19) '
+            .. 'and Hojo (23) on an enemy without Blind or Slow, every 60 s at most. Provoke (with /WAR) is switched off: '
+            .. 'switch it on when this NIN tanks.',
+        rules = {
+            { on = true, target = 'SELF', cond = 'MOD_LT', arg = 'UTSUSEMI.2', kind = 'spell', name = 'UTSUSEMI_NI' },
+            { on = true, target = 'SELF', cond = 'MOD_LT', arg = 'UTSUSEMI.1', kind = 'spell', name = 'UTSUSEMI_ICHI' },
+            { on = false, target = 'TARGET', cond = 'NOT_HAS_TOP_ENMITY', kind = 'ja', name = 'PROVOKE' },
+            { on = true, target = 'TARGET', cond = 'NOT_STATUS', arg = 'BLINDNESS', kind = 'spell', name = 'KURAYAMI_ICHI', retry = '60' },
+            { on = true, target = 'TARGET', cond = 'NOT_STATUS', arg = 'SLOW', kind = 'spell', name = 'HOJO_ICHI', retry = '60' },
+        },
+    } },
+    DRG = { {
+        name = 'Basic Dragoon',
+        about = 'High Jump while the DRG has the enemy\'s attention (level 35, it sheds some), Jump (10) and High Jump '
+            .. 'below 1000 TP for TP - checked on the DRG, used on the enemy. The wyvern is the squad\'s: Spirit Link (25) '
+            .. 'gives it HP when it is badly hurt, unless this Rule Set uses Spirit Link itself.',
+        rules = {
+            { on = true, target = 'TRIGGER_SELF_ACTION_TARGET', cond = 'HAS_TOP_ENMITY', kind = 'ja', name = 'HIGH_JUMP' },
+            { on = true, target = 'TRIGGER_SELF_ACTION_TARGET', cond = 'TP_LT', arg = '1000', kind = 'ja', name = 'JUMP' },
+            { on = true, target = 'TRIGGER_SELF_ACTION_TARGET', cond = 'TP_LT', arg = '1000', kind = 'ja', name = 'HIGH_JUMP' },
+        },
+    } },
+    BLU = { {
+        name = 'Basic Blue Mage',
+        about = 'Healing Breeze below 40 % HP (level 16), Pollen below 60 % (1); Cocoon (8), Metallic Body (8) and '
+            .. 'Refueling (48) when they are not on; Head Butt an enemy that is casting (12). The squad\'s blue magic rules '
+            .. 'decide which spells a BLU has.',
+        rules = {
+            { on = true, target = 'SELF', cond = 'HPP_LT', arg = '40', kind = 'spell', name = 'HEALING_BREEZE' },
+            { on = true, target = 'SELF', cond = 'HPP_LT', arg = '60', kind = 'spell', name = 'POLLEN' },
+            { on = true, target = 'TARGET', cond = 'CASTING_MA', kind = 'spell', name = 'HEAD_BUTT' },
+            { on = true, target = 'SELF', cond = 'NOT_STATUS', arg = 'DEFENSE_BOOST', kind = 'spell', name = 'COCOON' },
+            { on = true, target = 'SELF', cond = 'NOT_STATUS', arg = 'STONESKIN', kind = 'spell', name = 'METALLIC_BODY' },
+            { on = true, target = 'SELF', cond = 'NOT_STATUS', arg = 'HASTE', kind = 'spell', name = 'REFUELING' },
+        },
+    } },
+    COR = { {
+        name = 'Basic Corsair',
+        about = 'Two rolls for the party: Chaos Roll (level 14, attack) and Hunter\'s Roll (11, accuracy) when they are not '
+            .. 'on, then ranged attacks. Double-Up is not used. A Rule Set replaces the squad\'s automatic ranged attacks, so '
+            .. 'the ranged attack rule must stay in it.',
+        rules = {
+            { on = true, target = 'SELF', cond = 'NOT_STATUS', arg = 'CHAOS_ROLL', kind = 'ja', name = 'CHAOS_ROLL' },
+            { on = true, target = 'SELF', cond = 'NOT_STATUS', arg = 'HUNTERS_ROLL', kind = 'ja', name = 'HUNTERS_ROLL' },
+            { on = true, target = 'TARGET', cond = 'ALWAYS', kind = 'ranged' },
+        },
+    } },
 }
+-- (job expansion) no Summoner template: an avatar is the squad's (called by level, Blood Pacts on its own); a Rule Set
+-- has no pet target to give it orders. PUP is not covered yet.
 
 function M.templates_for(job)
     return M.TEMPLATES[job or ''] or {}
 end
 
 -- A new, unsaved Rule Set from a template (a copy: the template itself never changes). A target the server does not offer
--- (an older server without PARTY_LOWEST_HPP) becomes PARTY. Returns the draft, or nil + why.
+-- (an older server without PARTY_LOWEST_HPP) becomes PARTY; a rule with another target or condition it does not offer
+-- is left out. Returns the draft, or nil + why.
 function M.new_from_template(job, index, cat)
     local t = M.templates_for(job)[index or 1]
     if t == nil then
@@ -1031,25 +1239,50 @@ function M.new_from_template(job, index, cat)
         offered[target] = true
     end
 
-    M.keep_unsaved() -- (beta polish: earlier unsaved edits become the unsaved draft, never lost)
-    local rules = {}
-    for i, r in ipairs(t.rules) do
+    -- (job expansion) a rule whose target or condition this server does not offer at all (an older server: no
+    -- "Check Self -> Act on Enemy", no shadow count) is left out of the copy; Party member, lowest HP becomes Party member
+    local function usable(copy)
+        if cat and not offered[copy.target] then
+            if copy.target ~= 'PARTY_LOWEST_HPP' then
+                return false
+            end
+
+            copy.target = 'PARTY'
+        end
+
+        for _, c in ipairs({ copy.cond, copy.cond2 }) do
+            if cat and cat.conds and cat.conds[c] == nil then
+                return false
+            end
+        end
+
+        return true
+    end
+
+    local rules, skipped = {}, 0
+    for _, r in ipairs(t.rules) do
         local copy = {}
         for k, v in pairs(r) do
             copy[k] = v
         end
 
-        if cat and not offered[copy.target] then
-            copy.target = 'PARTY'
+        if usable(copy) then
+            rules[#rules + 1] = copy
+        else
+            skipped = skipped + 1
         end
-
-        rules[i] = copy
     end
 
+    if #rules == 0 then
+        return nil, 'this server cannot use the template "' .. t.name .. '" (update the server)'
+    end
+
+    M.keep_unsaved() -- (beta polish: earlier unsaved edits become the unsaved draft, never lost)
     S.draft = { num = 0, rev = nil, job = job, name = t.name, flags = 'o', dirty = true, rules = rules, template = t.name }
     S.checks = {}
     say(string.format('"%s" loaded as a new Rule Set (not saved). Change it as you like, then Save; assigning it replaces '
-        .. 'the mate\'s usual job rules while it is assigned.', t.name))
+        .. 'the mate\'s usual job rules while it is assigned.%s', t.name,
+        skipped > 0 and string.format(' %d rule(s) left out: this server does not offer them yet.', skipped) or ''), skipped > 0 and 'warn' or nil)
     return S.draft
 end
 
@@ -1790,24 +2023,40 @@ end
 -- (launcher_rules.py). Anything without an entry is shown as a tidied name ("SOME_NAME" -> "Some Name").
 M.TARGET_LABELS = { SELF = 'Self', PARTY = 'Party member', PARTY_LOWEST_HPP = 'Party member, lowest HP', TANK = 'Tank',
                     CASTER = 'Mage', MELEE = 'Melee', RANGED = 'Ranged', TOP_ENMITY = 'Ally with aggro',
-                    TARGET = 'Enemy (current target)', MASTER = 'Master (you)' }
+                    TARGET = 'Enemy (current target)', MASTER = 'Master (you)',
+                    TRIGGER_SELF_ACTION_TARGET = 'Check Self -> Act on Enemy' }
 -- what each target really means in the engine (gambits_container.cpp), shown as a tooltip
 M.TARGET_HELP = {
     SELF = 'The squad mate itself.',
     PARTY = 'The first party member, in party order, that matches the conditions.',
     PARTY_LOWEST_HPP = 'The party member with the lowest HP % that matches the conditions (alive, within 15 yalms; '
         .. 'equal HP % keeps party order). Good for healing.',
-    TANK = 'A party member whose main job is PLD or RUN.',
-    CASTER = 'A party member whose main job is WHM, BLM, RDM, BRD, SMN, BLU, SCH, GEO or RUN.',
-    MELEE = 'A party member whose main job is a melee job (WAR MNK THF PLD DRK BST SAM NIN DRG BLU PUP DNC RUN).',
-    RANGED = 'A party member whose main job is RNG or COR.',
+    TANK = 'A party member whose main job is PLD or RUN, or one given the role tank with !squad partyrole.',
+    CASTER = 'A party member whose main job is WHM, BLM, RDM, BRD, SMN, BLU, SCH, GEO or RUN, or one given the role mage '
+        .. 'with !squad partyrole.',
+    MELEE = 'A party member whose main job is a melee job (WAR MNK THF PLD DRK BST SAM NIN DRG BLU PUP DNC RUN), or one '
+        .. 'given the role melee with !squad partyrole.',
+    RANGED = 'A party member whose main job is RNG or COR, or one given the role ranged with !squad partyrole.',
     TOP_ENMITY = 'The party member the enemy is attacking (highest enmity).',
     TARGET = 'The enemy the squad mate is fighting.',
     MASTER = 'You, the player.',
+    TRIGGER_SELF_ACTION_TARGET = 'The conditions are checked on the squad mate itself, the action goes to the enemy. '
+        .. 'E.g. "MP below 50 %" -> Aspir the enemy, or "HP below 50 %" -> Drain the enemy.',
 }
 M.KIND_LABELS   = { family = 'Best of Family', spell = 'Specific Spell', ja = 'Job Ability', ranged = 'Ranged attack',
                     nuke = 'Best nuke (weakness)', burst = 'Magic burst' }
-M.NEW_KINDS     = { 'family', 'spell', 'ja' }   -- offered for new rules (ranged/nuke/burst are kept in existing rules)
+-- (job expansion) offered for new rules: ranged (RNG/COR), nuke (the best nuke for the enemy's weakness) and burst (the
+-- best spell for the open magic burst window) too
+M.NEW_KINDS     = { 'family', 'spell', 'ja', 'ranged', 'nuke', 'burst' }
+M.KIND_HELP     = {
+    family = 'The best spell of a family the mate knows (e.g. Cure -> Cure IV).',
+    spell  = 'One exact spell.',
+    ja     = 'One job ability.',
+    ranged = 'A ranged attack (needs a ranged weapon and ammunition).',
+    nuke   = 'The strongest elemental nuke of the element the enemy is weakest to.',
+    burst  = 'The best spell for the open magic burst: an element of the skillchain, the enemy\'s weakest resistance, '
+        .. 'enough MP, not on recast, and a cast that ends before the window closes. Use it with "A magic burst is possible".',
+}
 
 -- The condition builder (Target -> Conditions -> Action): a subject, a comparison and a value. Each pair is one engine
 -- condition; nothing here is emulated. Conditions outside it (level, random, timer, ...) stay as they are in existing
@@ -1824,13 +2073,43 @@ M.SUBJECTS = {
     { key = 'MISSING', label = 'Missing HP',  ops = { { 'at least', 'HP_MISSING' } }, unit = 'HP', default = 500 },
     { key = 'AGGRO',   label = 'Aggro',       ops = { { 'has it (the mate itself)', 'HAS_TOP_ENMITY' },
                                                       { 'does not have it', 'NOT_HAS_TOP_ENMITY' } } },
+    -- (hotfix 2026-11-21) the engine's party tank test (a party member whose main job is NIN, PLD or RUN; the rule's
+    -- target does not matter). The Basic Warrior starter uses NOT_PT_HAS_TANK, which the builder could not offer.
+    { key = 'PTTANK',  label = 'Party tank',  ops = { { 'there is one (NIN, PLD or RUN)', 'PT_HAS_TANK' },
+                                                      { 'there is none', 'NOT_PT_HAS_TANK' } } },
     { key = 'STATUS',  label = 'Status',      ops = { { 'has', 'STATUS' }, { 'is missing', 'NOT_STATUS' } } },
     { key = 'ENEMY',   label = 'Enemy',       ops = { { 'is casting a spell', 'CASTING_MA' }, { 'is readying a weapon skill', 'READYING_WS' },
                                                       { 'is readying a special move', 'READYING_MS' },
                                                       { 'is readying a job ability', 'READYING_JA' } }, enemyOnly = true },
     -- (server version 5) the mate's own recast of a job ability is running (whatever the rule's target is)
     { key = 'COOLDOWN', label = 'Ability on Cooldown', ops = { { 'is on cooldown (the mate\'s)', 'JA_ON_COOLDOWN' } } },
+    -- (job expansion, server version 6) Utsusemi shadows / Blink images left below a number (MOD_LT): Utsusemi again
+    -- before the last shadow goes
+    { key = 'SHADOWS', label = 'Shadows / images', ops = { { 'below', 'MOD_LT' } }, default = 'UTSUSEMI.2' },
+    -- (job expansion) the advanced conditions: offered only with "More conditions" ticked (a saved rule with one is
+    -- always shown)
+    { key = 'SKILLCHAIN', label = 'Skillchain', ops = { { 'a magic burst is possible', 'MB_AVAILABLE' },
+                                                        { 'a skillchain is open', 'SC_AVAILABLE' },
+                                                        { 'no skillchain is open', 'NOT_SC_AVAILABLE' } },
+      enemyOnly = true, advanced = true },
+    { key = 'LEVEL',   label = 'Level',       ops = { { 'below', 'LVL_LT' }, { 'at least', 'LVL_GTE' } }, unit = '', default = 30,
+      advanced = true },
+    { key = 'TIMER',   label = 'Timer',       ops = { { 'every', 'TIMER' } }, unit = 's', default = 60, advanced = true },
+    { key = 'RANDOM',  label = 'Random',      ops = { { 'chance', 'RANDOM' } }, unit = '%', default = 50, advanced = true },
 }
+
+-- (job expansion) how the conditions are offered: common (always in the builder), advanced (with "More conditions"),
+-- hidden (never offered: other jobs' conditions or engine internals; a saved rule with one is still shown and kept)
+M.CONDITION_CLASS = {}
+for _, subj in ipairs(M.SUBJECTS) do
+    for _, op in ipairs(subj.ops) do
+        M.CONDITION_CLASS[op[2]] = subj.advanced and 'advanced' or 'common'
+    end
+end
+for _, id in ipairs({ 'CASTING_DEBUFF', 'CASTING_ELEMENT_MA', 'CAST_ELE_MA_SELF', 'CASTING_ELE_MA_AOE', 'NEED_ELE_BAREFFECT',
+                      'NO_SAMBA', 'NO_STORM', 'NO_MAX_RUNE', 'HAS_RUNES', 'LUNGE_MB_AVAILABLE', 'STATUS_FLAG', 'IS_ECOSYSTEM' }) do
+    M.CONDITION_CLASS[id] = 'hidden'
+end
 M.SUBJECT_OF = {}   -- condition id -> subject, op index
 for _, subj in ipairs(M.SUBJECTS) do
     for i, op in ipairs(subj.ops) do
@@ -1884,6 +2163,7 @@ M.COND_LABELS = {
     HAS_MP_MPP_LT      = { 'MP (mages) below', '%' },
     HAS_MP_MPP_GTE     = { 'MP (mages) at least', '%' },
     JA_ON_COOLDOWN     = { 'On cooldown:', 'ja' },
+    MOD_LT             = { 'Below:', 'mod' },
 }
 
 local ROMAN = { I = true, II = true, III = true, IV = true, V = true, VI = true }
@@ -1923,7 +2203,17 @@ function M.cond_unit(id, cat)
     end
 
     local c = cat and cat.conds and cat.conds[id or '']
-    return c and (c.kind == 'e' and 'effect' or c.kind == 'j' and 'ja' or c.kind == 'r' and '' or nil) or nil
+    return c and (c.kind == 'e' and 'effect' or c.kind == 'j' and 'ja' or c.kind == 'm' and 'mod' or c.kind == 'r' and '' or nil) or nil
+end
+
+-- "UTSUSEMI.2" -> "Utsusemi shadows below 2"
+function M.mod_text(arg)
+    local name, n = M.mod_parse(arg)
+    if name == nil then
+        return '? below ?'
+    end
+
+    return M.MODS[name][3] .. ' below ' .. tostring(n)
 end
 
 -- "HP below 50%", "Missing effect Protect", "Always"
@@ -1936,6 +2226,8 @@ function M.cond_text(id, arg, cat)
     local label = M.cond_label(id)
     if id == 'JA_ON_COOLDOWN' then
         return (arg and arg ~= '' and M.pretty(arg) or '?') .. ' is on cooldown' -- "Provoke is on cooldown"
+    elseif unit == 'mod' then
+        return M.mod_text(arg)
     elseif unit == nil then
         return label
     elseif unit == 'effect' or unit == 'ja' then
@@ -1968,7 +2260,8 @@ end
 -- (beta polish) the compact rule line of the rule list: "Enemy: Not top enmity + No tank -> Provoke". The full wording
 -- (M.rule_summary) stays in the tooltip and under the selected rule.
 M.TARGET_SHORT = { SELF = 'Self', PARTY = 'Party', PARTY_LOWEST_HPP = 'Lowest HP', TANK = 'Tank', CASTER = 'Mage', MELEE = 'Melee',
-                   RANGED = 'Ranged', TOP_ENMITY = 'Aggro ally', TARGET = 'Enemy', MASTER = 'You' }
+                   RANGED = 'Ranged', TOP_ENMITY = 'Aggro ally', TARGET = 'Enemy', MASTER = 'You',
+                   TRIGGER_SELF_ACTION_TARGET = 'Self->Enemy' }
 M.COND_SHORT = {
     ALWAYS = 'Always', HAS_TOP_ENMITY = 'Top enmity', NOT_HAS_TOP_ENMITY = 'Not top enmity', PT_HAS_TANK = 'Tank in party',
     NOT_PT_HAS_TANK = 'No tank', SC_AVAILABLE = 'Skillchain open', NOT_SC_AVAILABLE = 'No skillchain', MB_AVAILABLE = 'Burst window',
@@ -1995,6 +2288,10 @@ function M.cond_short(id, arg, cat)
         return 'No ' .. (arg and M.pretty(arg) or '?')
     elseif id == 'JA_ON_COOLDOWN' then
         return (arg and M.pretty(arg) or '?') .. ' on cooldown'
+    elseif id == 'MOD_LT' then
+        local name, n = M.mod_parse(arg)
+        local short = { UTSUSEMI = 'Shadows', BLINK = 'Images' }
+        return (name and short[name] or '?') .. ' < ' .. tostring(n or '?')
     end
 
     return M.cond_text(id, arg, cat)
@@ -2273,10 +2570,28 @@ local function available()
     return s(600)
 end
 
+-- (hotfix 2026-11-21) Ashita's Lua bindings hand the text of imgui.SetTooltip and imgui.TextWrapped to ImGui as a
+-- printf FORMAT (addons.dll passes the Lua string as the only argument of IGuiManager::SetTooltip(fmt, ...) and
+-- TextWrapped(fmt, ...)). A '%' in such a text is read as a conversion: "40% and" printed garbage (% a), and the Lowest
+-- HP help ("HP % that") is an invalid format, on which the C runtime ends the game (0xC0000409). TextUnformatted never
+-- formats, so tooltips and wrapped lines are drawn with it; the text the player sees is unchanged.
+local function format_safe(text)
+    return (tostring(text or ''):gsub('%%', '%%%%')) -- (only for a binding without TextUnformatted: '%%' shows one '%')
+end
+
 local function tooltip(text)
     local g = imgui()
-    if g.IsItemHovered and g.SetTooltip and g.IsItemHovered() then
-        g.SetTooltip(text)
+    if not (g.IsItemHovered and g.IsItemHovered()) then
+        return
+    end
+
+    if g.BeginTooltip and g.EndTooltip and g.TextUnformatted then
+        if g.BeginTooltip() ~= false then -- (true when shown; nil from a binding that returns nothing)
+            g.TextUnformatted(tostring(text or ''))
+            g.EndTooltip()
+        end
+    elseif g.SetTooltip then
+        g.SetTooltip(format_safe(text))
     end
 end
 
@@ -2297,14 +2612,20 @@ end
 M.available_h = available_h
 
 -- coloured text that wraps at the panel's edge (status lines, warnings: never cut off)
+-- (hotfix 2026-11-21) drawn unformatted: see tooltip() above. PushTextWrapPos(0) + TextUnformatted is what TextWrapped
+-- does inside ImGui, without reading the text as a format.
 local function wrapped(color, text)
     local g = imgui()
-    if not g.TextWrapped then
+    if g.PushTextWrapPos and g.PopTextWrapPos and g.TextUnformatted then
+        with_colors({ { 'ImGuiCol_Text', color } }, function()
+            g.PushTextWrapPos(0)
+            scoped(nil, function() g.PopTextWrapPos() end, function() g.TextUnformatted(tostring(text or '')) end)
+        end)
+    elseif g.TextWrapped then
+        with_colors({ { 'ImGuiCol_Text', color } }, function() g.TextWrapped(format_safe(text)) end)
+    else
         colored(color, text)
-        return
     end
-
-    with_colors({ { 'ImGuiCol_Text', color } }, function() g.TextWrapped(text) end)
 end
 
 -- continue the line when `w` pixels still fit, else start a new one (narrow windows, large scales; FFXIPort's pattern)
@@ -2441,6 +2762,8 @@ function M.set_condition(r, slot, cond, cat)
     if spec and spec.kind == 'r' then
         local v = sn and sn.subj.default or spec.lo
         r[ak] = string.format('%d', math.max(spec.lo, math.min(spec.hi, v)))
+    elseif spec and spec.kind == 'm' then
+        r[ak] = (sn and sn.subj.default) or 'UTSUSEMI.2' -- (job expansion) MOD_LT: "MODIFIER.number"
     else
         r[ak] = nil
     end
@@ -2460,7 +2783,8 @@ function M.set_action(r, kind, name)
 end
 
 -- the subjects the builder offers for a slot: only those whose engine conditions the server's catalog reports
-function M.subjects_for(slot, target, cat)
+-- (job expansion) advanced = true also offers the advanced subjects (skillchain, level, timer, random)
+function M.subjects_for(slot, target, cat, advanced)
     local out = {}
     for _, subj in ipairs(M.SUBJECTS) do
         local reported = true
@@ -2468,7 +2792,8 @@ function M.subjects_for(slot, target, cat)
             reported = reported and cat and cat.conds and cat.conds[op[2]] ~= nil
         end
 
-        if reported and not (subj.key == 'ALWAYS' and slot == 2) and not (subj.enemyOnly and target ~= 'TARGET') then
+        if reported and not (subj.key == 'ALWAYS' and slot == 2) and not (subj.enemyOnly and target ~= 'TARGET')
+            and (advanced or not subj.advanced) then
             out[#out + 1] = subj
         end
     end
@@ -2482,7 +2807,7 @@ local function condition_editor(r, slot, cat, labelW)
     local ck, ak = cond_keys(slot)
     local cond = r[ck]
     local info = cond and M.SUBJECT_OF[cond]
-    local subjects = M.subjects_for(slot, r.target, cat)
+    local subjects = M.subjects_for(slot, r.target, cat, S.moreConds == true)
     local keys, byKey = {}, {}
     if slot == 2 then
         keys[1] = 'NONE'
@@ -2595,6 +2920,23 @@ local function condition_editor(r, slot, cat, labelW)
         end
 
         tooltip('True while the squad mate\'s own recast of this job ability is running (e.g. Flash while Provoke is not ready).')
+    elseif spec and spec.kind == 'm' then
+        -- (job expansion, server version 6) MOD_LT: which count, and the number it must be below ("UTSUSEMI.2")
+        local name, n = M.mod_parse(r[ak])
+        same_if_fits(s(170), labelW)
+        width(s(170))
+        local chosen = combo('##gsq-mod' .. slot, name, M.MOD_ORDER, function(v) return v and M.MODS[v][3] or '(choose)' end)
+        same_if_fits(s(110), labelW)
+        width(s(110))
+        local typed = int_input('##gsq-modn' .. slot, tostring(n or 2))
+        r[ak] = string.format('%s.%s', chosen or 'UTSUSEMI', typed ~= nil and typed ~= '' and typed or '2')
+        tooltip('True while the target has fewer than this many left (Utsusemi shadows or Blink images). '
+            .. 'E.g. Utsusemi shadows below 2: cast Utsusemi again before the last shadow is gone.')
+        local why = M.mod_problem(r[ak])
+        if why then
+            same()
+            colored(M.theme.bad, '(' .. why .. ')')
+        end
     end
 
     if M.ENEMY_CONDS[cond] and r.target ~= 'TARGET' then
@@ -2809,6 +3151,17 @@ local function rule_editor(d, r, cat, readonly)
     condition_editor(r, 1, cat, labelW)
     label('And')
     condition_editor(r, 2, cat, labelW)
+    if g.SetCursorPosX then
+        g.SetCursorPosX(labelW)
+    end
+
+    -- (job expansion) the advanced conditions (skillchain, level, timer, random) only when asked for
+    local more = { S.moreConds == true }
+    if g.Checkbox('More conditions##gsq-more', more) then
+        S.moreConds = more[1]
+    end
+
+    tooltip('Also offer the advanced conditions: skillchain and magic burst windows (target Enemy), level, timer and random.')
 
     label('Action')
     width(s(160))
@@ -2817,10 +3170,12 @@ local function rule_editor(d, r, cat, readonly)
         kinds[#kinds + 1] = k
     end
 
-    local kind = combo('##gsq-kind', r.kind, kinds, M.kind_label)
+    local kind = combo('##gsq-kind', r.kind, kinds, M.kind_label, function(v) return M.KIND_HELP[v or ''] end)
     if kind ~= r.kind then
         M.set_action(r, kind)
     end
+
+    tooltip(M.KIND_HELP[r.kind or ''] or 'What the squad mate does.')
 
     name_picker(r, cat)
     local spellNote = M.action_note(r, cat, M.mate())
@@ -2965,7 +3320,11 @@ local function sets_panel(mate, listH)
     for i, t in ipairs(M.templates_for(mate.job)) do
         same_if_fits(s(150))
         if button('Starter: ' .. t.name .. '##gsq-tpl' .. i) then
-            M.new_from_template(mate.job, i, S.cat)
+            local made, why = M.new_from_template(mate.job, i, S.cat)
+            if made == nil then
+                say(why, false)
+            end
+
             S.sel = 1
         end
 
@@ -3285,7 +3644,7 @@ function M.draw()
 
     if S.server == false then
         heading('Squad Rule Sets')
-        g.TextWrapped('The Squad editor needs the server update with !gsq (gambits_squad.lua version ' .. M.MIN_SERVER .. ')'
+        wrapped(nil, 'The Squad editor needs the server update with !gsq (gambits_squad.lua version ' .. M.MIN_SERVER .. ')'
             .. (S.serverWhy and (': ' .. S.serverWhy) or '') .. '.')
         if button('Try again##gsq-retry') then
             S.server = nil

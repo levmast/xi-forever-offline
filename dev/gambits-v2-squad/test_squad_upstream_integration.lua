@@ -174,7 +174,7 @@ check(has(CPP, 'SquadOwnerMerit') and has(CPP, 'squadMateMayUse'), 'squad.cpp ha
 check(has(CPP, 'skillType == xi::SkillType::Archery || skillType == xi::SkillType::Marksmanship || skillType == xi::SkillType::Throwing'),
       'squad.cpp copies the ranged weapon of real shooting or throwing weapons only')
 local GSQ = readAll(LUA .. '/gambits_squad.lua')
-check(GSQ:match('local VERSION%s*=%s*5%s') ~= nil, 'gambits_squad.lua is protocol v5')
+check(GSQ:match('local VERSION%s*=%s*6%s') ~= nil, 'gambits_squad.lua is protocol v6 (job expansion)')
 
 -- ================================================================= 2. default behaviour without a Rule Set = v0.1.48
 section('default job behaviour without a Rule Set (v0.1.48 bard songs by party)')

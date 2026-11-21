@@ -299,14 +299,15 @@ class CoopTab(tk.Frame):
         self.away_pick = tk.StringVar()
         self.away_buttons = tk.Frame(parent, bg=BG)
         self.away_buttons.pack(fill="x", pady=(4, 0))
-        tk.Frame(parent, bg=BORDER, height=1).pack(fill="x", pady=(10, 6))
-        row = tk.Frame(parent, bg=BG)
-        row.pack(fill="x")
-        self.button(row, "coop_save", self.save_character, "SAVE CHARACTER").pack(side="left")
-        self.button(row, "coop_load", self.restore_character, "RESTORE").pack(side="left", padx=8)
-        tk.Label(parent, text="A backup file of the character picked above, to restore in this same world.", bg=BG, fg=DIM,
-                 font=SMALL, anchor="w").pack(fill="x", pady=(2, 0))
-        self.build_carry(parent)
+        if not getattr(self.app, "new_ui", False):      # the newer look has these on SYSTEM > Characters (launcher_pages.py)
+            tk.Frame(parent, bg=BORDER, height=1).pack(fill="x", pady=(10, 6))
+            row = tk.Frame(parent, bg=BG)
+            row.pack(fill="x")
+            self.button(row, "coop_save", self.save_character, "SAVE CHARACTER").pack(side="left")
+            self.button(row, "coop_load", self.restore_character, "RESTORE").pack(side="left", padx=8)
+            tk.Label(parent, text="A backup file of the character picked above, to restore in this same world.", bg=BG, fg=DIM,
+                     font=SMALL, anchor="w").pack(fill="x", pady=(2, 0))
+            self.build_carry(parent)
         self.show_away()
 
     # ----- one player, several PCs (2026-11-20): the character and its squad move, each PC keeps its own world -----

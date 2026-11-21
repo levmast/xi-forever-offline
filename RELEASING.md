@@ -1,12 +1,12 @@
 # Making a release
 
 Players only get what you publish. Your own changes and the Phoenix updates you pull reach them when you publish a new
-version; their launcher then offers it (Settings > Updates, and a question when it starts). Test builds (pre-releases)
+version; their launcher then offers it (SYSTEM > Updates, a line on the Play page, and a question when it starts). Test builds (pre-releases)
 only reach players who switched on "Get test builds".
 
 ## The easy way: the launcher
 Commit and push your work (kit and server), rebuild the server if C++ changed (`Rebuild server.bat`), close the game,
-then Settings > **Publish update...**. It shows the next version, release notes from your commit messages and anything
+then SYSTEM > Team > **Publish update...**. It shows the next version, release notes from your commit messages and anything
 not ready yet, and after you confirm it:
 1. builds `XI Forever Offline.exe` (`build_release.ps1`, in its own Python environment),
 2. makes `dist\xi-forever-offline-server-<v>-win64.zip` (`package_server.py`) and `dist\kit\xi-forever-offline-<v>-win64.zip` (`package_kit.py`), each with a SHA256SUMS.txt,

@@ -262,7 +262,7 @@ def umu_command(kit, args, python=None):
     """The command that runs umu-run with args: the system's Python, or the packaged launcher's own (--run)."""
     umu = umu_path(kit)
     if not umu:
-        raise RuntimeError("Proton's starter (umu) is not installed yet: run the setup again, or ADDONS > Other > umu.")
+        raise RuntimeError("Proton's starter (umu) is not installed yet: run the setup again, or OPTIONS > Get more > umu.")
     python = python if python is not None else host_python()
     if python:
         return [python, umu] + list(args)
@@ -281,7 +281,7 @@ def game_env(kit, cfg, base=None):
     fix_frozen_environment(env)
     proton = installed_proton(kit, cfg.get("proton_version"))
     if not proton:
-        raise RuntimeError("Proton is not installed yet: run the setup again, or ADDONS > Other > GE-Proton.")
+        raise RuntimeError("Proton is not installed yet: run the setup again, or OPTIONS > Get more > GE-Proton.")
     env.update({
         "WINEPREFIX": prefix_path(kit),
         "PROTONPATH": proton,

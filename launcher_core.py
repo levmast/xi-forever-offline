@@ -487,6 +487,7 @@ RATE_FIELDS = [
     ("map.DROP_RATE_MULTIPLIER",        "map.lua",  "DROP_RATE_MULTIPLIER",        "Monster item drop rate",                1.0, 0.0, 100.0, "float"),
     ("map.MOB_GIL_MULTIPLIER",          "map.lua",  "MOB_GIL_MULTIPLIER",          "Gil dropped by monsters",               1.0, 0.0, 100.0, "float"),
     ("main.GIL_RATE",                   "main.lua", "GIL_RATE",                    "Gil from quests",                       1.0, 0.0, 100.0, "float"),
+    ("main.AH_PRICE_RATE",              "main.lua", "AH_PRICE_RATE",               "Auction house prices (1 = as they are)", 1.0, 0.1, 10.0, "float"),
     ("main.FAME_RATE",                  "main.lua", "FAME_RATE",                   "Fame from quests (1 = retail)",         1.0, 0.1, 20.0, "float"),
     # (2026-11-20) lottery NMs (Leaping Lizzy, Valkurm Emperor...): the server reads these since v0.1.49 (spawn_slot.cpp).
     # Chance: a multiplier on each NM's own chance; any negative value = the NM always comes next. 0 counts as 1%.
@@ -497,6 +498,7 @@ RATE_FIELDS = [
     ("main.SPARKS_RATE",                "main.lua", "SPARKS_RATE",                 "Sparks from Records of Eminence",       1.0, 0.0, 100.0, "float"),
     ("main.CASKET_DROP_RATE",           "main.lua", "CASKET_DROP_RATE",            "Treasure casket chance (0.1 = 10%)",    0.1, 0.0, 1.0,   "float"),
     ("map.SKILLUP_CHANCE_MULTIPLIER",   "map.lua",  "SKILLUP_CHANCE_MULTIPLIER",   "Combat and magic skill-up chance",      1.0, 0.0, 20.0,  "float"),
+    ("map.BLUE_LEARN_MULTIPLIER",       "map.lua",  "BLUE_LEARN_MULTIPLIER",       "Blue magic learning chance",            1.0, 0.0, 3.0,   "float"),
     ("map.CRAFT_CHANCE_MULTIPLIER",     "map.lua",  "CRAFT_CHANCE_MULTIPLIER",     "Crafting skill-up chance",              1.0, 0.0, 20.0,  "float"),
     ("map.CRAFT_HQ_CHANCE_MULTIPLIER",  "map.lua",  "CRAFT_HQ_CHANCE_MULTIPLIER",  "Crafting high-quality chance",          1.0, 0.0, 20.0,  "float"),
     ("map.FISHING_SKILL_MULTIPLIER",    "map.lua",  "FISHING_SKILL_MULTIPLIER",    "Fishing skill-up chance",               1.0, 0.0, 20.0,  "float"),
@@ -534,9 +536,13 @@ RATE_DEFAULTS.update({"crowds_field": True, "crowds_field_parties": 1})   # fiel
 RATE_DEFAULTS.update({"bots": True, "bots_roster": 100, "bots_online": 50})   # bot players (bots.lua, bots_life.lua)
 RATE_DEFAULTS.update({"bots_growth": "realistic"})
 RATE_DEFAULTS.update({"bots_head_start": False, "bots_head_start_done": False})   # one-time bot head start (bots_growth.lua)
+RATE_DEFAULTS.update({"squad_all_gear": False})   # (Yache) every piece of gear counts as given to the squad (squad.lua squadAllGear)
+RATE_DEFAULTS.update({"bots_pass_loot": True})   # (delukard) bot players in your party pass every drop at once (bots.cpp)
+RATE_DEFAULTS.update({"training_dummies": False})   # (Jon Tanta) !sandbox training dummies in Rolanberry Fields, a testing tool (squad_sandbox.lua)
 RATE_DEFAULTS.update({"squad_keep_gear": False})   # gear given to the squad is unlocked and you keep the piece (squad.lua squadKeepGear)
 RATE_DEFAULTS.update({"spell_scrolls": False})  # squad mates need scrolls for spells of level 18+ (blue magic from monsters) (squad.lua)
 RATE_DEFAULTS.update({"short_quest_waits": True})   # Chocobo's Wounds 1 minute, Forge Your Destiny 1 hour (late/quest_waits.lua)
+RATE_DEFAULTS.update({"event_harvest": True, "event_starlight": True, "event_egg_hunt": True, "event_horro": True})   # one switch per seasonal event (events_mode.lua)
 RATE_DEFAULTS.update({"events": "date"})   # seasonal events: "date" (their own dates), "on" (all year), "off" (events_mode.lua)
 RATE_DEFAULTS.update({"modern_stacks": True})   # item stacks as in today's game (12 / 99); off = Phoenix's era stacks (stack_mode.py)
 RATE_DEFAULTS.update({"full_bags": True})   # every bag (inventory, Mog Safe, Satchel, Sack, Case, Wardrobes) at 80 from the start (crystalboy_quests.lua)
@@ -703,14 +709,16 @@ def write_crowds_config(server_dir, rates):
         growth = rates.get("bots_growth", "realistic")
         growth = growth if growth in ("off", "realistic", "fast") else "realistic"
         head_start = bool(rates.get("bots_head_start")) and not rates.get("bots_head_start_done")
-        f.write("return { enabled = %s, roster = %d, online = %d, growth = '%s', head_start = %s }\n" % (
+        f.write("return { enabled = %s, roster = %d, online = %d, growth = '%s', head_start = %s, pass_loot = %s }\n" % (
             "true" if rates.get("bots", True) else "false", max(0, min(600, int(rates.get("bots_roster", 100) or 0))),
-            max(0, min(550, int(rates.get("bots_online", 50) or 0))), growth, "true" if head_start else "false"))
+            max(0, min(550, int(rates.get("bots_online", 50) or 0))), growth, "true" if head_start else "false",
+            "true" if rates.get("bots_pass_loot", True) else "false"))
     with open(os.path.join(module_dir, "squad_config.lua"), "w", encoding="utf-8", newline="\n") as f:
         f.write("-- Written by the XI: Forever Offline launcher (Rates tab). Do not edit: it is rewritten every launch.\n")
-        f.write("return { call_cooldown_min = %d, spell_scrolls = %s, keep_gear = %s }\n" % (
+        f.write("return { call_cooldown_min = %d, spell_scrolls = %s, keep_gear = %s, training_dummies = %s, all_gear = %s }\n" % (
             clean_call_cooldown(rates.get("squad_call_cooldown", 5)), "true" if rates.get("spell_scrolls", False) else "false",
-            "true" if rates.get("squad_keep_gear", False) else "false"))
+            "true" if rates.get("squad_keep_gear", False) else "false", "true" if rates.get("training_dummies", False) else "false",
+            "true" if rates.get("squad_all_gear", False) else "false"))
     with open(os.path.join(module_dir, "storage_config.lua"), "w", encoding="utf-8", newline="\n") as f:
         f.write("-- Written by the XI: Forever Offline launcher (Rates tab). Do not edit: it is rewritten every launch.\n")
         f.write("return { full_bags = %s }\n" % ("true" if rates.get("full_bags", True) else "false"))
@@ -719,7 +727,9 @@ def write_crowds_config(server_dir, rates):
         f.write("return { short = %s }\n" % ("true" if rates.get("short_quest_waits", True) else "false"))
     with open(os.path.join(module_dir, "events_config.lua"), "w", encoding="utf-8", newline="\n") as f:
         f.write("-- Written by the XI: Forever Offline launcher (Rates tab). Do not edit: it is rewritten every launch.\n")
-        f.write("return { mode = '%s' }\n" % clean_events(rates.get("events", "date")))
+        f.write("return { mode = '%s', harvest = %s, starlight = %s, egg_hunt = %s, horro = %s }\n" % (
+            clean_events(rates.get("events", "date")),
+            *("true" if rates.get(k, True) else "false" for k in ("event_harvest", "event_starlight", "event_egg_hunt", "event_horro"))))
 
 
 EVENTS_MODES = ("date", "on", "off")
@@ -842,10 +852,19 @@ def load_rates(here):
             rates["spell_scrolls"] = bool(saved["spell_scrolls"])
         if "squad_keep_gear" in saved:
             rates["squad_keep_gear"] = bool(saved["squad_keep_gear"])
+        if "training_dummies" in saved:
+            rates["training_dummies"] = bool(saved["training_dummies"])
+        if "bots_pass_loot" in saved:
+            rates["bots_pass_loot"] = bool(saved["bots_pass_loot"])
+        if "squad_all_gear" in saved:
+            rates["squad_all_gear"] = bool(saved["squad_all_gear"])
         if "short_quest_waits" in saved:
             rates["short_quest_waits"] = bool(saved["short_quest_waits"])
         if "events" in saved:
             rates["events"] = clean_events(saved["events"])
+        for k in ("event_harvest", "event_starlight", "event_egg_hunt", "event_horro"):
+            if k in saved:
+                rates[k] = bool(saved[k])
         for key, lo, hi in (("bots_roster", 0, 600), ("bots_online", 0, 550)):
             if key in saved:
                 try:
@@ -885,7 +904,7 @@ def list_profiles(here):
 def profile_text(name, rates):
     """The shareable form: a short header plus the settings as JSON (only the known settings)."""
     data = {k: v for k, v in rates.items() if k in RATE_DEFAULTS and k not in PROFILE_SKIP}
-    return ("# XI: Forever Offline rate profile: %s\n# Load it in the launcher: CONFIG > Rates > Profile > Import.\n" % name
+    return ("# XI: Forever Offline rate profile: %s\n# Load it in the launcher: RULES > My builds > Import.\n" % name
             + json.dumps({"name": name, "rates": data}, indent=2) + "\n")
 
 
@@ -949,8 +968,8 @@ def apply_preset(rates, name):
                          ("crowds_field", True), ("crowds_field_parties", 1),
                          ("bots", True), ("bots_roster", 100), ("bots_online", 50), ("bots_growth", "realistic"),
                          ("squad_chat", True), ("bots_head_start", False), ("bots_head_start_done", False),
-                         ("squad_call_cooldown", 5), ("full_bags", True), ("modern_stacks", True), ("spell_scrolls", False), ("squad_keep_gear", False),
-                         ("short_quest_waits", True), ("events", "date")):
+                         ("squad_call_cooldown", 5), ("full_bags", True), ("modern_stacks", True), ("spell_scrolls", False), ("squad_keep_gear", False), ("training_dummies", False), ("bots_pass_loot", True), ("squad_all_gear", False),
+                         ("short_quest_waits", True), ("events", "date"), ("event_harvest", True), ("event_starlight", True), ("event_egg_hunt", True), ("event_horro", True)):
         out[key] = rates.get(key, default)
     out["crowds_per_zone"] = rates.get("crowds_per_zone", 15)
     out["main.MAX_LEVEL"] = rates.get("main.MAX_LEVEL", 75)
@@ -1088,6 +1107,15 @@ def apply_rates(server_dir, rates):
     wanted["map.lua"].append(("CRAFT_SPECIALIZATION_POINTS", 3200 if rates.get("all_crafts", True) else 400, "int"))
     # auction house: no limit on your own listings (the ah_pagination module shows them 6 per page)
     wanted["map.lua"].append(("AH_LIST_LIMIT", 0, "int"))
+    # (2026-11-21, Bob Roberts) the core caps a player's speed at map.SPEED_LIMIT (80), so a "Run speed" above 50 was cut
+    # back as soon as Flee or movement gear added to it, and above 80 it did nothing at all. The limit keeps the retail
+    # ratio (80 for 50: room for Flee and gear) and never drops below the mount speed or 80.
+    try:
+        _base = int(float(rates.get("map.BASE_SPEED", 50)))
+        _mount = int(float(rates.get("map.MOUNT_SPEED", 80)))
+    except (TypeError, ValueError):
+        _base, _mount = 50, 80
+    wanted["map.lua"].append(("SPEED_LIMIT", max(80, _mount, min(255, round(_base * 1.6))), "int"))
     # (2026-11-20, Trinity: "Is fishing disabled?") the server default switches all fishing off (a guard against fishing
     # bots on public servers, "enable at your own risk"); there is no such risk on your own world
     wanted["map.lua"].append(("FISHING_ENABLE", True, "bool"))

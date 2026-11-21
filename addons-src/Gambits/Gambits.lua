@@ -19,7 +19,7 @@ Files: Gambits.lua (this shell), transport.lua (chat transport), squad_editor.lu
 
 addon.name    = 'Gambits'
 addon.author  = 'XI: Forever Offline'
-addon.version = '0.2.0'
+addon.version = '0.3.0'
 addon.desc    = 'Gambits: Rule Sets for your squad mates (Target -> Conditions -> Action).'
 addon.link    = ''
 

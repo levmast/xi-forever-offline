@@ -29,8 +29,10 @@ In a sparse server clone: git -C <server> show HEAD:sql/spell_list.sql > spell_l
 import re
 import sys
 
-FORMAT_VERSION = 2
+FORMAT_VERSION = 3  # 3 (job expansion): ct = the spell's content_tag (an expansion), only when it has one
 JOBS = 22  # bytes in spell_list.jobs
+# the row's last three columns: content_tag, status_effect, status_effect_tier
+CONTENT = re.compile(r",(NULL|'([A-Z0-9_]+)'),(NULL|\d+),(\d+)\);\s*$")
 SCROLL_BASE = 4608  # a spell's scroll is item 4608 + spell id (trustutils.cpp: 0x1200 + id)
 ITEM_ROW = re.compile(r"^INSERT INTO `item_basic` VALUES \((\d+),")
 
@@ -56,6 +58,19 @@ def parse_groups(sql_text):
         m = ROW.match(line.strip())
         if m:
             out[int(m.group(1))] = int(m.group(4))
+    return out
+
+
+def parse_content(sql_text):
+    """{id: content tag} for every active row that has one (e.g. 'WOTG')."""
+    out = {}
+    for line in sql_text.splitlines():
+        line = line.strip()
+        m = ROW.match(line)
+        if m:
+            c = CONTENT.search(line)
+            if c and c.group(2):
+                out[int(m.group(1))] = c.group(2)
     return out
 
 
@@ -109,12 +124,14 @@ def parse_enum(lua_text):
     return names
 
 
-def render(spells, names, groups, items):
+def render(spells, names, groups, items, content=None):
+    content = content or {}
     lines = [
         "-- Gambits v2: which jobs learn each spell, and at which level, for gambits_squad.lua (the Squad editor's spells).",
         "-- MADE BY dev/gambits-v2-squad/make_squad_spell_jobs.py FROM sql/spell_list.sql, scripts/enum/magic.lua AND",
         "-- sql/item_basic.sql - do not edit by hand, run the script again.",
-        "-- [spell id] = { 'NAME' (xi.magic.spell), { [job id] = level, ... }, g = spell group, sc = its scroll item exists }",
+        "-- [spell id] = { 'NAME' (xi.magic.spell), { [job id] = level, ... }, g = spell group, sc = its scroll item exists",
+        "--                [, ct = its content tag (an expansion: left out of the editor while the server has it off)] }",
         "return",
         "{",
         "    format  = 'xifo-squad-spell-jobs',",
@@ -128,7 +145,8 @@ def render(spells, names, groups, items):
             continue
         jobs = ", ".join(f"[{job}] = {level}" for job, level in sorted(levels.items()))
         scroll = "true" if (SCROLL_BASE + sid) in items else "false"
-        lines.append(f"        [{sid}] = {{ '{names[sid]}', {{ {jobs} }}, g = {groups.get(sid, 0)}, sc = {scroll} }},")
+        tag = f", ct = '{content[sid]}'" if sid in content else ""
+        lines.append(f"        [{sid}] = {{ '{names[sid]}', {{ {jobs} }}, g = {groups.get(sid, 0)}, sc = {scroll}{tag} }},")
     lines += ["    },", "}", ""]
     return "\n".join(lines)
 
@@ -154,7 +172,7 @@ def main(argv):
     else:
         with open(args[2], encoding="utf-8", errors="replace") as f:
             items = parse_items(f.read())
-        text = render(parse_spells(sql), names, parse_groups(sql), items)
+        text = render(parse_spells(sql), names, parse_groups(sql), items, parse_content(sql))
     if check:
         try:
             with open(out, encoding="utf-8") as f:

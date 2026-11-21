@@ -669,7 +669,7 @@ def migrate_gambits_names(kit, ashita_dir, log=print):
             with open(path, "w", encoding="utf-8", newline="\r\n") as handle:
                 handle.write("\n".join(out).rstrip("\n") + "\n")
     messages.append("Gambits is now the squad Rule Set editor (/gambits). Your own character's rules moved to the add-on "
-                    "'autobox' (/autobox): switch it on in ADDONS > Addons if you use them. Your sheets are untouched.")
+                    "'autobox' (/autobox): switch it on in OPTIONS > Addons if you use them. Your sheets are untouched.")
     for line in messages:
         log(line)
     return messages

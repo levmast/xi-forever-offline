@@ -245,13 +245,44 @@ local function client(line)
     end
 end
 
+-- (hotfix 2026-11-21) Ashita's Lua bindings, as addons.dll implements them: SetTooltip, TextWrapped, BulletText and
+-- LabelText hand the Lua string to ImGui as a printf FORMAT (no "%s"); Text, TextColored and TextUnformatted draw it
+-- unformatted. A format text is accepted only if every '%' is part of '%%' - anything else either prints garbage
+-- ("40% and" -> %a) or is rejected by the C runtime, which ends the game (0xC0000409; e.g. "lowest HP % that").
+local function format_problem(fmt)
+    fmt = tostring(fmt)
+    if fmt:gsub('%%%%', ''):find('%', 1, true) then
+        return 'a format text with a bare %: ' .. fmt
+    end
+    return nil
+end
 local function fakeImgui()
-    local g = { colors = 0, vars = 0, ids = 0, children = 0, windows = 0, fonts = 0, disabled = 0, errors = {}, clicks = {}, texts = {} }
+    local g = { colors = 0, vars = 0, ids = 0, children = 0, windows = 0, fonts = 0, disabled = 0, tooltips = 0, wraps = 0,
+                errors = {}, clicks = {}, texts = {}, tips = {}, wrapped = {}, formats = 0 }
     local function err(e) g.errors[#g.errors + 1] = e end
-    g.Text = function(t) g.texts[#g.texts + 1] = t end
-    g.TextWrapped = g.Text
-    g.TextColored = function(_, t) g.texts[#g.texts + 1] = t end
-    g.SameLine, g.SetNextItemWidth, g.Separator, g.SetTooltip = function() end, function() end, function() end, function() end
+    local function shown(t)
+        g.texts[#g.texts + 1] = t
+        if g.tooltips > 0 then g.tips[#g.tips + 1] = t end
+        if g.wraps > 0 then g.wrapped[#g.wrapped + 1] = t end
+    end
+    local function formatted(fmt)
+        g.formats = g.formats + 1
+        local why = format_problem(fmt)
+        if why then err(why) end
+        return (tostring(fmt):gsub('%%%%', '%%'))
+    end
+    g.Text = function(t) shown(t) end
+    g.TextUnformatted = function(t) shown(t) end
+    g.TextColored = function(_, t) shown(t) end
+    g.TextWrapped = function(fmt) local t = formatted(fmt); g.wraps = g.wraps + 1; shown(t); g.wraps = g.wraps - 1 end
+    g.BulletText = function(fmt) shown(formatted(fmt)) end
+    g.LabelText = function(_, fmt) shown(formatted(fmt)) end
+    g.SetTooltip = function(fmt) local t = formatted(fmt); g.tips[#g.tips + 1] = t end
+    g.BeginTooltip = function() g.tooltips = g.tooltips + 1; return true end
+    g.EndTooltip = function() g.tooltips = g.tooltips - 1; if g.tooltips < 0 then err('tooltip') end end
+    g.PushTextWrapPos = function() g.wraps = g.wraps + 1 end
+    g.PopTextWrapPos = function() g.wraps = g.wraps - 1; if g.wraps < 0 then err('wrap') end end
+    g.SameLine, g.SetNextItemWidth, g.Separator = function() end, function() end, function() end
     g.IsItemHovered = function() return false end
     g.GetContentRegionAvail = function() return { 1000, 500 } end
     g.Button = function(label) if g.clicks[label] then g.clicks[label] = nil; return true end return false end
@@ -281,7 +312,7 @@ local function fakeImgui()
 end
 local function balanced(g)
     return g.colors == 0 and g.vars == 0 and g.ids == 0 and g.children == 0 and g.windows == 0 and g.fonts == 0
-        and g.disabled == 0 and #g.errors == 0
+        and g.disabled == 0 and g.tooltips == 0 and g.wraps == 0 and #g.errors == 0
 end
 for _, name in ipairs({ 'ImGuiCol_WindowBg', 'ImGuiCol_ChildBg', 'ImGuiCol_PopupBg', 'ImGuiCol_Text', 'ImGuiCol_TextDisabled',
     'ImGuiCol_Border', 'ImGuiCol_Separator', 'ImGuiCol_FrameBg', 'ImGuiCol_FrameBgHovered', 'ImGuiCol_FrameBgActive',
@@ -364,7 +395,7 @@ check(cmd('/gv2') == true and GV.open[1] == true, '/gv2 is handled (blocked) and
 check(cmd('/gambits help') == true and cmd('/autobox') == false, '/gambits is this addon\'s command; /autobox (the old engine) is not touched')
 check(cmd('/GV2 help') == true, 'the command is not case sensitive')
 local ok1, t1 = run_until(function() return Ed._S.server and Ed._S.cat ~= nil and #Ed._S.sets > 0 end, 30)
-check(ok1 and Ed._S.server.version == 5 and Ed._S.mates[1].name == 'Mira', string.format('opening asks the server: hello (version %s), Mira, sets, choices (%.1f s)',
+check(ok1 and Ed._S.server.version == 6 and Ed._S.mates[1].name == 'Mira', string.format('opening asks the server: hello (version %s), Mira, sets, choices (%.1f s)',
       tostring(Ed._S.server and Ed._S.server.version), t1))
 check(balanced(gui) and gui.title:find('Gambits v2', 1, true), 'the window draws balanced (colours, style, IDs, children, window)')
 check(not visible_has('GSQ|') and not visible_has('command error') and not visible_has('^>>'), 'no GSQ answer, refusal or error line is visible')
@@ -943,7 +974,7 @@ gui.SetNextWindowSizeConstraints = function(lo) rec.constraints = { lo[1], lo[2]
 gui.NewLine = function() rec.newlines = rec.newlines + 1 end
 gui.SetCursorPosX = function() end
 gui.AlignTextToFramePadding = function() end
-gui.TextWrapped = function(tx) gui.texts[#gui.texts + 1] = tx; rec.wrapped[#rec.wrapped + 1] = tx end
+rec.wrapped, rec.tips = gui.wrapped, gui.tips -- (the stand-in records wrapped lines and tooltips the way they are drawn)
 local winW, winH = 1080, 600
 gui.GetWindowSize = function() return winW, winH end
 local availW, availH = 1000, 560
@@ -996,26 +1027,155 @@ check(narrowNL > rec.newlines, string.format('a narrow window moves controls to 
 -- long status lines are wrapped, never cut
 local longMsg = 'Ping: 10/10 answered; round trip min 203, avg 423, max 750 ms; per request avg 1200 ms (with resends); refused by the game 0, sent again 0; interval 1.00 s'
 Ed.say(longMsg)
-rec.wrapped = {}
+gui.wrapped = {}
 step()
 local foundMsg = false
-for _, w in ipairs(rec.wrapped) do if w == longMsg then foundMsg = true end end
+for _, w in ipairs(gui.wrapped) do if w == longMsg then foundMsg = true end end
 check(foundMsg, 'a long Ping line is drawn wrapped and whole')
 -- tooltips show the full set name and the full rule line
 Ed._S.sets = { { num = 7, job = 'WHM', rules = 3, flags = 'o', rev = '1', id = 'u', name = 'An extremely long name xx' } }
 Ed._S.selectedSet = 7
 gui.IsItemHovered = function() return true end
-gui.SetTooltip = function(tx) rec.tips[#rec.tips + 1] = tx end
+gui.tips = {}
 step()
 gui.IsItemHovered = function() return false end
 local tipName, tipRule = false, false
-for _, tp in ipairs(rec.tips) do
+for _, tp in ipairs(gui.tips) do
     if tp:find('An extremely long name xx', 1, true) then tipName = true end
     if tp:find('Party member: HP below 40% and MP at least 10% -> Cure II (then waits 30 s)', 1, true) then tipRule = true end
 end
 check(tipName and tipRule, 'tooltips carry the whole set name and the whole rule line')
 check(balanced(gui), 'balanced after all of it')
 gui.GetContentRegionAvail = function() return { 1000, 500 } end
+
+-- ---------------------------------------------------------------- 11b. hotfix 2026-11-21: no text is ever read as a format
+section('hotfix: tooltips and wrapped lines are drawn unformatted (Ashita formats SetTooltip / TextWrapped); themes; Party tank')
+do -- (a block: the file's main chunk is close to Lua's limit of 200 local variables)
+local SIZE_TIPS = { 'Smaller text and controls (70-200 %).', 'Back to 100 %.', 'Larger text and controls (70-200 %).' }
+local LOWEST_TIP = Ed.TARGET_HELP.PARTY_LOWEST_HPP
+-- the stand-in's format model rejects exactly what the old code handed to SetTooltip / TextWrapped
+local oldWay = { LOWEST_TIP, 'Party member: HP below 40% and MP at least 10% -> Cure II', SIZE_TIPS[1], SIZE_TIPS[2] }
+local rejected = 0
+for _, t in ipairs(oldWay) do if format_problem(t) then rejected = rejected + 1 end end
+check(rejected == #oldWay and format_problem('50%% escaped') == nil and format_problem('no percent') == nil,
+      'the format model: every bare % is unsafe (the Lowest HP help is even invalid for the C runtime), %% is fine')
+local function hover_all(views)
+    gui.errors, gui.tips, gui.wrapped, gui.formats = {}, {}, {}, 0
+    gui.IsItemHovered = function() return true end
+    for _, v in ipairs(views) do Ed._S.view = v; step() end
+    gui.IsItemHovered = function() return false end
+    Ed._S.view = 'rules'
+end
+local function has_tip(text) for _, t in ipairs(gui.tips) do if t == text then return true end end return false end
+local function any_tip(part) for _, t in ipairs(gui.tips) do if t:find(part, 1, true) then return true end end return false end
+-- a draft with the risky texts: a Lowest HP rule (its target help), % conditions, a template-sized set
+Ed._S.draft = { num = 0, job = 'WHM', name = 'Percent test', flags = 'o', rules = {
+    rule('PARTY_LOWEST_HPP', 'HPP_LT', '50', nil, nil, 'family', 'CURE'),
+    rule('PARTY', 'HPP_LT', '40', 'MPP_GTE', '10', 'spell', 'CURE_II', '30') } }
+Ed._S.sel = 1
+hover_all({ 'rules', 'ws' })
+local sizeOk = has_tip(SIZE_TIPS[1]) and has_tip(SIZE_TIPS[2]) and has_tip(SIZE_TIPS[3])
+check(sizeOk, 'the Size tooltips next to the Theme selector show their text exactly ("(70-200 %).", "Back to 100 %.")')
+check(has_tip(LOWEST_TIP), 'the Lowest HP target help shows exactly: ' .. LOWEST_TIP)
+check(any_tip('HP below 50% -> Best of Cure') and any_tip('HP below 40% and MP at least 10% -> Cure II (then waits 30 s)'),
+      'rule lines with % show exactly in their tooltips')
+check(gui.formats == 0, 'no text went to a formatting call at all (SetTooltip / TextWrapped / BulletText / LabelText): ' .. gui.formats)
+check(balanced(gui), 'hovering everything (Rule Sets and Weapon Skills): balanced, no format problem: ' .. table.concat(gui.errors, ' | '))
+-- other sequences a format would misread, through a status line (wrapped) and the selected rule's line
+local tricky = 'odd: %s %d %n %x % th 100% %% %'
+Ed.say(tricky)
+gui.wrapped, gui.errors = {}, {}
+step()
+local trickyShown = false
+for _, w in ipairs(gui.wrapped) do if w == tricky then trickyShown = true end end
+check(trickyShown and #gui.errors == 0 and gui.formats == 0, 'a status line with %s %d %n %x "% th" "100%" "%%" "%" is shown exactly, unformatted')
+local wrappedRule = false
+for _, w in ipairs(gui.wrapped) do if w:find('HP below 50% -> Best of Cure', 1, true) then wrappedRule = true end end
+check(wrappedRule, 'the selected rule\'s wording (with %) is drawn wrapped and exactly')
+-- templates: their "about" texts (with %) as tooltips
+Ed._S.draft, Ed._S.sel = nil, nil
+hover_all({ 'rules' })
+local aboutOk = true
+for _, job in ipairs({ 'PLD', 'WHM' }) do
+    local about = Ed.TEMPLATES[job][1].about
+    if Ed.mate() and Ed.mate().job == job then aboutOk = aboutOk and any_tip(about) end
+end
+check(aboutOk and balanced(gui) and gui.formats == 0, 'the starter template tooltips (texts with "below 50 %") are unformatted too')
+-- a binding without TextUnformatted / BeginTooltip / PushTextWrapPos (not Ashita v4): the old calls, with % escaped
+local keepTU, keepBT, keepET, keepPW, keepPP = gui.TextUnformatted, gui.BeginTooltip, gui.EndTooltip, gui.PushTextWrapPos, gui.PopTextWrapPos
+gui.TextUnformatted, gui.BeginTooltip, gui.EndTooltip, gui.PushTextWrapPos, gui.PopTextWrapPos = nil, nil, nil, nil, nil
+Ed._S.draft = { num = 0, job = 'WHM', name = 'Percent test', flags = 'o', rules = { rule('PARTY_LOWEST_HPP', 'HPP_LT', '50', nil, nil, 'family', 'CURE') } }
+Ed._S.sel = 1
+hover_all({ 'rules' })
+check(gui.formats > 0 and #gui.errors == 0 and has_tip(SIZE_TIPS[2]) and has_tip(LOWEST_TIP),
+      'fallback: SetTooltip / TextWrapped get %% (the player still sees one %), never a bare %')
+gui.TextUnformatted, gui.BeginTooltip, gui.EndTooltip, gui.PushTextWrapPos, gui.PopTextWrapPos = keepTU, keepBT, keepET, keepPW, keepPP
+-- the three themes, switched with the header's selector in the middle of a frame (hovering everything at the same time)
+local realBC, realSel = gui.BeginCombo, gui.Selectable
+local maxVars, maxColors = 0, 0
+local realPV, realPC = gui.PushStyleVar, gui.PushStyleColor
+gui.PushStyleVar = function(...) realPV(...); maxVars = math.max(maxVars, gui.vars) end
+gui.PushStyleColor = function(...) realPC(...); maxColors = math.max(maxColors, gui.colors) end
+local pick
+gui.BeginCombo = function(id) return id == '##gsq-theme' end
+gui.Selectable = function(label) return label == pick end
+local varsBy = {}
+for i, name in ipairs({ 'squad', 'crimson', 'classic', 'crimson', 'squad', 'classic' }) do
+    local saves = settingsSaved
+    pick = Ed.THEME_NAMES[name] .. '##' .. ({ classic = 1, squad = 2, crimson = 3 })[name]
+    gui.errors, gui.formats = {}, 0
+    gui.IsItemHovered = function() return true end
+    step()                       -- (the frame that switches: pushed with the old theme, popped by its token)
+    pick = nil
+    maxVars = 0
+    step()                       -- (the next frame: pushed with the new theme)
+    gui.IsItemHovered = function() return false end
+    varsBy[name] = maxVars
+    check(Ed.themeName == name and GV.settings.theme == name and settingsSaved > saves and balanced(gui) and gui.formats == 0,
+          string.format('switch %d to %s from the selector (mid-frame, hovering): saved, colours %d and style vars %d back to 0',
+                        i, name, gui.colors, gui.vars))
+end
+gui.BeginCombo, gui.Selectable, gui.PushStyleVar, gui.PushStyleColor = realBC, realSel, realPV, realPC
+check(varsBy.squad > varsBy.classic and varsBy.crimson == varsBy.squad,
+      string.format('Squad/Crimson push their rounding and border (%d style vars) on top of Classic\'s (%d): all popped', varsBy.squad, varsBy.classic))
+-- Party tank: in the second condition's dropdown, chosen, saved, read back
+local subjLabels = {}
+local want
+gui.BeginCombo = function(id) return id == '##gsq-subj2' or id == '##gsq-op2' end
+gui.Selectable = function(label)
+    subjLabels[#subjLabels + 1] = label
+    return label == want
+end
+Ed._S.draft = { num = 0, job = 'WHM', name = 'Tank rule', flags = 'o', rules = { rule('TARGET', 'NOT_HAS_TOP_ENMITY', nil, nil, nil, 'ja', 'PROVOKE') } }
+Ed._S.sel = 1
+step()
+local offered = false
+for _, l in ipairs(subjLabels) do offered = offered or l:find('^Party tank##') ~= nil end
+check(offered, 'the second condition\'s dropdown offers "Party tank"')
+for _, l in ipairs(subjLabels) do if l:find('^Party tank##') then want = l end end
+step()
+local tr = Ed._S.draft.rules[1]
+check(tr.cond2 == 'PT_HAS_TANK' and tr.arg2 == nil, 'choosing it gives PT_HAS_TANK ("there is one"): ' .. tostring(tr.cond2))
+want = 'there is none##2'
+step()
+check(tr.cond2 == 'NOT_PT_HAS_TANK', 'and its comparison "there is none" gives NOT_PT_HAS_TANK: ' .. tostring(tr.cond2))
+want = nil
+gui.BeginCombo, gui.Selectable = realBC, realSel
+check(balanced(gui) and Ed.rule_summary(tr, Ed._S.cat):find('Party has no tank', 1, true), 'shown as "Party has no tank"; balanced')
+Ed.save(); run_until(idle, 30)
+local tankNum = tonumber((Ed._S.message or ''):match('Saved as Rule Set (%d+)'))
+local tankSet = stored(tankNum or -1)
+check(tankSet and tankSet.rules[1].cond2 and tankSet.rules[1].cond2[1] == 'NOT_PT_HAS_TANK' and #R.ruleProblems(tankSet.rules[1]) == 0,
+      'saved through the server (confirmed): the stored rule holds NOT_PT_HAS_TANK and passes the server checks')
+Ed.open_set(tankNum or -1, false); run_until(idle, 20)
+check(Ed._S.draft and Ed._S.draft.rules[1].cond2 == 'NOT_PT_HAS_TANK' and Ed.encode_rule(Ed._S.draft.rules[1]) == Ed.encode_rule(tr),
+      'opened again: the same rule (loaded exactly)')
+local usableTank = R.usableRules(tankSet, { job = 3, level = 25, subJob = 1, subLevel = 12 })
+check(#usableTank == 1 and usableTank[1].cond2 and usableTank[1].cond2[1] == 'NOT_PT_HAS_TANK',
+      'reapplied (WHM 25 / WAR 12): the server hands the rule to the engine with NOT_PT_HAS_TANK unchanged')
+Ed._S.draft, Ed._S.sel = nil, nil
+check(balanced(gui), 'balanced at the end of the hotfix checks')
+end
 -- ---------------------------------------------------------------- 12. version 4: the member's own eligible choices
 section('v4: Mira WHM25/WAR12 sees exactly what the server allows her; clean names; saved actions kept; Check wording')
 MIRA.sjob, MIRA.jobs[1] = 1, { level = 30 }       -- WAR, her own WAR level 30 -> sub level min(30, 12) = 12

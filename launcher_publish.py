@@ -177,4 +177,33 @@ def publish(kit, server, version, notes, prerelease, log=print, run=subprocess.r
         make_release(KIT_REPO, version, f"XI: Forever Offline {version}", notes, prerelease,
                      [os.path.join(dist, "kit", f"xi-forever-offline-{version}-win64.zip"), os.path.join(dist, "kit", "SHA256SUMS.txt"),
                       (os.path.join(dist, "kit", f"xi-forever-offline-{version}-win64.zip"), ONE_CLICK_NAME)], token, log)
+    if "release" in steps:
+        prune_dist(kit, version, log)
     log(f"Done: {version} is published. Players' launchers will offer it" + (" to testers (test build)." if prerelease else "."))
+
+
+def prune_dist(kit, version, log=print, keep=2):
+    """(2026-11-21) dist/ kept every release ever built (about 0.45 GB each, 25 GB after two weeks). Once a version is on
+    GitHub its zips are only needed there, so only the newest `keep` server zips and player zips stay here."""
+    import re as _re
+    freed = 0
+    for folder, pattern in ((os.path.join(kit, "dist"), r"^xi-forever-offline-server-v(\d+)\.(\d+)\.(\d+)-win64\.zip$"),
+                            (os.path.join(kit, "dist", "kit"), r"^xi-forever-offline-v(\d+)\.(\d+)\.(\d+)-win64\.zip$")):
+        if not os.path.isdir(folder):
+            continue
+        found = []
+        for name in os.listdir(folder):
+            m = _re.match(pattern, name)
+            if m:
+                found.append((tuple(int(x) for x in m.groups()), name))
+        for _, name in sorted(found, reverse=True)[keep:]:
+            path = os.path.join(folder, name)
+            try:
+                freed += os.path.getsize(path)
+                os.remove(path)
+            except OSError:
+                pass
+    if freed:
+        log(f"Removed old release zips from dist ({freed // (1024 * 1024)} MB); GitHub keeps every release.")
+    return freed
+

@@ -22,14 +22,14 @@ On a Steam Deck the setup picks a small world, turns AI chat off (it needs a lot
 Deck's screen (1280 x 800).
 
 ## Steam Deck: play from Game Mode
-Launcher: **SETTINGS > Add to Steam and the menu**, then in Steam's window tick XI: Forever Offline and press
+Launcher: **SYSTEM > Linux > Add to Steam and the menu**, then in Steam's window tick XI: Forever Offline and press
 *Add Selected Programs*. In Game Mode start it from your library; press PLAY with the touchscreen or the trackpad.
 For the game itself, a controller layout with the trackpads as mouse works well (FFXI's own gamepad settings apply too).
 
 ## If something goes wrong
 - Logs are in the `logs` folder. Send `logs/ashita.log`, `logs/proton-setup.log` and `logs/xi_map.log` with a report.
-- SETTINGS > **Write Proton logs** makes Proton write `logs/steam-*.log` too (big, only while you need it).
-- SETTINGS > **Redo the game's Proton setup** registers the game in Proton again at the next PLAY.
+- SYSTEM > Linux > **Write Proton logs** makes Proton write `logs/steam-*.log` too (big, only while you need it).
+- SYSTEM > Linux > **Redo the game's Proton setup** registers the game in Proton again at the next PLAY.
 - `config.json` (advanced): `"proton_env": {"NAME": "value"}` passes extra Proton settings; `"linux_sandbox": true`
   uses Ashita's Sandbox plugin to find the game instead of Proton's registry.
 

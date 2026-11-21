@@ -35,7 +35,7 @@ Settings (button place, last tab): config/addons/servermenu/settings.cfg
 
 addon.name    = 'servermenu';
 addon.author  = 'XI: Forever Offline';
-addon.version = '1.25';
+addon.version = '1.26b';
 addon.desc    = 'The XI: Forever Offline menu: squad mates, and the dualbox character with his gambits.';
 addon.link    = '';
 
@@ -248,8 +248,49 @@ local function ask(delay)
     S.incoming = nil;
 end
 
+-- Actions buttons: what you asked for (S.want[slot] = 'on' or 'off') is checked against what the server reports in every new mate list.
+-- A command the game dropped is simply sent again (up to 4 tries per mate); a mate that matches is forgotten.
+local function reconcileActions()
+    if not S.want then return; end
+    S.tries = S.tries or {};
+    for _, mate in ipairs(S.mates or {}) do
+        local w = S.want[mate.slot];
+        if w and mate.switches ~= nil then
+            local isOff = mate.switches == 0;
+            if (w == 'off') == isOff then
+                S.want[mate.slot] = nil; S.tries[mate.slot] = nil;
+            elseif (S.tries[mate.slot] or 0) < 4 then
+                S.tries[mate.slot] = (S.tries[mate.slot] or 0) + 1;
+                enqueue(string.format('/say !squad sw %d all %s', mate.slot, w), 0);
+                if w == 'on' and mate.out then
+                    enqueue('/say !squad dismiss ' .. mate.slot, 2.5);
+                    enqueue('/say !squad call ' .. mate.slot, 9);
+                end
+                S.actKick = now() + 2.5;
+                ask(4);
+            else
+                S.want[mate.slot] = nil; S.tries[mate.slot] = nil;   -- gave up: the card shows the real state
+            end
+        end
+    end
+end
+
+local function actionsWatchdog(t)
+    if S.want and next(S.want) ~= nil and S.wantAt and t - S.wantAt > 40 then S.want = {}; S.tries = {}; end
+end
+
 local function pump(t)
-    if t - S.lastSend < 0.6 then return; end
+    actionsWatchdog(t);
+    if t - S.lastSend < (S.sendGap or 0.6) then return; end
+    -- Actions clicks: one `!actions` check after the last click settles (the server also checks every 2 s on its own)
+    if S.actKick and t >= S.actKick then
+        local pending = false;
+        for _, item in ipairs(S.queue) do if item.command:find('^/say !squad sw') then pending = true; break; end end
+        if not pending then
+            S.actKick = nil;
+            S.queue[#S.queue + 1] = { at = t, command = '/say !actions' };
+        end
+    end
     local pick = nil;                                   -- the first command that is due (a later "ask again" does not hold up a click)
     for i, item in ipairs(S.queue) do if item.at <= t then pick = i; break; end end
     if not pick then return; end
@@ -257,6 +298,8 @@ local function pump(t)
     if chat == nil or typing(chat) then return; end
     local first = table.remove(S.queue, pick);
     S.lastSend = t;
+    -- the game drops chat lines sent close together: every Squads action (call, dismiss, switches, options) goes out 2.2 seconds after the one before, however fast you click
+    S.sendGap = (first.command:find('^/say !') and not first.command:find('^/say !squad panel')) and 2.2 or 0.6;
     S.hideUntil = t + 6;   -- (1.25: was 2.5 s; a busy server answers later than that)
     pcall(function() chat:QueueCommand(1, first.command); end);
 end
@@ -320,7 +363,10 @@ local function onLine(payload)
     end
     if payload == 'end' then
         S.mates = S.incoming or {};
+        reconcileActions();
         S.incoming = nil;
+        S.behs = S.incomingBeh;                 -- (nil from an older server: the Forward to Gambits button stays hidden)
+        S.incomingBeh = nil;
         S.camp = S.incomingCamp;                -- (nil from a server without camps: the Camp row stays hidden)
         S.incomingCamp = nil;
         S.engage = S.incomingEngage;            -- (nil from an older server: the engage button and the Style row stay hidden)
@@ -411,6 +457,13 @@ local function onLine(payload)
     if mname and S.incomingCamp then
         S.incomingCamp.kinds = S.incomingCamp.kinds or {};
         table.insert(S.incomingCamp.kinds, { name = mname, lo = tonumber(mlo), hi = tonumber(mhi), count = tonumber(mcount), fits = mfits == '1' });
+        return;
+    end
+    -- (Jon + Deed 2026-11-21) beh|<key>|<on|off|mixed>|<label>: the squad AI switches, for the Forward to Gambits button
+    local bkey, bstate, blabel = payload:match('^beh|([%w_]+)|(%a+)|(.+)$');
+    if bkey then
+        S.incomingBeh = S.incomingBeh or {};
+        table.insert(S.incomingBeh, { key = bkey, state = bstate, label = blabel });
         return;
     end
     local mate = parseMate(payload);
@@ -1115,6 +1168,18 @@ local function squadTab()
         if button('Advanced', 'advanced', 92, 26, S.showAdvanced and 'selected' or nil) then S.showAdvanced = not S.showAdvanced; end
         tooltip('Follow distance, resting at camp, call order and each mate\'s wait before fighting');
     end
+    if S.behs and #S.behs > 0 then
+        imgui.SameLine(0, 6);
+        local allOff = true;
+        for _, b in ipairs(S.behs) do if b.state ~= 'off' then allOff = false; end end
+        if button(allOff and 'Forwarded to Gambits' or 'Forward to Gambits', 'behall', 176, 26, allOff and 'on' or nil) then
+            enqueue('/say !squad behave all ' .. (allOff and 'on' or 'off'));
+            for _, b in ipairs(S.behs) do b.state = allOff and 'on' or 'off'; end
+            ask(1.5);
+        end
+        tooltip(allOff and 'The built-in squad AI is off. Everything is set in Gambits. Click to take it back.'
+            or 'Turns the built-in squad AI off for every job so each mate runs on what you set in Gambits.');
+    end
     imgui.SameLine(0, 14);
     dimText(#S.mates == 1 and '1 mate' or (#S.mates .. ' mates'));
     if S.adv and S.showAdvanced then
@@ -1173,6 +1238,33 @@ local function squadTab()
                         imgui.SameLine(0, 6);
                     end
                 end
+                -- one click: all four action switches (melee, ranged, abilities, magic) for this mate, next to its Call / Dismiss
+                S.act = S.act or {};
+                -- the state is the server's: all four switches off = OFF (the mate list carries the mask). Older servers: what you last clicked.
+                local actOn;
+                if mate.switches ~= nil then actOn = mate.switches ~= 0; else actOn = S.act[mate.slot] ~= false; end
+                -- while any Actions change is on its way (sent, not yet confirmed by the server) every Actions button is greyed out
+                local busy = S.want ~= nil and next(S.want) ~= nil;
+                if busy then
+                    local n = pushColors({ { 'ImGuiCol_Button', { 0.22, 0.24, 0.28, 1 } }, { 'ImGuiCol_ButtonHovered', { 0.22, 0.24, 0.28, 1 } }, { 'ImGuiCol_ButtonActive', { 0.22, 0.24, 0.28, 1 } } });
+                    imgui.Button((S.want[mate.slot] and 'Working...' or (actOn and 'Actions ON' or 'Actions OFF')) .. '##act' .. mate.slot, { px(96), px(0) });
+                    if n > 0 then imgui.PopStyleColor(n); end
+                elseif button(actOn and 'Actions ON' or 'Actions OFF', 'act' .. mate.slot, 96, 0, actOn and 'on' or nil) then
+                    S.want = S.want or {}; S.want[mate.slot] = actOn and 'off' or 'on'; S.tries = S.tries or {}; S.tries[mate.slot] = 0;
+                    S.wantAt = now();
+                    S.act[mate.slot] = not actOn;
+                    enqueue(string.format('/say !squad sw %d all %s', mate.slot, actOn and 'off' or 'on'));
+                    S.actKick = now() + 2.5;   -- one `!actions` check after the change settles (see pump)
+                    -- turning a mate ON: her spells and abilities only take the new switches when she is called, so send her off and call her
+                    -- again (each line waits its turn in the queue). Turning OFF needs no recall: the server stops her at once.
+                    if not actOn and mate.out then
+                        enqueue('/say !squad dismiss ' .. mate.slot, 2.5);
+                        enqueue('/say !squad call ' .. mate.slot, 9);
+                    end
+                    ask(4);
+                end
+                tooltip('OFF means off: the mate stops fighting, following, Sneak Attack, eating and casting. ON also sends this mate off and calls her again (about 12 seconds), because spells and abilities only take the switches at a call. The button shows the real state from the server.');
+                imgui.SameLine(0, 6);
                 if button(S.more[mate.slot] and 'Less' or 'Jobs', 'more' .. mate.slot, 56, 0) then S.more[mate.slot] = not S.more[mate.slot]; end
                 tooltip('Change this mate\'s main and support job');
                 imgui.SameLine(0, 6);

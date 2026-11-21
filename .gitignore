@@ -17,6 +17,10 @@
 !/launcher_rules.py
 !/launcher_icons.py
 !/launcher_personality.py
+# the newer look (2026-11): the pages, their controls, and where each setting goes
+!/launcher_pages.py
+!/launcher_widgets.py
+!/launcher_settings.py
 !/launcher_thirdparty.py
 !/launcher_setup.py
 !/launcher_update.py

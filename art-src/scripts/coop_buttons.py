@@ -35,6 +35,10 @@ BUTTONS = {
     'coop_save':     ((226, H),  'SAVE CHARACTER',  [('shantotto', (0.1, 0.02, 0.85, 0.5))],        BROWN),
     'coop_load':     ((160, H),  'RESTORE',         [('thief', (0.2, 0.0, 0.85, 0.42))],            BROWN),
     'coop_tailscale': ((226, H), 'GET TAILSCALE',   [('ca-mithra', (0.0, 0.0, 1.0, 0.5))],          TEAL),
+    # Play on another PC (2026-11-20): shorter words on the pictures so the two fit side by side
+    'coop_carry_save':   ((252, H), 'SAVE FOR OTHER PC',  [('ca-children', (0.0, 0.0, 0.5, 0.75))],       BROWN),
+    'coop_carry_load':   ((264, H), 'LOAD FROM OTHER PC', [('ca-mini-taru', (0.30, 0.0, 0.52, 1.0))],       BROWN),
+    'coop_carry_folder': ((150, H), 'FOLDER...',          [('ca-children', (0.5, 0.0, 1.0, 0.75))],       STEEL),
 }
 ANCHOR = {'coop': 0.5, 'coop_on': 0.5, 'coop_play': 0.55, 'coop_stop': 0.6}
 HEADERS = {'coop_head_host': 'HOST MY WORLD', 'coop_head_visit': 'VISIT A FRIEND'}

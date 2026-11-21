@@ -188,7 +188,7 @@
       "license": "GPL-3.0",
       "homepage": "https://github.com/KiplingFFXI/cadence",
       "into": "ashita",
-      "note": "Auto-attack and resting timers. Made for Phoenix; installed switched off (ADDONS > Addons to load it).",
+      "note": "Auto-attack and resting timers. Made for Phoenix; installed switched off (tick it in the Addons list to load it).",
       "source": {
         "type": "github_release",
         "repo": "KiplingFFXI/cadence",
@@ -210,7 +210,7 @@
       "license": "GPL-3.0",
       "homepage": "https://github.com/KiplingFFXI/checkmate",
       "into": "ashita",
-      "note": "Advanced monster check (/check details on screen). Made for Phoenix; installed switched off (ADDONS > Addons to load it).",
+      "note": "Advanced monster check (/check details on screen). Made for Phoenix; installed switched off (tick it in the Addons list to load it).",
       "source": {
         "type": "github_release",
         "repo": "KiplingFFXI/checkmate",
@@ -232,7 +232,7 @@
       "license": "GPL-3.0",
       "homepage": "https://github.com/KiplingFFXI/momentum",
       "into": "ashita",
-      "note": "EXP, merit and Dynamis tracking bar. Made for Phoenix; installed switched off (ADDONS > Addons to load it).",
+      "note": "EXP, merit and Dynamis tracking bar. Made for Phoenix; installed switched off (tick it in the Addons list to load it).",
       "source": {
         "type": "github_release",
         "repo": "KiplingFFXI/momentum",
@@ -255,7 +255,7 @@
       "license": "GPL-3.0",
       "homepage": "https://github.com/wildcabbagepatch/FFXIPort",
       "into": "ashita",
-      "note": "Made for XI: Forever Offline: a teleport window (/port) for the Home Points, Survival Guides, gate crystals and Runic Portals you have unlocked (1,000 gil or conquest points; free within a city). The server part ships with the server. Installed switched off (ADDONS > Addons to load it); it follows the Fast travel switch.",
+      "note": "Made for XI: Forever Offline: a teleport window (/port) for the Home Points, Survival Guides, gate crystals and Runic Portals you have unlocked (1,000 gil or conquest points; free within a city). The server part ships with the server. Installed switched off (tick it in the Addons list to load it); it follows the Fast travel switch.",
       "source": {
         "type": "github_release",
         "repo": "wildcabbagepatch/FFXIPort",

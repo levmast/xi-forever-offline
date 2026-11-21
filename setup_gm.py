@@ -145,7 +145,7 @@ def setup(cfg, connect_fn=sd.connect, graphics_module=None, hasher=sd.hash_passw
     if problems:
         say(f"Finished with {problems} problem(s) above. Send Claude the lines starting with '!!'.")
     else:
-        say("DONE. In the launcher's Settings page press 'Start GM game'.")
+        say("DONE. In the launcher: SYSTEM > GM and testing > 'Start GM game'.")
         say(f"The first time, create a character in the lobby (account '{user}'): it is a GM from its first login.")
     return problems
 

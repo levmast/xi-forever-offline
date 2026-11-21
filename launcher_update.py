@@ -93,7 +93,38 @@ def _download(release, pattern, kit, fetch, log, what):
     path = os.path.join(folder, name)
     with open(path, "wb") as handle:
         handle.write(data)
+    prune_updates(kit, keep=(path,), log=log)
     return path
+
+
+def prune_updates(kit, keep=(), log=print):
+    """(2026-11-21, Yumainai) downloads/updates only ever grew: every release zip stayed. An update is unpacked straight
+    after its download and never read again, so only the newest launcher and the newest server download are kept
+    (plus anything in `keep`). Returns the bytes freed."""
+    folder = os.path.join(kit, "downloads", "updates")
+    if not os.path.isdir(folder):
+        return 0
+    files = [os.path.join(folder, n) for n in os.listdir(folder)]
+    files = [f for f in files if os.path.isfile(f)]
+    keep = {os.path.normcase(os.path.abspath(k)) for k in keep}
+    newest = {}
+    for f in sorted(files, key=os.path.getmtime, reverse=True):
+        kind = "server" if "-server-" in os.path.basename(f).lower() else "launcher"
+        newest.setdefault(kind, f)
+    keep |= {os.path.normcase(os.path.abspath(f)) for f in newest.values()}
+    freed = 0
+    for f in files:
+        if os.path.normcase(os.path.abspath(f)) in keep:
+            continue
+        try:
+            size = os.path.getsize(f)
+            os.remove(f)
+            freed += size
+        except OSError:
+            pass
+    if freed:
+        log(f"Removed old update downloads ({freed // (1024 * 1024)} MB).")
+    return freed
 
 
 def _unpack_tar(tar_path, dest, keep=(), log=print):
@@ -254,7 +285,7 @@ def update_server(kit, cfg, release, fetch, log=print, run=None, connect=None):
     dump = os.path.join(backups, f"db-before-{release.get('tag_name')}-{time.strftime('%Y%m%d-%H%M%S')}.sql")
     log("Saving your database first...")
     result = run(setup.mariadb_cmd(cfg["mariadb_dir"], "mariadb-dump") + ["-h127.0.0.1", f"-P{cfg.get('db_port', 3306)}",
-                  f"-u{cfg['db_user']}", f"-p{cfg['db_pass']}", cfg["db_name"], f"--result-file={dump}"],
+                  f"-u{cfg['db_user']}", f"-p{cfg['db_pass']}", "--single-transaction", cfg["db_name"], f"--result-file={dump}"],
                  capture_output=True, text=True, creationflags=NO_WINDOW,
                  **({} if IS_WINDOWS else {"env": setup.mariadb_env(cfg["mariadb_dir"])}))
     if result.returncode != 0:

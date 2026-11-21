@@ -39,6 +39,10 @@ try:
     import launcher_coop_gui as coopgui
 except Exception:  # the launcher still works, without the Co-op page
     coopgui = None
+try:
+    import launcher_pages as newui     # the newer look: World, Rules, the eight-button bar ("classic_ui": true in config.json = the old one)
+except Exception:  # the launcher still works, with the classic pages
+    newui = None
 
 LOGS = os.path.join(HERE, "logs")
 KIT_REPO_NAME = "Hurami89/xi-forever-offline"
@@ -263,6 +267,7 @@ class CheckList(tk.Frame):
     def __init__(self, parent, kind, scripts):
         super().__init__(parent, bg=BG)
         self.kind, self.scripts, self.message = kind, scripts, ""
+        self.extra = None       # the newer look puts the downloads for these items here too (launcher_pages.ListDownloads)
         top = tk.Frame(self, bg=BG)
         top.pack(fill="x", padx=8, pady=(0, 4))
         tk.Label(top, text="Search:", bg=BG, fg=DIM).pack(side="left")
@@ -338,6 +343,10 @@ class CheckList(tk.Frame):
                 tk.Label(row, text=info["desc"], bg=PANEL, fg=DIM, font=(UI_FONT, 9), wraplength=720, justify="left",
                          anchor="w").grid(row=1, column=1, sticky="w", pady=(0, 4))
             row.columnconfigure(1, weight=1)
+            if self.extra is not None:
+                self.extra.on_row(self, row, n)
+        if self.extra is not None:
+            self.extra.more_rows(self, wanted, names)
 
     def toggle(self, name, var):
         try:
@@ -787,7 +796,8 @@ class SquadTab(tk.Frame):
         self.cfg = cfg
         self.conn = None
         self.chars, self.mates, self.mate = [], [], None
-        self.require_unlock = bool(cfg.get("squad_require_unlock", True))
+        # (2026-11-21) the Rules page's "Squad gets all gear" lifts the gear lock in the gear picker too
+        self.require_unlock = bool(cfg.get("squad_require_unlock", True)) and not core.load_rates(HERE).get("squad_all_gear", False)
         # player installs: mates start at level 1 and level up in game, and a look is picked once (as in squad.lua)
         self.player = bool(cfg.get("mariadb_dir"))
         self.level_vars, self.gear_vars, self.level_spins = {}, {}, {}
@@ -1527,7 +1537,10 @@ class ImageButton(tk.Canvas):
 
 
 class RatesTab(tk.Frame):
-    """Experience, drop, gil and skill-up rates, the level cap and a few switches. Read when PLAY is pressed."""
+    """Experience, drop, gil and skill-up rates, the level cap and a few switches. Read when PLAY is pressed.
+    In the newer look this tab is made but not shown: the World, Rules, Squad and Era pages (launcher_pages.py) show
+    its variables. A NEW SETTING ALSO NEEDS A LINE IN launcher_settings.py, which says where it goes on those pages
+    (dev\\launcher-tests\\test_settings.py fails until it has one)."""
     FAST_TRAVEL = ("main.HOMEPOINT_TELEPORT", "main.ENABLE_SURVIVAL_GUIDE")   # one "Fast travel" checkbox for both
     # (2026-11-18) settings about the era and how classic the game feels, shown together under "Era options"
     ERA_KEYS = ("main.MAX_LEVEL", "main.ENABLE_COP", "main.ENABLE_TOAU", "main.ENABLE_WOTG", "main.ENABLE_ACP", "main.ENABLE_AMK",
@@ -1612,13 +1625,13 @@ class RatesTab(tk.Frame):
             ttk.Spinbox(inner, from_=field[5], to=field[6], increment=1 if field[7] == "int" else 0.25,
                         textvariable=var, width=8).grid(row=row, column=1, padx=6, pady=2)
             row += 1
-        for k in (2, 20, 18, 25, 23, 0, 24):    # era exp tables, fast travel, full bags, item stacks, short quest waits, all crafts, seasonal events
+        for k in (2, 20, 18, 25, 23, 0, 24, 30, 31, 32, 33):    # era exp tables, fast travel, full bags, item stacks, short quest waits, all crafts, seasonal events
             R[k], row = row, row + 1
         row = header("World", row)
-        for k in (3, 1, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14):
+        for k in (3, 1, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 28):   # (28: bots pass all loot)
             R[k], row = row, row + 1
         row = header("Squad and AI", row)
-        for k in (15, 16, 19, 26, 21, 22, 17):   # (26: squad gear, you keep the item)
+        for k in (15, 16, 19, 26, 29, 27, 21, 22, 17):   # (26: squad gear, you keep the item; 29: all gear; 27: training dummies)
             R[k], row = row, row + 1
         self.all_crafts = tk.BooleanVar(value=rates.get("all_crafts", True))
         tk.Checkbutton(inner, text="Every craft can reach 100 (off = only one, like the retail rule)", variable=self.all_crafts, bg=BG, fg=FG,
@@ -1728,9 +1741,25 @@ class RatesTab(tk.Frame):
                        "the whole squad and you keep yours. Off = the squad takes the piece (one-of-a-kind gear is always kept).",
                        variable=self.squad_keep_gear, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
                        wraplength=520, justify="left").grid(row=R[26], column=0, columnspan=2, sticky="w", padx=6, pady=2)
+        self.bots_pass_loot = tk.BooleanVar(value=rates.get("bots_pass_loot", True))
+        tk.Checkbutton(inner, text="Bots pass all loot: bot players in your party pass every drop at once, so it comes to "
+                       "you without waiting for the lot timer. Off = they leave it to the timer.",
+                       variable=self.bots_pass_loot, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
+                       wraplength=520, justify="left").grid(row=R[28], column=0, columnspan=2, sticky="w", padx=6, pady=2)
+        self.squad_all_gear = tk.BooleanVar(value=rates.get("squad_all_gear", False))
+        tk.Checkbutton(inner, text="Squad gets all gear: mates can wear anything their job and level allow without it being "
+                       "given to them first. Off = gear has to be given once (trade it, or !squad give).",
+                       variable=self.squad_all_gear, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
+                       wraplength=520, justify="left").grid(row=R[29], column=0, columnspan=2, sticky="w", padx=6, pady=2)
+        self.training_dummies = tk.BooleanVar(value=rates.get("training_dummies", False))
+        tk.Checkbutton(inner, text="Training dummies (for testing): !sandbox puts dummies of level 1 to 99 in Rolanberry "
+                       "Fields that never die and never attack, to try out squads and gambits. Off = no dummies.",
+                       variable=self.training_dummies, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
+                       wraplength=520, justify="left").grid(row=R[27], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         self.short_quest_waits = tk.BooleanVar(value=rates.get("short_quest_waits", True))
         tk.Checkbutton(inner, text="Short quest waits: Chocobo's Wounds 1 minute between feedings (era: a game day each), "
-                       "Forge Your Destiny 1 hour at the forge (era: three game days). Off = the era waits.",
+                       "Forge Your Destiny 1 hour at the forge (era: three game days), Aht Urhgan missions about 1 minute "
+                       "between missions. Off = the era waits.",
                        variable=self.short_quest_waits, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
                        wraplength=520, justify="left").grid(row=R[23], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         # (2026-11-18) seasonal events: by their dates (default), all year, or none (events_mode.lua)
@@ -1739,6 +1768,13 @@ class RatesTab(tk.Frame):
         self.events = tk.StringVar(value=self.EVENTS_LABELS[core.clean_events(rates.get("events", "date"))])
         ttk.Combobox(inner, values=list(self.EVENTS_LABELS.values()), state="readonly", textvariable=self.events,
                      width=16).grid(row=R[24], column=1, padx=6, pady=2)
+        # (2026-11-20) one switch per event: on = it runs on its dates (or all year with "Always on"), off = never
+        for slot, key, name in ((30, "event_harvest", "Harvest Festival"), (31, "event_starlight", "Starlight Celebration"),
+                                (32, "event_egg_hunt", "Egg Hunt"), (33, "event_horro", "Horro's Visit")):
+            var = tk.BooleanVar(value=rates.get(key, True))
+            setattr(self, key, var)
+            tk.Checkbutton(inner, text="   " + name, variable=var, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG,
+                           activeforeground=FG).grid(row=R[slot], column=0, columnspan=2, sticky="w", padx=6, pady=1)
         if tp is not None:
             self.ai_model_row(inner, R[21])
         self.show_world(rates)
@@ -1841,7 +1877,8 @@ class RatesTab(tk.Frame):
         return next((k for k, v in self.EVENTS_LABELS.items() if v == label), "date")
 
     BOOL_KEYS = ("all_crafts", "ah_sim", "era_exp", "conquest_sim", "crowds", "crowds_chat", "crowds_chat_ai", "crowds_field",
-                 "bots", "squad_chat", "full_bags", "modern_stacks", "spell_scrolls", "squad_keep_gear", "short_quest_waits")
+                 "bots", "squad_chat", "full_bags", "modern_stacks", "spell_scrolls", "squad_keep_gear", "training_dummies", "bots_pass_loot", "squad_all_gear", "short_quest_waits",
+                 "event_harvest", "event_starlight", "event_egg_hunt", "event_horro")
     TEXT_KEYS = (("crowds_per_zone", "crowds_size"), ("crowds_chat_amount", "crowds_chat_amount"),
                  ("crowds_field_parties", "crowds_field_parties"), ("bots_roster", "bots_roster"), ("bots_online", "bots_online"),
                  ("bots_growth", "bots_growth"), ("squad_call_cooldown", "squad_call_cooldown"))
@@ -1953,8 +1990,13 @@ class RatesTab(tk.Frame):
         rates["modern_stacks"] = bool(self.modern_stacks.get())
         rates["spell_scrolls"] = bool(self.spell_scrolls.get())
         rates["squad_keep_gear"] = bool(self.squad_keep_gear.get())
+        rates["training_dummies"] = bool(self.training_dummies.get())
+        rates["bots_pass_loot"] = bool(self.bots_pass_loot.get())
+        rates["squad_all_gear"] = bool(self.squad_all_gear.get())
         rates["short_quest_waits"] = bool(self.short_quest_waits.get())
         rates["events"] = self.events_value()
+        for k in ("event_harvest", "event_starlight", "event_egg_hunt", "event_horro"):
+            rates[k] = bool(getattr(self, k).get())
         rates["bots_head_start"] = bool(self.bots_head_start.get()) and not self.head_start_done
         rates["bots_head_start_done"] = self.head_start_done
         rates["claim_shield"] = False
@@ -3042,6 +3084,9 @@ class App(tk.Tk):
         self.boot_ini = os.path.join(self.ashita, "config", "boot", self.cfg.get("ashita_boot", core.DEFAULT_BOOT)) if self.ashita else None
         has_ini = bool(self.boot_ini) and os.path.exists(self.boot_ini)
         self.graphics = core.load_graphics(HERE, self.boot_ini if has_ini else None)
+        self.new_ui = newui is not None and not self.cfg.get("classic_ui")
+        if self.new_ui:
+            newui.prepare(self, globals())
         self.build_ui()
         self.after(200, self.pump)
         self.after(1000, self.lights)
@@ -3204,7 +3249,8 @@ class App(tk.Tk):
 
         # Rates tab
         self.rates_tab = RatesTab(tabs, self.rates, player=bool(self.cfg.get("mariadb_dir")))
-        tabs.add(self.rates_tab, text="  Rates  ")
+        if not self.new_ui:                    # the newer World and Rules pages show these settings instead (launcher_pages.py)
+            tabs.add(self.rates_tab, text="  Rates  ")
 
         # Graphics tab (needs the Ashita boot file)
         self.graphics_tab = None
@@ -3279,6 +3325,18 @@ class App(tk.Tk):
                           command=lambda: self.add_user_item(folder=True)).pack(side="left", padx=4)
         if tp is not None and os.path.exists(os.path.join(HERE, "thirdparty.json")):
             self.build_downloads_page(tabs)
+        if self.new_ui:                        # World, Rules, the new bar (launcher_pages.py takes over build_nav, show_subnav, fit_window)
+            try:
+                newui.build(self, tabs)
+            except Exception:                  # anything wrong with the newer pages: the classic ones, so the launcher always opens
+                self.new_ui = False
+                try:
+                    os.makedirs(LOGS, exist_ok=True)
+                    with open(os.path.join(LOGS, "new-pages-error.log"), "w") as f:
+                        f.write(traceback.format_exc())
+                except OSError:
+                    pass
+                tabs.add(self.rates_tab, text="  Rates  ")
         self.build_nav()
 
     def ui_button(self, parent, name, command, text):
@@ -3478,6 +3536,8 @@ class App(tk.Tk):
         state = tp.load_state(HERE)
         if not self.cfg.get("mariadb_dir"):       # a self-built (dev) server is never replaced by the release package
             items = [item for item in items if item.get("into") != "server"]
+        if getattr(self, "dl_filter", None) is not None:      # the newer look lists addons and plugins on their own pages
+            items = [item for item in items if self.dl_filter(item)]
         for row, item in enumerate(items):
             installed, version = tp.status(item, HERE, self.ashita, state, server=self.cfg.get("server_dir"))
             tk.Label(self.dl_rows, text=item["name"], bg=BG, fg=FG, font=(UI_FONT, 10, "bold"), anchor="w").grid(
@@ -3864,6 +3924,12 @@ class App(tk.Tk):
         except Exception as e:
             self.say(f"Could not check Ashita's target offset ({e}).")
 
+        try:                                  # (2026-11-21, Yumainai) old update downloads: keep only the newest of each
+            import launcher_update as _upd
+            _upd.prune_updates(HERE, log=self.say)
+        except Exception as e:
+            self.say(f"Could not tidy the old update downloads ({e}).")
+
         try:                                  # (2026-11-19) Gambits -> autobox, GambitsV2 -> Gambits: once, every install
             import launcher_setup as _names
             _names.migrate_gambits_names(HERE, cfg.get("ashita_dir", ""), log=self.say)
@@ -3934,7 +4000,7 @@ class App(tk.Tk):
         self.say("Applying your rates...")
         try:
             if float(self.rates.get("map.EXP_RATE", 1) or 0) <= 0:
-                self.say("Note: 'Experience from monsters' is 0 on CONFIG > Rates, so monsters give no experience. Set it to 1 for the normal amount.")
+                self.say("Note: Experience from monsters is 0 on the RULES page, so monsters give no experience. Set it to 1 for the normal amount.")
         except (TypeError, ValueError):
             pass
         try:
@@ -4127,7 +4193,7 @@ class App(tk.Tk):
             if self.game_proc.poll() is not None:
                 raise RuntimeError("The game closed before it started (Proton said it was done).\n\nAshita / Proton said:\n"
                                    + core.tail(os.path.join(LOGS, "ashita.log"))
-                                   + "\n\nTurn on 'Write Proton logs' on the Settings page and send logs/steam-*.log with the report.")
+                                   + "\n\nTurn on 'Write Proton logs' on SYSTEM > Linux and send logs/steam-*.log with the report.")
             if time.time() - start > limit:
                 raise RuntimeError("The game loader never started.\n\nAshita / Proton said:\n" + core.tail(os.path.join(LOGS, "ashita.log")))
             self.say_status(f"Starting the game... {int(time.time() - start)} seconds")
@@ -4197,7 +4263,7 @@ class App(tk.Tk):
         boot = self.cfg.get("ashita_boot_gm")
         path = os.path.join(self.ashita, "config", "boot", boot) if (self.ashita and boot) else ""
         if not path or not os.path.exists(path):
-            messagebox.showinfo("GM game", "The GM account is not set up yet.\n\nOn the Settings page press 'Set up GM account' first.")
+            messagebox.showinfo("GM game", "The GM account is not set up yet.\n\nOn SYSTEM > GM and testing press 'Set up GM account' first.")
             return
         if self.running and core.is_running("xiloader"):
             self.launch_extra(boot, "ashita-gm.log")
@@ -4853,7 +4919,7 @@ class SetupWizard(tk.Tk):
                         linux.deck_defaults(HERE, boot)
                         self.q.put(("log", "Steam Deck: the game is set to the Deck's screen (1280 x 800)."))
                         linux.install_desktop_entry(HERE)
-                        self.q.put(("log", "Added XI: Forever Offline to the menu: add it to Steam on the launcher's Settings page."))
+                        self.q.put(("log", "Added XI: Forever Offline to the menu: add it to Steam on the launcher's SYSTEM > Linux page."))
                     except Exception as e:
                         self.q.put(("log", f"Could not set the Steam Deck defaults ({e})."))
                 self.q.put(("done", None))

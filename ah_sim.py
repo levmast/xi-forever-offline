@@ -333,6 +333,17 @@ def estimate(basesell, equipment, level, ratios, prices):
     return max(int(round(basesell * ratio)), basesell + 1)
 
 
+def price_rate(here=HERE):
+    """(2026-11-21, Tasou) the launcher's "Auction house prices" rate (rates.json main.AH_PRICE_RATE): 1 = the prices as
+    they are, 0.5 = half, 2 = double. Never below the vendor price + 1 (the item checks below keep that floor)."""
+    try:
+        with open(os.path.join(here, "rates.json"), "r", encoding="utf-8-sig") as f:
+            value = float(json.load(f).get("main.AH_PRICE_RATE", 1.0))
+        return max(0.1, min(10.0, value))
+    except (OSError, ValueError, TypeError):
+        return 1.0
+
+
 def eligible_items(conn, settings, price_data=None):
     rows = query(conn, "SELECT b.itemid, b.name, b.stackSize, b.BaseSell, e.itemId, e.level, e.ilevel, e.su_level "
                        "FROM item_basic b LEFT JOIN item_equipment e ON e.itemId = b.itemid "
@@ -348,6 +359,7 @@ def eligible_items(conn, settings, price_data=None):
         if in_era(int(itemid), equipment, level, ilevel, su_level, settings["era"]):
             era_rows.append((int(itemid), name, max(1, int(stack_size or 1)), int(basesell or 0), equipment, level))
     ratios = calibrate([(i, b, e, l) for i, _n, _s, b, e, l in era_rows], market, settings["prices"]) if market else {}
+    rate = price_rate()
     items = {}
     for itemid, name, stack_size, basesell, equipment, level in era_rows:
         single, stack = (market.get(itemid) or [None, None])
@@ -368,6 +380,10 @@ def eligible_items(conn, settings, price_data=None):
             if equipment:
                 fair = max(fair, level * 100)
             source = "fallback"
+        if rate != 1.0:
+            fair = max(int(fair * rate), basesell + 1)
+            if stack_fair:
+                stack_fair = max(int(stack_fair * rate), basesell * stack_size + 1)
         items[itemid] = Item(itemid, name, stack_size, basesell, level, equipment, fair, stack_fair, source)
     return items
 
@@ -631,7 +647,10 @@ def report(items, settings):
 
 
 def price_stamp(price_data):
-    return "none" if not price_data else f"{price_data.get('source')}@{price_data.get('fetched')}"
+    # (the price rate is part of it: a new rate restocks everything at the new prices)
+    rate = price_rate()
+    base = "none" if not price_data else f"{price_data.get('source')}@{price_data.get('fetched')}"
+    return base if rate == 1.0 else f"{base}x{rate:g}"
 
 
 def reprice_if_needed(conn, price_data, here=HERE):

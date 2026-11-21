@@ -59,7 +59,8 @@ try {
             @{ n = 'server !gsq (test_gambits_squad.lua)';               a = @('test_gambits_squad.lua', $lua, $gl, $ja, $add, $Work) },
             @{ n = 'Rule Sets and U13 (test_squad_rulesets.lua)';        a = @('test_squad_rulesets.lua', (Join-Path $lua 'squad.lua'), (Join-Path $lua 'squad_starter_gear.lua'), $gl, (Join-Path $lua 'squad_rulesets.lua'), $orig, $ja) },
             @{ n = 'squad.lua integration (test_squad_upstream_integration.lua)'; a = @('test_squad_upstream_integration.lua', $lua, $gl, $ja, $orig, $Work) + $data },
-            @{ n = 'WAR/PLD/RDM/WS batch (test_gambits_ws_batch.lua)';  a = @('test_gambits_ws_batch.lua', $lua, $gl, $ja, $add, $Work, $Server) }
+            @{ n = 'WAR/PLD/RDM/WS batch (test_gambits_ws_batch.lua)';  a = @('test_gambits_ws_batch.lua', $lua, $gl, $ja, $add, $Work, $Server) },
+            @{ n = 'job expansion (test_gambits_jobexp.lua)';           a = @('test_gambits_jobexp.lua', $lua, $gl, $ja, $add, $Work, $Server) }
         )
         foreach ($s in $suites) {
             $out = & $run.exe @pre @($s.a) 2>&1 | ForEach-Object { "$_" }

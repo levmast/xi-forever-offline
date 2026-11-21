@@ -1,6 +1,6 @@
 > **2026-11-19:** this addon is now called **autobox** (folder `addons/autobox`, command `/autobox`). Where this text says
 > Gambits or `/gambits` it means autobox and `/autobox`. The name Gambits now belongs to the squad Rule Set editor.
-> Your sheets are still kept in `config/addons/Gambits/`. It is not loaded at start: ADDONS > Addons, or the server
+> Your sheets are still kept in `config/addons/Gambits/`. It is not loaded at start: OPTIONS > Addons, or the server
 > menu's AUTO button, loads it.
 
 # Gambits 2.2.207

@@ -336,7 +336,7 @@ def import_gguf(gguf_path, name=None, log=print, run=None):
     import subprocess
     exe = find_ollama()
     if not exe:
-        raise RuntimeError("Ollama is not installed yet (ADDONS > Other > Ollama).")
+        raise RuntimeError("Ollama is not installed yet (OPTIONS > Get more > Ollama).")
     if not (os.path.isfile(gguf_path) and gguf_path.lower().endswith(".gguf")):
         raise ValueError("Pick a .gguf file.")
     base = name or re.sub(r"[^a-z0-9._-]+", "-", os.path.splitext(os.path.basename(gguf_path))[0].lower()).strip("-.") or "my-model"

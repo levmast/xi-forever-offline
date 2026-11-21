@@ -216,7 +216,7 @@ GetSquad = function() return squad end
 local function run(line) srv.printed = {}; G.handle(srv, line); return srv.printed end
 local function F(line) return G.splitPlain(line, '|') end
 local o = run('hello 1')
-check(o[1] == 'GSQ|1|hello|5|32|120|64', 'hello: version 5 - ' .. tostring(o[1]))
+check(o[1] == 'GSQ|1|hello|6|32|120|64', 'hello: version 6 (job expansion) - ' .. tostring(o[1]))
 o = run('wsg 2 1')
 local f = F(o[1])
 check(#o == 2 and f[3] == 'ws' and f[4] == '1' and f[5] == 'WAR' and f[6] == 'l' and f[13] == '0' and f[14] == '-' and f[15] == '-' and f[16] == '1'
@@ -411,7 +411,8 @@ S.draft.rules[1].name = 'CHANGED'
 check(M.TEMPLATES.RDM[1].rules[1].name == 'CURE', 'the draft is a copy')
 local d2 = M.new_from_template('RDM', 1, { targets = { 'PARTY', 'TARGET', 'SELF' } })
 check(d2.rules[1].target == 'PARTY', 'a server without PARTY_LOWEST_HPP: the template falls back to PARTY')
-check(#M.templates_for('BLM') == 0 and M.new_from_template('BLM', 1) == nil, 'no template for other jobs')
+-- (job expansion) the other jobs have starters now (test_gambits_jobexp.lua); still none for SMN or PUP
+check(#M.templates_for('SMN') == 0 and #M.templates_for('PUP') == 0 and M.new_from_template('SMN', 1) == nil, 'no template for SMN or PUP')
 
 -- ================================================================= 6b. beta polish: the Rule Set editor's usability changes
 section('beta polish: compact rule lines, labels, set names, one-click open, unsaved edits kept, Assign & Apply')
@@ -554,6 +555,8 @@ local g, depth = {}, 0
 g.Text = function() end; g.TextColored = function() end; g.TextWrapped = function() end; g.SameLine = function() end; g.NewLine = function() end
 g.Separator = function() end; g.SetNextItemWidth = function() end; g.AlignTextToFramePadding = function() end; g.SetCursorPosX = function() end
 g.Button = function() return false end; g.IsItemHovered = function() return false end; g.SetTooltip = function() end
+g.TextUnformatted = function() end; g.PushTextWrapPos = function() end; g.PopTextWrapPos = function() end -- (hotfix 2026-11-21)
+g.BeginTooltip = function() return true end; g.EndTooltip = function() end
 g.BeginCombo = function() return false end; g.EndCombo = function() end; g.Selectable = function() return false end
 g.PushStyleColor = function() depth = depth + 1 end; g.PopStyleColor = function(n) depth = depth - (n or 1) end
 g.GetContentRegionAvail = function() return { 600, 400 } end
@@ -681,6 +684,73 @@ if SERVER_ROOT then
           and SQ:find('PTrust->GetLocalVar("SQUAD_ID") == 0', 1, true), 'source: SquadApplyWeaponSkills is registered and only touches called squad mates')
 else
     io.write('  (no server root given: the C++ source checks were skipped)\n')
+end
+
+-- ================================================================= 9. hotfix 2026-11-21: the Party tank condition
+section('hotfix: Party tank (PT_HAS_TANK / NOT_PT_HAS_TANK) in the condition builder, server meaning unchanged')
+do -- (a block: keeps the main chunk's local variables below Lua's limit)
+local hcat
+do
+    local items, endF = {}, nil
+    for _, l in ipairs(run('catm 31 1 j')) do local ff = F(string.sub(l, 1, 150)); if ff[3] == 'end' then endF = ff else items[#items + 1] = ff end end
+    hcat = M.parse_catalog(items, endF)
+end
+check(hcat and hcat.conds.PT_HAS_TANK and hcat.conds.PT_HAS_TANK.kind == 'n' and hcat.conds.NOT_PT_HAS_TANK
+      and hcat.conds.NOT_PT_HAS_TANK.kind == 'n', 'the server catalog reports both, without a value (as before the hotfix)')
+local ptSubj = M.SUBJECT_OF.PT_HAS_TANK and M.SUBJECT_OF.PT_HAS_TANK.subj
+check(ptSubj and ptSubj.key == 'PTTANK' and ptSubj.label == 'Party tank' and M.SUBJECT_OF.NOT_PT_HAS_TANK
+      and M.SUBJECT_OF.NOT_PT_HAS_TANK.subj == ptSubj and M.SUBJECT_OF.PT_HAS_TANK.op == 1 and M.SUBJECT_OF.NOT_PT_HAS_TANK.op == 2,
+      'one subject "Party tank" with "there is one" / "there is none"')
+local function offers(slot, target)
+    for _, sj in ipairs(M.subjects_for(slot, target, hcat)) do if sj.key == 'PTTANK' then return true end end
+    return false
+end
+local everywhere = true
+for _, t in ipairs({ 'SELF', 'PARTY', 'PARTY_LOWEST_HPP', 'TANK', 'CASTER', 'MELEE', 'RANGED', 'TOP_ENMITY', 'TARGET', 'MASTER' }) do
+    everywhere = everywhere and offers(1, t) and offers(2, t)
+end
+check(everywhere, 'offered in the dropdown for both condition slots with every target (the engine ignores the target for it)')
+local noPt = { conds = {} }
+for k, v in pairs(hcat.conds) do if k ~= 'PT_HAS_TANK' and k ~= 'NOT_PT_HAS_TANK' then noPt.conds[k] = v end end
+local hidden = true
+for _, sj in ipairs(M.subjects_for(1, 'TARGET', noPt)) do hidden = hidden and sj.key ~= 'PTTANK' end
+check(hidden, 'not offered when a server does not report it (the builder still follows the catalog)')
+-- every condition a starter template uses can be chosen in the builder (the gap the hotfix closes)
+local missing = {}
+for job, list in pairs(M.TEMPLATES) do
+    for _, t in ipairs(list) do
+        for i, r in ipairs(t.rules) do
+            for _, c in ipairs({ r.cond, r.cond2 }) do
+                if c and not M.SUBJECT_OF[c] then missing[#missing + 1] = string.format('%s rule %d: %s', job, i, c) end
+            end
+        end
+    end
+end
+check(#missing == 0, 'every condition of every starter template is in the builder: ' .. table.concat(missing, ', '))
+-- choosing, switching, wording
+local pr = { on = true, target = 'TARGET', cond = 'NOT_HAS_TOP_ENMITY', kind = 'ja', name = 'PROVOKE' }
+M.set_condition(pr, 2, 'PT_HAS_TANK', hcat)
+check(pr.cond2 == 'PT_HAS_TANK' and pr.arg2 == nil and M.check_draft({ name = 'Tank test', rules = { pr } }, hcat) == nil,
+      'chosen as the second condition: no value, passes the editor checks')
+M.set_condition(pr, 2, 'NOT_PT_HAS_TANK', hcat)
+check(pr.cond2 == 'NOT_PT_HAS_TANK' and pr.arg2 == nil and pr.cond == 'NOT_HAS_TOP_ENMITY', 'switched to "there is none": the other condition is untouched')
+check(M.cond_text('NOT_PT_HAS_TANK') == 'Party has no tank' and M.cond_text('PT_HAS_TANK') == 'Party has a tank'
+      and M.rule_short(war[1]) == 'Enemy: Not top enmity + No tank -> Provoke', 'the existing wording is unchanged')
+check(M.protected(war[1], hcat) == nil, 'the Basic Warrior Provoke rule is editable (not "kept")')
+-- saved, loaded and reapplied exactly as before: the wire form and the server's Rule Set checks
+local warWire = M.encode_rule(war[1])
+check(warWire == '1,TARGET,NOT_HAS_TOP_ENMITY,,NOT_PT_HAS_TANK,,j,PROVOKE,', 'the wire form of the Basic Warrior rule is unchanged: ' .. warWire)
+local warBack = G.decodeRule(warWire, 1)
+check(warBack and warBack.cond2 and warBack.cond2[1] == 'NOT_PT_HAS_TANK' and problems(warBack) == '', 'the server reads it back and accepts it')
+check(problems(rule('SELF', { 'PT_HAS_TANK' })) == '' and problems(rule('PARTY', { 'NOT_PT_HAS_TANK' })) == ''
+      and problems(rule('SELF', { 'PT_HAS_TANK', 1 })):find('takes no value', 1, true), 'PT_HAS_TANK / NOT_PT_HAS_TANK stay valid conditions without a value')
+check(ai.c.PT_HAS_TANK == 25 and ai.c.NOT_PT_HAS_TANK == 26, 'the engine ids are unchanged (25, 26)')
+if SERVER_ROOT then
+    local C2 = readAll(SERVER_ROOT .. '/src/map/ai/helpers/gambits_container.cpp') or ''
+    check(C2:find('case G_CONDITION::NOT_PT_HAS_TANK:', 1, true) and C2:find('predicateResults.push_back(!PartyHasTank());', 1, true)
+          and C2:find('jobType == xi::Job::NIN || jobType == xi::Job::PLD || jobType == xi::Job::RUN', 1, true),
+          'source: the engine meaning is the official one (a NIN, PLD or RUN main job in the party), as the label says')
+end
 end
 
 io.write(string.format('\npassed %d, failed %d\n', passed, failed))

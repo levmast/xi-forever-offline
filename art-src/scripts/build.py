@@ -19,9 +19,15 @@ BUTTONS = {
     'exit':     ((133, 56), 'EXIT',     [('ninja', (0.08, 0.0, 0.78, 0.42))],                     ((92, 46, 128), (30, 14, 46))),
     'update':   ((142, 56), 'UPDATE',   [('dragoon', (0.0, 0.0, 1.0, 0.4))],                      ((44, 112, 66), (14, 42, 24))),
     'logs':     ((130, 56), 'LOGS',     [('bard', (0.12, 0.0, 0.88, 0.55))],                      ((120, 78, 40), (46, 28, 12))),
+    # the bottom bar of the newer look (2026-11-20): HOME, WORLD, RULES, SQUADS, OPTIONS, CO-OP, SYSTEM, EXIT
+    'world':    ((126, 56), 'WORLD',    [('character-races', (0.04, 0.02, 0.31, 0.30))],          ((44, 112, 66), (14, 42, 24))),
+    'rules':    ((120, 56), 'RULES',    [('summoner', (0.38, 0.0, 0.84, 0.5))],                   ((46, 84, 150), (14, 28, 64))),
+    'options':  ((132, 56), 'OPTIONS',  [('beastmaster', (0.0, 0.0, 0.8, 0.55))],                 ((118, 48, 60), (44, 16, 24))),
+    'system':   ((140, 56), 'SYSTEM',   [('black-mage', (0.15, 0.0, 0.9, 0.62))],                 ((132, 88, 44), (52, 32, 14))),
 }
 
-ANCHOR = {'play': 0.62, 'stop': 0.7, 'squad': 0.5, 'update': 0.3, 'tools': 0.35}
+ANCHOR = {'play': 0.62, 'stop': 0.7, 'squad': 0.5, 'update': 0.3, 'tools': 0.35, 'options': 0.35}
+ART_SHARE = {'options': 0.27}      # how much of a small button the art may take (0.36 unless named here): a long word needs the room
 SUBTITLE = False
 GOLD = ((252, 230, 158), (170, 120, 40))
 INK = (52, 34, 18)
@@ -127,7 +133,7 @@ def make_button(name, style):
         return frame(img, c, GOLD if not dark else ((236, 242, 255), (80, 120, 196)), 3 if big else 2, ink=(20, 26, 48) if dark else INK)
     ah = h - 6
     strip = art_strip(parts, ah, None)
-    maxw = int(w * (0.44 if big else 0.36))
+    maxw = int(w * (0.44 if big else ART_SHARE.get(name, 0.36)))
     if name == 'dualbox':
         maxw = int(w * 0.5)
     if strip.width > maxw:
