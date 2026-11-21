@@ -58,6 +58,7 @@ S("event_harvest", "world", "Seasonal events", SWITCH, "Harvest Festival")
 S("event_starlight", "world", "Seasonal events", SWITCH, "Starlight Celebration")
 S("event_egg_hunt", "world", "Seasonal events", SWITCH, "Egg Hunt")
 S("event_horro", "world", "Seasonal events", SWITCH, "Horro's Visit")
+S("event_sunbreeze", "world", "Seasonal events", SWITCH, "Sunbreeze Festival")
 
 # the switch beside a section's title turns the whole feature on or off
 MASTERS = {"Town crowds": "crowds", "Field parties": "crowds_field", "Bot players": "bots",
