@@ -493,8 +493,29 @@ class LineReader:
         return [part.rstrip("\r") for part in parts if part.strip()]
 
 
+# (2026-11-20, Sunie: kanji in squad banter, mostly after "don't" / "won't", commas and full stops) The game's chat is
+# Shift-JIS: a curly apostrophe, a long dash or any other character outside plain ASCII arrives as bytes the game reads
+# as Japanese. AI models write those all the time, so what a mate says is put into plain ASCII first.
+ASCII_PUNCTUATION = {
+    "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u201b": "'", "\u2032": "'", "\u00b4": "'", "\u0060": "'",
+    "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u2033": '"', "\u00ab": '"', "\u00bb": '"',
+    "\u2013": "-", "\u2014": "-", "\u2015": "-", "\u2212": "-", "\u2010": "-", "\u2011": "-",
+    "\u2026": "...", "\u00a0": " ", "\u2009": " ", "\u200a": " ", "\u202f": " ", "\u200b": "", "\ufeff": "",
+    "\u2022": "-", "\u00b7": "-",
+}
+
+
+def plain_ascii(text: str) -> str:
+    import unicodedata
+    for odd, plain in ASCII_PUNCTUATION.items():
+        text = text.replace(odd, plain)
+    # accented letters keep their base letter (e -> e); anything else that is not ASCII (emoji, other scripts) is dropped
+    text = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in text if 32 <= ord(ch) < 127)
+
+
 def write_out(kind: str, mate: str, text: str) -> None:
-    text = clean_line(text)
+    text = clean_line(plain_ascii(str(text)))
     if not text:
         return
     line = f"{kind}\t{clean_line(mate)}\t{text}\n"
@@ -1618,7 +1639,7 @@ def handle_line(line: str) -> None:
         if name in PROFILES:
             respond(name, leader(), "\t".join(parts[2:]))
     elif kind == "CTX" and len(parts) >= 3:
-        CONTEXT["zone"] = clean_line(parts[1]) or CONTEXT["zone"]
+        CONTEXT["zone"] = clean_line(parts[1]).replace("_", " ") or CONTEXT["zone"]   # (the server sends Port_San_dOria)
         try:
             CONTEXT["level"] = int(parts[2])
         except ValueError:
@@ -1691,7 +1712,7 @@ def handle_line(line: str) -> None:
     elif kind == "BOTSAY" and len(parts) >= 3:
         handle_chat(clean_line(parts[1]), "\t".join(parts[2:]), from_bot=True)
     elif kind == "ZONE" and len(parts) >= 2:
-        zone = clean_line(parts[1])
+        zone = clean_line(parts[1]).replace("_", " ")
         CONTEXT["zone"] = zone or CONTEXT["zone"]
         CONTEXT["updated_at"] = time.time()
         handle_event("zone", f"the party entered {zone}.", "zone_chance")

@@ -204,7 +204,7 @@ cmd.onTrigger(player, 'dismiss'); check(W.cleared == 1, '!squad dismiss alone st
 
 section('giving gear: one-of-a-kind items (squad_copy_items) stay with you')
 reset(); player = entity(xi.objType.PC, { level = 30, id = 4 })
-bit = bit or { band = function(a, b) return a & b end }
+bit = bit or require('bit')
 xi.itemFlag = { RARE = 0x8000 }
 local deleted = {}
 package.loaded['modules/custom/lua/squad_copy_items'] = { [500] = 'Test Ring' }
@@ -222,6 +222,25 @@ trust.checkDistance = nil; player.checkDistance = function() return 1 end
 W.unlocked = {}; deleted = {}
 xi.squad.onTrade(player, trust, { { itemId = 500, slot = 3 }, { itemId = 502, slot = 4 } })
 check(W.unlocked[500] and W.unlocked[502] and #deleted == 1 and deleted[1] == 502, 'trading: the one-of-a-kind piece stays with you, the ordinary one is taken')
+
+section('giving gear: the launcher switch "you keep the item" (squad_config keep_gear)')
+local KEEP = { call_cooldown_min = 5, spell_scrolls = false, keep_gear = true }
+package.preload['modules/custom/lua/squad_config'] = function() return KEEP end
+W.unlocked = {}; deleted = {}
+cmd.onTrigger(player, 'give', '501')
+check(W.unlocked[501] and #deleted == 0, 'switch on, !squad give: unlocked and nothing is taken')
+check(W.printed[#W.printed]:find('you keep yours') ~= nil, 'and you are told: ' .. tostring(W.printed[#W.printed]))
+xi.squad.onTrade(player, trust, { { itemId = 502, slot = 4 }, { itemId = 503, slot = 5 } })
+check(W.unlocked[502] and W.unlocked[503] and #deleted == 0, 'switch on, trading: both unlocked, nothing is taken')
+KEEP = { call_cooldown_min = 5, spell_scrolls = false, keep_gear = false }
+W.unlocked = {}; deleted = {}
+xi.squad.onTrade(player, trust, { { itemId = 504, slot = 4 } })
+check(W.unlocked[504] and deleted[1] == 504, 'switch off: the piece is taken as before')
+KEEP = { call_cooldown_min = 5, spell_scrolls = false }
+W.unlocked = {}; deleted = {}
+cmd.onTrigger(player, 'give', '505')
+check(W.unlocked[505] and deleted[1] == 505, 'an older config file without the key: taken as before')
+package.preload['modules/custom/lua/squad_config'] = nil; package.loaded['modules/custom/lua/squad_config'] = nil
 
 section('resting with you')
 reset(); player = entity(xi.objType.PC, { level = 30, id = 4 })

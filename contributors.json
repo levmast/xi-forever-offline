@@ -1,6 +1,7 @@
 {
-  "_about": "Who can send updates from the launcher's contributor mode, and what they can send. Only the copy on GitHub's main branch counts. Areas: gambits.",
+  "_about": "Who can send updates from the launcher's contributor mode, and what they can send. Only the copy on GitHub's main branch counts. Areas: gambits (the live Gambits addon), kit (launcher, addons, tools), server (the server repo, dev branch), or all.",
   "contributors": {
-    "wildcabbagepatch": {"areas": ["gambits"]}
+    "wildcabbagepatch": {"areas": ["gambits", "all"]},
+    "SirTanta": {"areas": ["gambits", "all"]}
   }
 }

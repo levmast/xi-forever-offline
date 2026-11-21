@@ -256,7 +256,7 @@ def list_plugins(ashita_dir):
 
 
 # ---------- what an addon or plugin is (for the Addons page) ----------
-OWN_ADDONS = {"gambits", "followme", "servermenu", "squadpanel", "crystalboy"}
+OWN_ADDONS = {"gambits", "autobox", "followme", "servermenu", "squadpanel", "crystalboy"}
 PLUGIN_NOTES = {"addons": "Runs Lua addons (keep this on).", "thirdparty": "Lets third-party plugins load.",
                 "screenshot": "Screenshots without the interface.", "minimap": "A minimap on screen.",
                 "hardwaremouse": "Hardware mouse cursor.", "toon": "Cel-shaded look.", "winefix": "Fixes for Wine (Linux).",
@@ -488,6 +488,11 @@ RATE_FIELDS = [
     ("map.MOB_GIL_MULTIPLIER",          "map.lua",  "MOB_GIL_MULTIPLIER",          "Gil dropped by monsters",               1.0, 0.0, 100.0, "float"),
     ("main.GIL_RATE",                   "main.lua", "GIL_RATE",                    "Gil from quests",                       1.0, 0.0, 100.0, "float"),
     ("main.FAME_RATE",                  "main.lua", "FAME_RATE",                   "Fame from quests (1 = retail)",         1.0, 0.1, 20.0, "float"),
+    # (2026-11-20) lottery NMs (Leaping Lizzy, Valkurm Emperor...): the server reads these since v0.1.49 (spawn_slot.cpp).
+    # Chance: a multiplier on each NM's own chance; any negative value = the NM always comes next. 0 counts as 1%.
+    # Wait: a multiplier on the time after a kill before the NM can be rolled again; 0 = none.
+    ("main.NM_LOTTERY_CHANCE",          "main.lua", "NM_LOTTERY_CHANCE",           "Lottery NM spawn chance (1 = retail, -1 = always)", 1.0, -1.0, 100.0, "float"),
+    ("main.NM_LOTTERY_COOLDOWN",        "main.lua", "NM_LOTTERY_COOLDOWN",         "Lottery NM wait after a kill (1 = retail, 0 = none)", 1.0, 0.0, 10.0, "float"),
     ("main.TABS_RATE",                  "main.lua", "TABS_RATE",                   "Tabs from Fields of Valor",             1.0, 0.0, 100.0, "float"),
     ("main.SPARKS_RATE",                "main.lua", "SPARKS_RATE",                 "Sparks from Records of Eminence",       1.0, 0.0, 100.0, "float"),
     ("main.CASKET_DROP_RATE",           "main.lua", "CASKET_DROP_RATE",            "Treasure casket chance (0.1 = 10%)",    0.1, 0.0, 1.0,   "float"),
@@ -511,7 +516,10 @@ RATE_FIELDS = [
     ("main.ENABLE_TRUST_QUESTS",        "main.lua", "ENABLE_TRUST_QUESTS",         "Trust quest NPCs (1 = on)", 0, 0, 1, "int"),
     ("main.ENABLE_DAILY_TALLY",         "main.lua", "ENABLE_DAILY_TALLY",          "Gobbie Mystery Box (1 = on)", 0, 0, 1, "int"),
     ("main.HALLOWEEN_2005",             "main.lua", "HALLOWEEN_2005",              "Harvest Festival (Oct 20-Nov 1, 1=on)", 1,   0,   1,     "int"),
-    ("main.NEW_CHARACTER_CUTSCENE",     "main.lua", "NEW_CHARACTER_CUTSCENE",      "New-character cutscenes (1 = on)", 1, 0, 1, "int"),
+    # (2026-11-20) off by default for now: on the November 2026 game version the opening scene stops at the map page and
+    # the new character is stuck (Ste, Odeken, tarolin, shujimi): the era event files were made for October. A world
+    # that already has a saved value keeps it. Put the default back to 1 once the era files match the game again.
+    ("main.NEW_CHARACTER_CUTSCENE",     "main.lua", "NEW_CHARACTER_CUTSCENE",      "New-character cutscenes (1 = on)", 0, 0, 1, "int"),
     ("main.HOMEPOINT_TELEPORT",         "main.lua", "HOMEPOINT_TELEPORT",          "Home Point teleports (1 = on, 0 = classic)", 1, 0, 1, "int"),
     ("main.ENABLE_SURVIVAL_GUIDE",      "main.lua", "ENABLE_SURVIVAL_GUIDE",       "Survival Guide teleports (1 = on, 0 = classic)", 1, 0, 1, "int"),
     ("map.BASE_SPEED",                  "map.lua",  "BASE_SPEED",                  "Run speed (50 = retail)",               50,  40,  120,   "int"),
@@ -526,9 +534,11 @@ RATE_DEFAULTS.update({"crowds_field": True, "crowds_field_parties": 1})   # fiel
 RATE_DEFAULTS.update({"bots": True, "bots_roster": 100, "bots_online": 50})   # bot players (bots.lua, bots_life.lua)
 RATE_DEFAULTS.update({"bots_growth": "realistic"})
 RATE_DEFAULTS.update({"bots_head_start": False, "bots_head_start_done": False})   # one-time bot head start (bots_growth.lua)
+RATE_DEFAULTS.update({"squad_keep_gear": False})   # gear given to the squad is unlocked and you keep the piece (squad.lua squadKeepGear)
 RATE_DEFAULTS.update({"spell_scrolls": False})  # squad mates need scrolls for spells of level 18+ (blue magic from monsters) (squad.lua)
 RATE_DEFAULTS.update({"short_quest_waits": True})   # Chocobo's Wounds 1 minute, Forge Your Destiny 1 hour (late/quest_waits.lua)
 RATE_DEFAULTS.update({"events": "date"})   # seasonal events: "date" (their own dates), "on" (all year), "off" (events_mode.lua)
+RATE_DEFAULTS.update({"modern_stacks": True})   # item stacks as in today's game (12 / 99); off = Phoenix's era stacks (stack_mode.py)
 RATE_DEFAULTS.update({"full_bags": True})   # every bag (inventory, Mog Safe, Satchel, Sack, Case, Wardrobes) at 80 from the start (crystalboy_quests.lua)
 RATE_DEFAULTS.update({"squad_call_cooldown": 5})   # minutes before a squad mate can be called again (squad.lua)   # bots grow while you are away (bots_growth.lua)
 RATE_DEFAULTS.update({"squad_chat": True})   # squad mates answer in party chat with the local AI (squad-chat/squad_chat.py)
@@ -698,8 +708,9 @@ def write_crowds_config(server_dir, rates):
             max(0, min(550, int(rates.get("bots_online", 50) or 0))), growth, "true" if head_start else "false"))
     with open(os.path.join(module_dir, "squad_config.lua"), "w", encoding="utf-8", newline="\n") as f:
         f.write("-- Written by the XI: Forever Offline launcher (Rates tab). Do not edit: it is rewritten every launch.\n")
-        f.write("return { call_cooldown_min = %d, spell_scrolls = %s }\n" % (clean_call_cooldown(rates.get("squad_call_cooldown", 5)),
-                                                                      "true" if rates.get("spell_scrolls", False) else "false"))
+        f.write("return { call_cooldown_min = %d, spell_scrolls = %s, keep_gear = %s }\n" % (
+            clean_call_cooldown(rates.get("squad_call_cooldown", 5)), "true" if rates.get("spell_scrolls", False) else "false",
+            "true" if rates.get("squad_keep_gear", False) else "false"))
     with open(os.path.join(module_dir, "storage_config.lua"), "w", encoding="utf-8", newline="\n") as f:
         f.write("-- Written by the XI: Forever Offline launcher (Rates tab). Do not edit: it is rewritten every launch.\n")
         f.write("return { full_bags = %s }\n" % ("true" if rates.get("full_bags", True) else "false"))
@@ -755,6 +766,31 @@ def clean_crowd_size(value):
         return 15
 
 
+# Settings that players set by hand in settings/main.lua before the launcher had a box for them. The first time the
+# launcher sees no saved value for one, it takes the value from that file instead of the default, so an update does not
+# quietly undo a hand edit (the launcher writes its own value over the file from then on).
+ADOPTED_RATES = ("main.NM_LOTTERY_CHANCE", "main.NM_LOTTERY_COOLDOWN")
+
+
+def _adopt_hand_edits(here, rates, saved):
+    try:
+        missing = [f for f in RATE_FIELDS if f[0] in ADOPTED_RATES and f[0] not in saved]
+        if not missing:
+            return
+        with open(os.path.join(here, "config.json"), "r", encoding="utf-8-sig") as f:
+            server_dir = json.load(f).get("server_dir") or ""
+        for field in missing:
+            path = os.path.join(server_dir, "settings", field[1])
+            if not os.path.exists(path):
+                continue
+            with open(path, "r", encoding="utf-8-sig", errors="replace") as f:
+                found = re.search(r"(?m)^\s*" + re.escape(field[2]) + r"\s*=\s*(-?\d+(?:\.\d+)?)\s*,", f.read())
+            if found:
+                rates[field[0]] = clean_rate(field, found.group(1))
+    except Exception:
+        pass      # (no config.json yet, an unreadable file: the defaults stand)
+
+
 def load_rates(here):
     rates = dict(RATE_DEFAULTS)
     try:
@@ -763,6 +799,7 @@ def load_rates(here):
         for field in RATE_FIELDS:
             if field[0] in saved:
                 rates[field[0]] = clean_rate(field, saved[field[0]])
+        _adopt_hand_edits(here, rates, saved)
         for flag in ("all_crafts", "ah_sim", "era_exp", "conquest_sim"):
             if flag in saved:
                 rates[flag] = bool(saved[flag])
@@ -799,8 +836,12 @@ def load_rates(here):
             rates["squad_call_cooldown"] = clean_call_cooldown(saved["squad_call_cooldown"])
         if "full_bags" in saved:
             rates["full_bags"] = bool(saved["full_bags"])
+        if "modern_stacks" in saved:
+            rates["modern_stacks"] = bool(saved["modern_stacks"])
         if "spell_scrolls" in saved:
             rates["spell_scrolls"] = bool(saved["spell_scrolls"])
+        if "squad_keep_gear" in saved:
+            rates["squad_keep_gear"] = bool(saved["squad_keep_gear"])
         if "short_quest_waits" in saved:
             rates["short_quest_waits"] = bool(saved["short_quest_waits"])
         if "events" in saved:
@@ -908,7 +949,7 @@ def apply_preset(rates, name):
                          ("crowds_field", True), ("crowds_field_parties", 1),
                          ("bots", True), ("bots_roster", 100), ("bots_online", 50), ("bots_growth", "realistic"),
                          ("squad_chat", True), ("bots_head_start", False), ("bots_head_start_done", False),
-                         ("squad_call_cooldown", 5), ("full_bags", True), ("spell_scrolls", False),
+                         ("squad_call_cooldown", 5), ("full_bags", True), ("modern_stacks", True), ("spell_scrolls", False), ("squad_keep_gear", False),
                          ("short_quest_waits", True), ("events", "date")):
         out[key] = rates.get(key, default)
     out["crowds_per_zone"] = rates.get("crowds_per_zone", 15)
@@ -1047,8 +1088,24 @@ def apply_rates(server_dir, rates):
     wanted["map.lua"].append(("CRAFT_SPECIALIZATION_POINTS", 3200 if rates.get("all_crafts", True) else 400, "int"))
     # auction house: no limit on your own listings (the ah_pagination module shows them 6 per page)
     wanted["map.lua"].append(("AH_LIST_LIMIT", 0, "int"))
+    # (2026-11-20, Trinity: "Is fishing disabled?") the server default switches all fishing off (a guard against fishing
+    # bots on public servers, "enable at your own risk"); there is no such risk on your own world
+    wanted["map.lua"].append(("FISHING_ENABLE", True, "bool"))
+    # (2026-11-20, the user: "there is no reason for a limit here") no daily limits on your own world: fishing (200
+    # catches a day and the fatigue meter; needs the server from this release on, older ones skip the key) and
+    # chocobo digging (100 finds a day)
+    wanted["map.lua"].append(("FISHING_DAILY_LIMITS", False, "bool"))
+    wanted["main.lua"].append(("DIG_FATIGUE", 0, "int"))
+    # (2026-11-20, Yumainai: the rank 2-3 dragon was not capped) the server default lifts the level cap of every mission
+    # fight to the max level; on, they keep their era caps (era/lua/battlefields/mission_level_caps.lua: rank 2-3 at 25,
+    # rank 5-1 at 50, Promathia 30 / 40 / 50 / 60 / 75), like every other capped battlefield
+    wanted["map.lua"].append(("LV_CAP_MISSION_BCNM", True, "bool"))
     # Keep crash dumps on: settings/main.lua is rebuilt from the defaults every launch, so a hand edit
     # there is lost. With dumps on, a crash writes a minidump and a tombstone that names the function.
+    # (2026-11-20, Yumainai: "Explorer Moogles" standing in the middle of Northern San d'Oria, Bastok Mines and Mhaura that
+    # do nothing) they are Wings of the Goddess content, so the server parks them at 0,0,0 and hides them; but the zone
+    # scripts un-hide them whenever this level is not 0 (xi.server.setExplorerMoogles). 0 = no Explorer Moogles.
+    wanted["main.lua"].append(("EXPLORER_MOOGLE_LV", 0, "int"))
     wanted["main.lua"].append(("GENERATE_CORE_DUMP", True, "bool"))
     # The watchdog kills the map server when one tick takes 2 s. On slower PCs a log in (the bots logging in with you and
     # catching up on their history) can take longer; that's fine offline, so allow 15 s before it counts as a hang.
@@ -1258,6 +1315,37 @@ def apply_graphics(ini_path, values, game_dir=None):
     lines = _borderless_startpos(lines, values["window_mode"] == 3)
     with open(ini_path, "w", encoding="utf-8", newline="") as f:
         f.write(newline.join(lines) + newline)
+
+
+def apply_shot_dir(ini_path, game_dir):
+    """Only key 0042 (the game folder, where PrintScreen saves) in a boot file's [ffxi.registry]; nothing else changes.
+    For the boot files that do not get the Graphics page's values: the GM game and the second character (Abbot,
+    2026-11-19: PrintScreen still froze the game on his GM account). True when the file was changed."""
+    shot_dir = game_dir_value(game_dir)
+    if not shot_dir or not ini_path or not os.path.exists(ini_path):
+        return False
+    with open(ini_path, "r", encoding="utf-8-sig", newline="") as f:
+        text = f.read()
+    newline = "\r\n" if "\r\n" in text else "\n"
+    lines = text.splitlines()
+    start, end = _section_bounds(lines)
+    if start is None:
+        return False
+    want = f"0042 = {shot_dir}"
+    for i in range(start + 1, end):
+        if re.match(r"^\s*0042\s*=", lines[i]):
+            if lines[i].strip() == want:
+                return False
+            lines[i] = want
+            break
+    else:
+        insert_at = end
+        while insert_at > start + 1 and not lines[insert_at - 1].strip():
+            insert_at -= 1
+        lines.insert(insert_at, want)
+    with open(ini_path, "w", encoding="utf-8", newline="") as f:
+        f.write(newline.join(lines) + newline)
+    return True
 
 
 def _borderless_startpos(lines, borderless):

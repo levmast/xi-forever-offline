@@ -107,7 +107,9 @@ def build(conn, era):
     cos = query(conn, "SELECT b.itemid, b.name, e.slot, b.flags, b.BaseSell, "
                       "(SELECT COUNT(*) FROM item_mods m WHERE m.itemId = b.itemid AND m.modId <> 1) "
                       "FROM item_basic b JOIN item_equipment e ON e.itemId = b.itemid "
-                      "WHERE e.level <= 1 AND (b.flags & ?) <> 0", (CAN_EQUIP,))
+                      # (datadecay 2026-11-19: sapphire leggings, ruby robe showed nothing) MId 0 = the server has no
+                      # model for the piece yet ("not implemented" in item_equipment), so it would be invisible
+                      "WHERE e.level <= 1 AND e.MId > 0 AND (b.flags & ?) <> 0", (CAN_EQUIP,))
     pieces = {}
     for itemid, name, slot, flags, sell, stat_lines in cos:
         itemid, flags, sell, stat_lines = int(itemid), int(flags or 0), int(sell or 0), int(stat_lines)

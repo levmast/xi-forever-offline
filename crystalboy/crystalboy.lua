@@ -1,6 +1,6 @@
 addon.name    = 'crystalboy'
 addon.author  = 'XI: Forever Offline'
-addon.version = '1.3'
+addon.version = '1.7'
 addon.desc    = 'Crystal Boy: play your Game Boy cartridges inside FFXI.'
 addon.link    = ''
 
@@ -17,6 +17,7 @@ local util    = require('cb.util')
 local carts   = require('cb.carts')
 local input   = require('cb.input')
 local trace   = require('cb.trace')
+local audio   = require('cb.audio')
 local okchat, chat = pcall(require, 'chat')
 
 ------------------------------------------------------------------------------
@@ -29,6 +30,8 @@ local DEFAULTS = {
     pause_unfocused = true,
     core = '',            -- core file in addons\crystalboy\cores ('' = first one found)
     palette = 'auto',     -- gambatte colorization: auto, GBC, SGB, internal, disabled
+    sound = true,         -- (1.5) the game's sound
+    volume = 60,          -- 0-100
 }
 
 local P = {}       -- paths
@@ -105,6 +108,8 @@ local function load_settings()
     S.scale = math.max(1, math.min(6, tonumber(S.scale) or 3))
     S.ff_speed = math.max(2, math.min(10, tonumber(S.ff_speed) or 4))
     S.slot = math.max(1, math.min(3, tonumber(S.slot) or 1))
+    S.volume = math.max(0, math.min(100, tonumber(S.volume) or 60))
+    S.sound = S.sound ~= false
     S.binds = input.load(t.binds) -- (older versions kept window key codes in S.keys: replaced by the defaults)
 end
 
@@ -224,6 +229,7 @@ end
 
 local function stop_game()
     if G.game then flush_save(); save_play() end
+    pcall(audio.flush)
     retro.unload_game()
     G.game = nil
     G.cart = nil
@@ -234,6 +240,7 @@ end
 local function start_game(entry)
     if not char_name() then say('Log in to a character first: saves are kept per character.'); return end
     if entry.problem then say(entry.file .. ': ' .. entry.problem); return end
+    trace.again()
     trace.log('start_game ' .. entry.file)
     if not ensure_core() then say(G.core_error); return end
     trace.log('core ready ' .. tostring(retro.core_name()))
@@ -400,6 +407,7 @@ local function apply_input()
     for _, action in ipairs({ 'save', 'load' }) do
         local down = input.held(action, S.binds)
         if down and not G.held[action] and G.game then
+            trace.log('key: ' .. action .. ' state'); trace.step('key ' .. action .. ' state')
             if action == 'save' then save_state(S.slot) else load_state(S.slot) end
         end
         G.held[action] = down or nil
@@ -429,6 +437,26 @@ local function tick()
     trace.log('run ' .. n .. ' frames', 'run', 40); trace.step('run ' .. n .. ' frames')
     retro.run(n)
     trace.log('run done', 'rundone', 40); trace.step('run done')
+    -- (1.5) sound: what the core produced in these frames goes to the sound device. Not while fast forwarding (it would
+    -- only be noise), and never allowed to break the game: any failure switches the sound off for this session.
+    local samples, frames = retro.audio_take()
+    if S.sound and not G.audio_failed and not fast and frames > 0 then
+        trace.step('audio')
+        local ok, err = pcall(function()
+            if not audio.is_open() or audio.rate() ~= retro.sample_rate() then
+                local opened, why = audio.open(retro.sample_rate())
+                trace.log('audio open ' .. tostring(retro.sample_rate()) .. ' -> ' .. tostring(opened) .. ' ' .. tostring(why))
+                if not opened then error(why or 'no sound device') end
+            end
+            audio.write(samples, frames, S.volume)
+        end)
+        if not ok then
+            G.audio_failed = true
+            trace.log('audio off: ' .. tostring(err))
+            say('Crystal Boy: no sound this session (' .. tostring(err) .. ').')
+        end
+        trace.step('audio done')
+    end
     if now_s() >= G.next_flush then
         G.next_flush = now_s() + 3
         flush_save()
@@ -456,7 +484,9 @@ end
 local function draw()
     if not G.open[1] then G.focused = false; return end
     imgui.SetNextWindowSize({ 160 * S.scale + 20, 144 * S.scale + 120 }, ImGuiCond_FirstUseEver)
-    if imgui.Begin('Crystal Boy', G.open, ImGuiWindowFlags_AlwaysAutoResize) then
+    -- (1.6) no keyboard / controller navigation inside this window: the keys you play with (Enter = Start, Space = fast)
+    -- are also ImGui's "press the highlighted button" keys, so playing could press Save state, Load state or Reset
+    if imgui.Begin('Crystal Boy', G.open, bit.bor(ImGuiWindowFlags_AlwaysAutoResize, ImGuiWindowFlags_NoNavInputs or 0)) then
         G.focused = imgui.IsWindowFocused()
 
         local preview = G.cart and cart_name(G.cart) or 'Choose a cartridge...'
@@ -484,6 +514,7 @@ local function draw()
             local id, u, v = screen.image()
             trace.log('image ' .. tostring(id), 'img', 40); trace.step('image ' .. tostring(id))
             if id then imgui.Image(id, { w, h }, { 0, 0 }, { u, v }) else imgui.Dummy({ w, h }) end
+            trace.step('image drawn')
         else
             imgui.Dummy({ w, h / 2 })
             if G.core_error then imgui.TextColored({ 1, 0.45, 0.45, 1 }, G.core_error) end
@@ -497,11 +528,17 @@ local function draw()
             if imgui.RadioButton(tostring(i), S.slot == i) then S.slot = i; save_settings() end
             imgui.SameLine()
         end
-        if imgui.Button('Save state') then save_state(S.slot) end
+        if imgui.Button('Save state') then trace.log('button: save state'); trace.step('button save state'); save_state(S.slot); trace.step('button save state done') end
         imgui.SameLine()
-        if imgui.Button('Load state') then load_state(S.slot) end
+        if imgui.Button('Load state') then trace.log('button: load state'); trace.step('button load state'); load_state(S.slot); trace.step('button load state done') end
         imgui.SameLine()
-        if imgui.Button('Reset') and G.game then retro.reset() end
+        if imgui.Button('Reset') and G.game then trace.log('button: reset'); trace.step('button reset'); retro.reset(); trace.step('button reset done') end
+        imgui.SameLine()
+        if imgui.Button(S.sound and 'Sound: on' or 'Sound: off') then
+            S.sound = not S.sound; G.audio_failed = nil
+            if not S.sound then pcall(audio.flush) end
+            save_settings()
+        end
 
         imgui.SameLine()
         if imgui.Button(G.show_controls and 'Controls ^' or 'Controls') then G.show_controls = not G.show_controls; G.capture = nil end
@@ -546,6 +583,7 @@ local function draw()
             extra = string.format('   |   %s / %gh', hm((G.play or {})[title]), tonumber(rule.playtime_hours))
         end
         imgui.Text(status .. extra)
+        trace.step('window drawn')
     end
     imgui.End()
 end
@@ -567,6 +605,7 @@ local HELP = {
     '/cb ff              fast forward on/off (or hold Space while playing)',
     '/cb save [1-3]      save state            /cb load [1-3]   load state',
     '/cb scale <1-6>     picture size          /cb speed <2-10> fast forward speed',
+    '/cb sound [on|off]  the game\'s sound       /cb volume <0-100>',
     '/cb snap <name>     memory snapshot       /cb diff <a> <b> [ram]  what changed',
     '/cb record          record the game memory once a second (start / stop)',
     '/cb done            which games this character has completed',
@@ -596,6 +635,7 @@ end)
 
 ashita.events.register('unload', 'cb_unload', function()
     stop_game()
+    pcall(audio.close)
     retro.close()
     screen.release()
     save_settings()
@@ -637,6 +677,13 @@ ashita.events.register('command', 'cb_command', function(e)
         load_state(tonumber(a[3]) or S.slot)
     elseif sub == 'scale' then
         S.scale = math.max(1, math.min(6, tonumber(a[3]) or S.scale)); save_settings(); say('Scale ' .. S.scale)
+    elseif sub == 'sound' then
+        if a[3] == 'on' or a[3] == 'off' then S.sound = a[3] == 'on' else S.sound = not S.sound end
+        G.audio_failed = nil
+        if not S.sound then pcall(audio.flush) end
+        save_settings(); say('Sound ' .. (S.sound and 'on' or 'off'))
+    elseif sub == 'volume' then
+        S.volume = math.max(0, math.min(100, tonumber(a[3]) or S.volume)); save_settings(); say('Volume ' .. S.volume)
     elseif sub == 'speed' then
         S.ff_speed = math.max(2, math.min(10, tonumber(a[3]) or S.ff_speed)); save_settings(); say('Fast forward x' .. S.ff_speed)
     elseif sub == 'record' then
@@ -695,37 +742,67 @@ end)
 -- empty keyboard and controller (so your character does not walk off while you play). Click the game to give them back.
 local function captured() return G.open[1] and G.focused end
 
-ashita.events.register('key', 'cb_key', function(e)
+-- (1.5) Every input and frame handler runs guarded: a Lua error in one of them is written to the trace with the line
+-- it happened on (once per handler) and the add-on carries on, instead of Ashita reporting "exception in event" and the
+-- error being lost. A crash inside the emulator itself is not a Lua error and still ends in the trace's last step.
+local guard_seen = {}
+local function guarded(name, f)
+    return function(e)
+        local ok, err = xpcall(function() return f(e) end, debug.traceback)
+        if not ok and not guard_seen[name] then
+            guard_seen[name] = true
+            trace.log('ERROR in ' .. name .. ': ' .. tostring(err))
+            pcall(say, 'Crystal Boy hit an error in "' .. name .. '" and carried on. Please send Ashita/config/addons/crystalboy/trace.txt in a bug report.')
+        end
+    end
+end
+local function register(event, alias, f) ashita.events.register(event, alias, guarded(event, f)) end
+
+register('key', 'cb_key', function(e)
     if captured() then e.blocked = true end -- window messages (chat, menus)
 end)
 
-ashita.events.register('key_state', 'cb_key_state', function(e)
+-- (1.7) Ricc: arrows moved the character too and Enter never reached the Crystal Boy. FFXI also reads the keyboard's
+-- buffered events (key_data); they were neither read nor blocked. Now they are both while the window has focus.
+register('key_data', 'cb_key_data', function(e)
     if not captured() then return end
-    local ptr = e.data_raw or e.data
+    trace.log('key_data ' .. tostring(e.key) .. ' ' .. tostring(e.down), 'kd', 20)
+    input.key_data(e.key, e.down)
+    e.blocked = true
+end)
+
+register('key_state', 'cb_key_state', function(e)
+    if not captured() then return end
+    -- (1.4) the pointer to the game's own key table when there is one; a string (a copy) is only read
+    local ptr = e.data_raw
+    if ptr == nil or type(ptr) == 'string' then ptr = e.data end
     if ptr == nil or (e.size and e.size < 256) then return end
-    trace.log('key_state ' .. type(ptr) .. ' size ' .. tostring(e.size), 'ks', 10)
+    trace.log('key_state ' .. type(ptr) .. ' raw ' .. type(e.data_raw) .. ' data ' .. type(e.data) .. ' size ' .. tostring(e.size), 'ks', 10)
+    trace.step('key_state ' .. type(ptr))
     pcall(input.take_keyboard, ptr, true)
     trace.log('key_state done', 'ksd', 10)
 end)
 
-ashita.events.register('xinput_state', 'cb_xinput_state', function(e)
+register('xinput_state', 'cb_xinput_state', function(e)
     if not captured() or e.state == nil then return end
     trace.log('xinput_state ' .. type(e.state), 'xs', 10)
+    trace.step('xinput_state')
     pcall(input.take_xinput, e.state, e.state_modified)
 end)
 
-ashita.events.register('xinput_button', 'cb_xinput_button', function(e)
+register('xinput_button', 'cb_xinput_button', function(e)
     if captured() then e.blocked = true end
 end)
 
-ashita.events.register('dinput_button', 'cb_dinput_button', function(e)
+register('dinput_button', 'cb_dinput_button', function(e)
     if not captured() then return end
     trace.log('dinput ' .. tostring(e.button) .. ' ' .. tostring(e.state), 'di', 20)
+    trace.step('dinput_button')
     input.dinput(e.button, e.state)
     e.blocked = true
 end)
 
-ashita.events.register('d3d_present', 'cb_present', function()
+register('d3d_present', 'cb_present', function()
     local c = char_name()
     if G.game and c ~= G.char then
         stop_game() -- logged out or switched character: keep saves apart

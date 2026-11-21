@@ -20,9 +20,9 @@ Commands (/followme or /fm):
 DUALBOX REMOTE CONTROL (0.3): the Squad panel in your main window can switch this character to Auto and pick his job profile. The two game
 windows talk through two small files in config/addons/duo: this addon writes status.cfg every second (name, job, HP, MP, what it is doing, and the
 gambit engine's own "why" line) and reads command.cfg, which the panel writes.
-  /fm auto on|off          follow + assist + attack, AND the gambit engine's master switch (/gambits on|off)
+  /fm auto on|off          follow + assist + attack, AND the gambit engine's master switch (/autobox on|off)
   /fm profile <role>       auto | tank | damage | healer | support: switches the gambit rows of his current job on or off to match
-                           (it uses the engine's own /gambits enable|disable, and re-applies when his job changes)
+                           (it uses the engine's own /autobox enable|disable, and re-applies when his job changes)
   /fm unclaimed on|off     lets the gambit engine act on the monster he is fighting even when the game does not show who claimed it
                            (the engine's own AllowUnclaimedTargets setting; on by default, and kept as you set it)
   (automatic)              while he is engaged with a target, the probe runs several times a second (it only READS the game); the last such
@@ -39,10 +39,10 @@ the same by hand. It is not saved: zoning or reloading the addon puts following 
 SERVER MENU (0.9): the Server menu in your main window (it replaces the Squad panel) can also switch single gambit rows on or off, move a row up
 or down, and show or hide the gambit engine's own window. The command file may carry several of these at once (ops=enable:dia,move:3:1,...),
 and status.cfg now says which command was last carried out (ack=) and where his job's gambit sheet is (sheetpath=), so no click is lost.
-  /fm row <id> on|off      switches one row of his current job's sheet (the engine's /gambits enable|disable)
-  /fm move <from> <to>     moves a row (the engine's /gambits move)
+  /fm row <id> on|off      switches one row of his current job's sheet (the engine's /autobox enable|disable)
+  /fm move <from> <to>     moves a row (the engine's /autobox move)
 RESTING WITH THE LEADER (1.1): when the leader rests (/heal), this character rests too (/heal on), and when the leader gets up, so
-does he (/heal off; only if this addon sat him down). While he rests the gambit engine is paused (/gambits pause), so a cure or a buff
+does he (/heal off; only if this addon sat him down). While he rests the gambit engine is paused (/autobox pause), so a cure or a buff
 does not stand him up again, and it is resumed when he gets up. rest_with_leader=false in followme.cfg turns this off.
 HEALING THE WHOLE PARTY (1.0): the engine's everyday cure row (maintenance-cure) waits until someone is missing at least 40 HP.
 A low-level character never has 40 HP to lose, so it never fired and only the emergency cure (below 45%) was left. This addon lowers
@@ -57,7 +57,7 @@ The leader must be in the same party and the same zone.
 
 addon.name    = 'followme';
 addon.author  = 'XI: Forever Offline';
-addon.version = '1.2';
+addon.version = '1.3';
 addon.desc    = 'Keeps this character following and fighting alongside a chosen player, with the game\'s own commands.';
 addon.link    = '';
 
@@ -295,7 +295,7 @@ local function applyProfile()
         return;
     end
     for _, rule in ipairs(sheet) do
-        enqueue('/gambits ' .. (wanted(role, rule) and 'enable ' or 'disable ') .. rule[1]);
+        enqueue('/autobox ' .. (wanted(role, rule) and 'enable ' or 'disable ') .. rule[1]);
     end
     S.hideUntil = now() + #S.queue * 0.35 + 3;      -- the engine prints "Rule updated." for each; keep them out of the chat log
     say(string.format('profile %s applied to %s (%d rows)', role, S.job, #sheet));
@@ -304,7 +304,7 @@ end
 local function setAuto(on)
     cfg.enabled = on and 'true' or 'false';
     save_cfg();
-    enqueue('/gambits ' .. (on and 'on' or 'off'));
+    enqueue('/autobox ' .. (on and 'on' or 'off'));
     S.hideUntil = now() + 3;
 end
 
@@ -551,8 +551,8 @@ local function watchFight(t)
         and #S.queue == 0 and t >= S.userUntil then
         S.lastFightAsk, S.lastStatusAsk, S.lastOwnAsk = t, t, t;
         S.statusUntil, S.whyUntil = t + 3, t + 4;
-        enqueue('/gambits status');
-        enqueue('/gambits why');
+        enqueue('/autobox status');
+        enqueue('/autobox why');
     end
 end
 
@@ -573,7 +573,7 @@ local function fightLines()
 end
 
 local function resetSheet()
-    enqueue('/gambits reset confirm');
+    enqueue('/autobox reset confirm');
     S.hideUntil = now() + 8;
     S.applyAt = now() + 3;                              -- then the chosen profile goes back on top
     say('his rows for ' .. tostring(S.job) .. ' are being reset to the normal sheet');
@@ -611,7 +611,7 @@ local function inspectSheet(t)
             g:write(tuned);
             g:close();
             text = tuned;
-            enqueue('/gambits reload');
+            enqueue('/autobox reload');
             S.hideUntil = now() + 4;
             say('his everyday cure now starts when anyone is missing ' .. cfg.cure_min_missing .. ' HP (it was 40, too much for a low level party)');
         end
@@ -634,10 +634,10 @@ end
 -- (letters, digits, - and _ only), so nothing else can reach the chat line.
 local function rowCommand(kind, a, b)
     if (kind == 'enable' or kind == 'disable') and a and a:match('^[%w%-_]+$') then
-        enqueue('/gambits ' .. kind .. ' ' .. a);
+        enqueue('/autobox ' .. kind .. ' ' .. a);
         return true;
     elseif kind == 'move' and tonumber(a) and tonumber(b) then
-        enqueue(string.format('/gambits move %d %d', math.floor(tonumber(a)), math.floor(tonumber(b))));
+        enqueue(string.format('/autobox move %d %d', math.floor(tonumber(a)), math.floor(tonumber(b))));
         return true;
     end
     return false;
@@ -648,7 +648,7 @@ local function runOps(text)
     for op in tostring(text):gmatch('[^,]+') do
         local kind, a, b = op:match('^%s*(%a+):?([^:]*):?([^:]*)%s*$');
         if kind == 'titanui' then
-            enqueue('/gambits ui');
+            enqueue('/autobox ui');
             n = n + 1;
         elseif kind and rowCommand(kind, a ~= '' and a or nil, b ~= '' and b or nil) then
             n = n + 1;
@@ -699,8 +699,8 @@ local function housekeeping(t)
             S.statusUntil = t + 3;
             S.whyUntil = t + 4;
             S.lastOwnAsk = t;
-            enqueue('/gambits status');
-            enqueue('/gambits why');                       -- the engine's reason for each row that did not fire
+            enqueue('/autobox status');
+            enqueue('/autobox why');                       -- the engine's reason for each row that did not fire
         end
         if t - S.lastSheetRead >= 10 then inspectSheet(t); end
         if t - S.lastUnclaimedCheck >= 10 then
@@ -772,7 +772,7 @@ end
 
 -- Pausing the gambit engine is the only thing that keeps a cure or a buff from
 -- standing him up mid-rest. A pause nobody lifts is also how he stops healing:
--- /gambits pause 3600 outlives a reload, a zone, or a leader who never gets up.
+-- /autobox pause 3600 outlives a reload, a zone, or a leader who never gets up.
 -- So the pause is held in short slices instead of one long one: if the resume is
 -- ever lost, the engine turns itself back on within half a minute.
 local GAMBIT_PAUSE_SECONDS = 30;
@@ -782,7 +782,7 @@ local function holdGambitsPaused(t)
     if S.restPauseAt and (t - S.restPauseAt) < GAMBIT_PAUSE_REFRESH then return; end
     S.restPauseAt = t;
     S.restPaused = true;
-    enqueue('/gambits pause ' .. GAMBIT_PAUSE_SECONDS);
+    enqueue('/autobox pause ' .. GAMBIT_PAUSE_SECONDS);
     S.hideUntil = now() + 3;
 end
 
@@ -852,7 +852,7 @@ local function decide(t)
             if status ~= 33 then S.restedByUs = false; end
             if S.restPaused and status ~= 33 then
                 S.restPaused, S.restPauseAt = false, nil;
-                enqueue('/gambits resume');
+                enqueue('/autobox resume');
                 S.hideUntil = now() + 3;
             end
         end
@@ -896,7 +896,7 @@ local function tick(t)
         local me = mem and call(mem:GetParty(), 'GetMemberTargetIndex', 0);
         if not me or call(mem:GetEntity(), 'GetStatus', me) ~= 33 then
             S.restPaused, S.restedByUs, S.restPauseAt = false, false, nil;
-            enqueue('/gambits resume');
+            enqueue('/autobox resume');
             S.hideUntil = now() + 3;
         end
     end
@@ -932,7 +932,7 @@ ashita.events.register('text_in', 'followme_text_in', function (e)
     local t = now();
     local hide = false;
 
-    -- /gambits status: master switch, state and last attempt, where the status comes from, the job file, and the action counts
+    -- /autobox status: master switch, state and last attempt, where the status comes from, the job file, and the action counts
     local master = rest:match('Gambits (%u+) %| Job');
     if master then S.master = master; hide = true; end
     local state, last = rest:match('^State: (.-) %| Last attempt: (.*)$');
@@ -949,7 +949,7 @@ ashita.events.register('text_in', 'followme_text_in', function (e)
     if rest:find('^Status probes: ') then hide = true; end
     hide = hide and t < S.statusUntil and t >= S.userUntil;
 
-    -- /gambits why: the gate, then one reason per row that did not fire
+    -- /autobox why: the gate, then one reason per row that did not fire
     if t < S.whyUntil and t >= S.userUntil then
         if rest:find('^Gate: ') then
             S.whyNew = {};
@@ -976,9 +976,9 @@ ashita.events.register('text_in', 'followme_text_in', function (e)
 end);
 
 ashita.events.register('command', 'followme_command', function (e)
-    -- a /gambits status or /gambits why typed by the person (ours are sent a moment after we record them): show them the answer
+    -- a /autobox status or /autobox why typed by the person (ours are sent a moment after we record them): show them the answer
     local typed = tostring(e.command or ''):lower():gsub('^%s+', '');
-    if typed:find('^/gambits%s+status') or typed:find('^/gambits%s+why') then
+    if typed:find('^/autobox%s+status') or typed:find('^/autobox%s+why') then
         local ours = typed == S.lastSentCmd and now() - S.lastSentAt < 1.5;      -- the command we sent a moment ago, coming back through the same event
         if not ours then S.userUntil = now() + 4; end
     end

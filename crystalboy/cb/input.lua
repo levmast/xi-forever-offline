@@ -40,15 +40,32 @@ local POV = { POV_UP = { 31500, 0, 4500 }, POV_RIGHT = { 4500, 9000, 13500 }, PO
               POV_LEFT = { 22500, 27000, 31500 } }
 local STICK = 12000 -- left stick dead zone (also moves the D-pad)
 
-M.s = { kb = {}, xb = 0, lt = 0, rt = 0, lx = 0, ly = 0, di = {}, pov = -1 }
+M.s = { kb = {}, kd = {}, xb = 0, lt = 0, rt = 0, lx = 0, ly = 0, di = {}, pov = -1 }
 
 function M.clear()
-    M.s.kb, M.s.di = {}, {}
+    M.s.kb, M.s.kd, M.s.di = {}, {}, {}
     M.s.xb, M.s.lt, M.s.rt, M.s.lx, M.s.ly, M.s.pov = 0, 0, 0, 0, 0, -1
+end
+
+--- (1.7) Buffered keyboard events (Ashita's key_data: DirectInput GetDeviceData). FFXI takes many key presses from
+-- this buffer rather than from the key state, so they are both read here and kept from the game.
+function M.key_data(key, down)
+    if type(key) ~= 'number' or key < 1 or key > 255 then return end
+    M.s.kd[key] = down and true or nil
 end
 
 --- Keyboard state (256 bytes, DirectInput). Read it, then empty it so the game sees no key.
 function M.take_keyboard(ptr, block)
+    -- (1.4) a Lua string is a copy of the state: read it, never write through it (writing into a string's memory
+    -- corrupts the game's Lua and crashes it some time later)
+    if type(ptr) == 'string' then
+        local kb = {}
+        for i = 1, math.min(255, #ptr - 1) do
+            if ptr:byte(i + 1) >= 0x80 then kb[i] = true end
+        end
+        M.s.kb = kb
+        return
+    end
     local p = ffi.cast('uint8_t *', ptr)
     local kb = {}
     for i = 1, 255 do
@@ -100,7 +117,7 @@ end
 
 --- Is this action held, by any device?
 function M.held(action, binds)
-    if binds.kb[action] and M.s.kb[binds.kb[action]] then return true end
+    if binds.kb[action] and (M.s.kb[binds.kb[action]] or M.s.kd[binds.kb[action]]) then return true end
     if binds.xi[action] and xi_is(binds.xi[action]) then return true end
     if binds.di[action] and di_is(binds.di[action]) then return true end
     if action == 'up' then return M.s.ly > STICK end

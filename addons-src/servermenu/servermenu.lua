@@ -35,7 +35,7 @@ Settings (button place, last tab): config/addons/servermenu/settings.cfg
 
 addon.name    = 'servermenu';
 addon.author  = 'XI: Forever Offline';
-addon.version = '1.21';
+addon.version = '1.25';
 addon.desc    = 'The XI: Forever Offline menu: squad mates, and the dualbox character with his gambits.';
 addon.link    = '';
 
@@ -257,7 +257,7 @@ local function pump(t)
     if chat == nil or typing(chat) then return; end
     local first = table.remove(S.queue, pick);
     S.lastSend = t;
-    S.hideUntil = t + 2.5;
+    S.hideUntil = t + 6;   -- (1.25: was 2.5 s; a busy server answers later than that)
     pcall(function() chat:QueueCommand(1, first.command); end);
 end
 
@@ -873,10 +873,12 @@ local function campRow()
     local someonePulls = camp.puller ~= 0 or camp.botPuller ~= nil;
     if camp.on and someonePulls then
         imgui.SameLine(0, 6);
-        if button(camp.paused and 'Resume' or 'Pause', 'camppause', 72, 0, camp.paused and 'selected' or nil) then
-            campCommand(camp.paused and 'camp resume' or 'camp pause'); camp.paused = not camp.paused;
+        -- (1.22) a new camp waits for Start before the first pull (squad.lua, from Jon Tanta's Squad Update)
+        local fresh = camp.paused and (camp.pulls or 0) == 0;
+        if button(camp.paused and (fresh and 'Start' or 'Resume') or 'Pause', 'camppause', 72, 0, camp.paused and 'selected' or nil) then
+            campCommand(camp.paused and (fresh and 'camp start' or 'camp resume') or 'camp pause'); camp.paused = not camp.paused;
         end
-        tooltip(camp.paused and 'The puller goes back to pulling' or 'No new pulls (the squad still holds camp)');
+        tooltip(camp.paused and (fresh and 'The puller starts pulling' or 'The puller goes back to pulling') or 'No new pulls (the squad still holds camp)');
     end
     if camp.on then
         imgui.SameLine(0, 12);
@@ -896,7 +898,8 @@ local function campRow()
         for _, k in ipairs(camp.kinds) do
             if k.fits then
                 local key = k.name:lower():gsub('_', ' ');
-                local label = string.format('%s lv%d%s x%d', (k.name:gsub('_', ' ')), k.lo, k.hi ~= k.lo and ('-' .. k.hi) or '', k.count);
+                -- (1.24) the count is how many are up right now; none up = all defeated and waiting to come back
+                local label = string.format('%s lv%d%s %s', (k.name:gsub('_', ' ')), k.lo, k.hi ~= k.lo and ('-' .. k.hi) or '', k.count > 0 and ('x' .. k.count) or '(none up)');
                 imgui.SameLine(0, 6);
                 if button(label, 'campkind' .. k.name, 0, 0, wants[key] and 'selected' or nil) then
                     campCommand('camp want ' .. k.name);
@@ -1444,6 +1447,20 @@ local function myAutoOn()
     return tostring(S.cfg.auto_me) == 'true';
 end
 
+-- (1.23, 2026-11-19) the rules for your own character moved from the addon "Gambits" to "autobox" (the name Gambits
+-- now belongs to the squad Rule Set editor). autobox is not loaded at start: AUTO loads it, and /autobox commands are
+-- only sent while it is loaded (it keeps a flag file while it runs), so nobody sees a command error for it.
+local function autoboxLoaded()
+    local ok, found = pcall(function ()
+        local base = AshitaCore:GetInstallPath();
+        if not base:match('[/\\]$') then base = base .. '\\'; end
+        local f = io.open(base .. 'config\\addons\\Gambits\\autobox_loaded.flag', 'r');
+        if f then f:close(); return true; end
+        return false;
+    end);
+    return ok and found == true;
+end
+
 -- AutoBot reads this file before it rests anyone. Written on every toggle and
 -- forced to "off" at addon load, so resting is never on by accident.
 local function auto_flag_character()
@@ -1539,10 +1556,12 @@ local function syncAutoFlag()
 
     if not myAutoOn() then
         -- Gambits keeps its per-character master switch across sessions, and the
-        -- startup script's /gambits off runs before a character exists, where it
+        -- startup script's /autobox off runs before a character exists, where it
         -- is refused. Send it again now that there is one.
-        enqueue('/gambits off', 0.5)
-        enqueue('/gambits off', 3.0)
+        if autoboxLoaded() then
+            enqueue('/autobox off', 0.5)
+            enqueue('/autobox off', 3.0)
+        end
     end
 
     writeAutoFlag(myAutoOn())
@@ -1566,6 +1585,7 @@ local function setMyAuto(on)
     S.autoJob = on and job or nil;
     if on then
         enqueue('/addon load autobot', 0.1);
+        enqueue('/addon load autobox', 0.3);   -- (its rules; loading it twice only prints a notice)
         enqueue('/ab resume', 0.9);
         enqueue('/ab combat autoengage on', 1.1);
         enqueue('/ab combat approach on', 1.3);
@@ -1580,7 +1600,7 @@ local function setMyAuto(on)
         enqueue('/ab autows off', 2.0);
         enqueue('/ab hprest on', 2.4);
         enqueue('/ab job ' .. job .. ' on', 2.6);
-        enqueue('/gambits on', 2.8);
+        enqueue('/autobox on', 2.8);
         -- AutoBot's own addon load can still be finishing when the first pass
         -- runs, and a /ab sent to an addon that is not listening yet is simply
         -- lost. Send the two that matter again, later, then print what the
@@ -1592,7 +1612,7 @@ local function setMyAuto(on)
         enqueue('/ab job ' .. job .. ' report', 6.6);
         ask(7.0);
     else
-        enqueue('/gambits off');
+        if autoboxLoaded() then enqueue('/autobox off'); end
         enqueue('/ab combat autotarget off', 0.2);
         enqueue('/ab combat autoengage off', 0.4);
         enqueue('/ab combat approach off', 0.6);
@@ -2418,13 +2438,15 @@ ashita.events.register('text_in', 'servermenu_text_in', function (e)
     local text = strip(e.message_modified or e.message);
     local at = text:find('squadpanel:', 1, true);
     if at then
-        if now() < S.waitUntil + 3 then e.blocked = true; end                -- hidden only while the menu asked for it
+        -- (1.25, Altair and Yumainai: a wall of squadpanel: lines in the chat log) these lines are only data for this
+        -- menu. They used to be hidden for a few seconds after the menu asked; a second answer, or a slow one, got through.
+        e.blocked = true;
         onLine(text:sub(at + 11));
         return;
     end
     local sheetAt = text:find('squadsheet:', 1, true);
     if sheetAt then
-        if now() < (S.sheetWaitUntil or 0) + 3 then e.blocked = true; end
+        e.blocked = true;
         onSheetLine(text:sub(sheetAt + 11));
         return;
     end

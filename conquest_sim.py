@@ -259,10 +259,35 @@ def backup(rows):
 
 
 # ---------- modes ----------
+def repair_bot_homepoints(rows):
+    """One time (2026-11-20): until then every bot that returned to its Home Point after dying counted for the beastmen, and
+    the bots die a lot, so the Home Point counters ran into the hundreds and the beastmen took nearly every region. Puts the
+    counters back to what the kills in the region would bring, and gives each region the beastmen hold back to the nation that
+    held it before (or, when the beastmen held it then too, to the nation leading there now). Returns how many regions changed
+    hands."""
+    returned = 0
+    for region, row in enumerate(rows):
+        weight = WEIGHT.get(region, 10)
+        row["hp"] = min(row["hp"], int(round(row["kills"] * HOMEPOINTS_WEEK[weight] / KILLS_WEEK)))
+        if row["ctrl"] == BEASTMEN:
+            owner = row["prev"] if row["prev"] in (0, 1, 2) else decide_owner(row["inf"], 0)
+            if owner in (0, 1, 2):
+                row["ctrl"] = owner
+                returned += 1
+        if row["prev"] == BEASTMEN and row["ctrl"] in (0, 1, 2):
+            row["prev"] = row["ctrl"]
+    return returned
+
+
 def tick(conn, state, now, dry_run=False):
     seed, j_now = state["seed"], step_of(now)
     rows = read_rows(conn)
     notes = []
+    if "last_step" in state and not state.get("bot_homepoints_repaired"):
+        returned = repair_bot_homepoints(rows)
+        notes.append(f"one-time repair: the bots' Home Points no longer count for the beastmen, {returned} region(s) given back")
+    if not dry_run:
+        state["bot_homepoints_repaired"] = True
     if "last_step" not in state:                 # first run: build a few weeks of history so the map is not blank
         weeks = int(state["history_weeks"])
         j_tally = j_now - (j_now % STEPS_PER_WEEK)            # the most recent tally

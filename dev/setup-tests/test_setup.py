@@ -162,7 +162,13 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(read(self.ffxi, "ROM", "1", "1.DAT"), "era")
         self.assertEqual(read(self.kit, "dat-backup", "ROM", "1", "1.DAT"), "original")
         self.assertEqual(read(self.kit, "dat-backup", "new-files.txt").split(), [os.path.join("ROM2", "9", "9.DAT")])
-        self.assertIn("already installed", ls.install_era_dats(self.kit, self.ffxi)[0])
+        self.assertIn("up to date", ls.install_era_dats(self.kit, self.ffxi)[0])
+        # a game update writes its own file over an era one: applying again puts the era file back and keeps the
+        # update's file as the saved original (2026-11-19)
+        open(os.path.join(self.ffxi, "ROM", "1", "1.DAT"), "w").write("updated")
+        self.assertIn("put back: 1", ls.install_era_dats(self.kit, self.ffxi)[0])
+        self.assertEqual(read(self.ffxi, "ROM", "1", "1.DAT"), "era")
+        self.assertEqual(read(self.kit, "dat-backup", "ROM", "1", "1.DAT"), "updated")
         items = {i["id"]: i for i in tp.load_manifest(self.kit)}
         moves = tp.plan(items["eradats"], ["Era-DATs-main/README.md", "Era-DATs-main/ROM/1/1.DAT", "Era-DATs-main/YAML/x.yaml"])
         self.assertEqual(moves, [("Era-DATs-main/ROM/1/1.DAT", "Era-DATs/ROM/1/1.DAT")])

@@ -5,6 +5,7 @@
   2. Crystal Boy items: the Crystal Boy and the four Recollections (ROM\\118\\107.DAT), the four Memory key items
      (ROM\\175\\35.DAT) and the Anniversary Ring made stackable (ROM\\118\\109.DAT) (install_crystalboy_items.py).
   3. Chariot Band: its description (+75%, 720 min, 4000), 3 charges and a 15-hour recast (client-patches\\chariot_band.json).
+  4. Item stacks: today's stack sizes or the era's, to match the server (the "Modern item stacks" switch; stack_mode.py).
 
 Every step checks first and only writes what is missing, so this runs at the end of first-run setup and again on
 every PLAY of a player install (an update or a reinstalled era pack is caught the next time). A step that cannot be
@@ -163,12 +164,31 @@ def chariot_band(kit, game, log=print):
     return "Chariot Band: its description now matches this server (+75%, 3 charges, 15 hours)."
 
 
+# ----- 4. Item stacks -----
+def item_stacks(kit, game, server, log=print):
+    """The game's item files say how far each item stacks, and they have to agree with the server's item table.
+    The switch is "modern_stacks" in the launcher's rates (on = today's sizes, the default; off = the era's)."""
+    sm = _kit_module(kit, "stack_mode")
+    core = _kit_module(kit, "launcher_core")
+    rows = sm.overrides(server) if server else []
+    if not rows:
+        return None
+    modern = bool(core.load_rates(kit).get("modern_stacks", True))
+    changed, _right, skipped = sm.apply_dats(game, rows, modern, os.path.join(kit, "backups", "stacking-dat"))
+    if not changed:
+        return None
+    return "Item stacks: %d item(s) in the game files now stack %s%s." % (
+        changed, "as in today's game (12 / 99)" if modern else "as in the era",
+        (" (%d left alone)" % skipped) if skipped else "")
+
+
 def apply_all(kit, game, server, log=print):
-    """Runs the three steps; returns the messages. Never raises."""
+    """Runs the four steps; returns the messages. Never raises."""
     messages = []
     for name, step in (("Home Points", lambda: homepoints(kit, game, server, log)),
                        ("Crystal Boy", lambda: crystalboy(kit, game, log)),
-                       ("Chariot Band", lambda: chariot_band(kit, game, log))):
+                       ("Chariot Band", lambda: chariot_band(kit, game, log)),
+                       ("Item stacks", lambda: item_stacks(kit, game, server, log))):
         try:
             message = step()
         except PermissionError:

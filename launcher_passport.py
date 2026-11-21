@@ -47,7 +47,7 @@ LINK_SLOTS = (16, 17)                # char_equip slots of the two worn linkshel
 WORLD_VAR_PREFIXES = ("[Bots]", "[Bot]", "COOP_")               # character variables that belong to one world
 MAX_MATES = 12                # squad mates one character may bring (the game keeps six)
 SQUAD_TABLES = ("squad_mate", "squad_job", "squad_equip", "squad_unlock")
-MATE_VAR = re.compile(r"^(SQUAD_[A-Z_]*_)(\d+)$")                # a mate's own setting: SQUAD_AI_<mate id>, SQUAD_LOOK_<mate id>...
+MATE_VAR = re.compile(r"^(SQUAD_[A-Z_]*_)(\d+)((?:_\d+)?)$")                # a mate's own setting: SQUAD_AI_<mate id>, SQUAD_LOOK_<mate id>...
 GUEST_VAR = "COOP_GUEST"
 MAX_PASSPORT_BYTES = 64 * 1024 * 1024
 MAX_ROWS = 20000
@@ -431,7 +431,8 @@ def _mate_var(name, mates):
     if not found:
         return name
     new = (mates or {}).get(int(found.group(2)))
-    return None if new is None else found.group(1) + str(new)
+    # (group 3: the job of a per-job setting, SQUAD_WSC_<mate id>_<job>, the Gambits weapon skill settings)
+    return None if new is None else found.group(1) + str(new) + found.group(3)
 
 
 def _travel_rows(table, block, mates=None):
@@ -1098,3 +1099,245 @@ def remove_guest(conn, guest_id):
         raise
     finally:
         cur.close()
+
+
+# ----- one player, several PCs: a character (and its squad) carried from one world to another (2026-11-20) -----
+# A "carry" file is the same passport a visit uses, but nothing is locked and nobody is a guest: the character simply
+# exists in both worlds, and loading the file puts the newer copy over the older one (a backup of the older one is
+# kept first). Each world keeps its own settings, bots, linkshells and conquest: only the character and squad move.
+CARRY = "carry"
+CARRY_EXT = ".xichar"
+SYNC_STATE = "character_sync.json"
+
+
+def save_carry(conn, charid, versions=None, stopped=False):
+    """One of this world's own characters as carry-file bytes. The character must be logged out (stopped=True: the
+    servers are not running, so a session row left behind by a server that was closed means nothing)."""
+    ensure_tables(conn)
+    world = world_identity(conn)
+    cur = conn.cursor()
+    try:
+        row = _one(cur, "SELECT c.charname, c.accid, a.login FROM chars c JOIN accounts a ON a.id = c.accid WHERE c.charid = ?", (charid,))
+        if row is None or int(row[1]) >= BOT_ACCOUNT_BASE:
+            raise PassportError("That character does not exist here.")
+        if row[2] == AWAY_LOGIN:
+            raise PassportError(f"{row[0]} is visiting a friend's world. Bring it home first.")
+        if _one(cur, "SELECT 1 FROM coop_guest WHERE charid = ? AND state <> 'gone' LIMIT 1", (charid,)):
+            raise PassportError(f"{row[0]} is a visitor here: it goes home with its own world.")
+        if not stopped and is_online(cur, charid):
+            raise PassportError(f"{row[0]} is in the game right now. Log out first.")
+        layout, squad = local_layout(cur), squad_layout(cur)
+        tables = _read(cur, layout, charid)
+        return pack(_make(CARRY, tables, row[0], world, {"world": world["id"], "charid": charid}, "", int(time.time()),
+                          layout_signature(layout, squad), versions, squad=_read_squad(cur, squad, charid)))
+    finally:
+        cur.close()
+        conn.rollback()
+
+
+def read_carry(data):
+    """The unpacked carry file, or PassportError when it is something else."""
+    passport = unpack(data)
+    if passport.get("kind") != CARRY:
+        raise PassportError("That file was not made with SAVE FOR ANOTHER PC.")
+    if passport.get("format") != FORMAT:
+        raise PassportError("That file was made by another version of XI: Forever Offline. Update both PCs first.")
+    return passport
+
+
+def _player_account(cur):
+    """The account a carried character joins when it is new here: the player's own (the one with the most characters)."""
+    rows = _all(cur, "SELECT a.id, COUNT(c.charid) FROM accounts a LEFT JOIN chars c ON c.accid = a.id "
+                     "WHERE a.id < ? AND a.login <> ? AND a.id NOT IN (SELECT accid FROM coop_guest) "
+                     "GROUP BY a.id ORDER BY COUNT(c.charid) DESC, a.id LIMIT 1", (BOT_ACCOUNT_BASE, AWAY_LOGIN))
+    if not rows:
+        raise PassportError("This world has no account yet. Press PLAY and log in once (make any character), then load the file again.")
+    if int(rows[0][1]) >= 16:
+        raise PassportError("Your account here already has 16 characters: there is no room for another one.")
+    return int(rows[0][0])
+
+
+def load_carry(conn, data, backup_dir=None, stopped=False):
+    """Puts a carried character into this world: over the character of the same name when there is one (a backup of it
+    is written to backup_dir first), or as a new character on the player's account. Returns a dict for the message."""
+    passport = read_carry(data)
+    name = passport["name"]
+    ensure_tables(conn)
+    cur = conn.cursor()
+    try:
+        layout, squad = local_layout(cur), squad_layout(cur)
+        _check_tables(passport, layout, squad)
+        row = _one(cur, "SELECT c.charid, c.accid, a.login FROM chars c JOIN accounts a ON a.id = c.accid "
+                        "WHERE c.charname = ? LIMIT 1 FOR UPDATE", (name,))
+        here = row is not None and int(row[1]) < BOT_ACCOUNT_BASE
+        if here:
+            charid = int(row[0])
+            if row[2] == AWAY_LOGIN:
+                raise PassportError(f"{name} is visiting a friend's world from this PC. Bring it home first.")
+            if _one(cur, "SELECT 1 FROM coop_guest WHERE charid = ? AND state <> 'gone' LIMIT 1", (charid,)):
+                raise PassportError(f"A visitor named {name} is in this world, so {name} cannot be loaded now.")
+            if not stopped and is_online(cur, charid):
+                raise PassportError(f"{name} is in the game right now. Log out first.")
+    except Exception:
+        conn.rollback()
+        cur.close()
+        raise
+    saved = None
+    if here and backup_dir:                    # (backup_character ends its own transaction, so it runs between ours)
+        conn.rollback()
+        os.makedirs(backup_dir, exist_ok=True)
+        saved = os.path.join(backup_dir, f"{name}-before-load-{time.strftime('%Y%m%d-%H%M%S')}.zip")
+        with open(saved, "wb") as handle:
+            handle.write(backup_character(conn, charid))
+    try:
+        notes = []
+        if here:
+            if _one(cur, "SELECT 1 FROM chars WHERE charid = ? FOR UPDATE", (charid,)) is None or (not stopped and is_online(cur, charid)):
+                raise PassportError(f"{name} changed while the file was being read. Try again.")
+            mates = _put_squad(cur, squad, charid, passport.get("squad"), keep_ids=True)
+            notes = _replace_rows(cur, layout, charid, passport["tables"], mates=mates)
+        else:
+            renamed = _make_room_for_name(cur, name)          # (a bot with that name gets another one)
+            if renamed:
+                notes.append(f"A bot player was using the name and is now called {renamed}.")
+            accid = _player_account(cur)
+            wanted = int((passport.get("home") or {}).get("charid", 0))
+            charid = wanted if 0 < wanted < BOT_CHAR_BASE and not _one(cur, "SELECT 1 FROM chars WHERE charid = ?", (wanted,)) \
+                else _free_id(cur, "chars", "charid", 1, BOT_CHAR_BASE)
+            cols = layout["chars"]
+            values = [_dec(v) for v in passport["tables"]["chars"]["rows"][0]]
+            values[cols.index("charname")] = name
+            extra_cols, extra_vals = ["charid", "accid"], [charid, accid]
+            if "original_accid" in table_columns(cur, "chars"):
+                extra_cols.append("original_accid")
+                extra_vals.append(accid)
+            cur.execute(f"INSERT INTO chars ({', '.join('`' + c + '`' for c in extra_cols)}, {', '.join('`' + c + '`' for c in cols)}) "
+                        f"VALUES ({', '.join('?' for _ in extra_cols)}, {', '.join('?' for _ in cols)})", tuple(extra_vals + values))
+            mates = _put_squad(cur, squad, charid, passport.get("squad"), keep_ids=False)
+            for table in ONE_ROW + MANY_ROWS:      # the new-character trigger made empty rows: the file's replace them
+                if table in layout:
+                    cur.execute(f"DELETE FROM `{table}` WHERE charid = ?", (charid,))
+                    _insert(cur, table, layout[table], _travel_rows(table, passport["tables"][table], mates), charid)
+            if "char_stats" in layout and "zoning" in layout["char_stats"]:
+                cur.execute("UPDATE char_stats SET zoning = 0 WHERE charid = ?", (charid,))
+        conn.commit()
+        return {"name": name, "charid": charid, "new": not here, "backup": saved, "notes": notes,
+                "summary": passport.get("summary", {}), "made": int(passport.get("made", 0)),
+                "from": (passport.get("world") or {}).get("id", "")}
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+
+
+def _sync_state(kit):
+    try:
+        with open(os.path.join(kit, SYNC_STATE), encoding="utf-8-sig") as handle:
+            state = json.load(handle)
+        return state if isinstance(state, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_sync_state(kit, state):
+    with open(os.path.join(kit, SYNC_STATE), "w", encoding="utf-8") as handle:
+        json.dump(state, handle, indent=2)
+
+
+def _fingerprint(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def _content(conn, charid):
+    """A fingerprint of what a character and its squad are right now in this world (to tell whether a session changed it)."""
+    passport = unpack(save_carry(conn, charid, stopped=True))
+    return _fingerprint(json.dumps([passport["tables"], passport.get("squad")], sort_keys=True).encode("utf-8"))
+
+
+def sync_in(conn, folder, kit, log=print):
+    """Before the servers start: every carry file in the folder that this PC has not seen yet (another PC saved it) is
+    loaded. Returns how many characters were loaded. One bad file never stops the others."""
+    state, loaded = _sync_state(kit), 0
+    if not os.path.isdir(folder):
+        log(f"Character folder not found ({folder}): nothing loaded.")
+        return 0
+    for filename in sorted(os.listdir(folder)):
+        if not filename.lower().endswith(CARRY_EXT):
+            continue
+        path = os.path.join(folder, filename)
+        try:
+            if os.path.getsize(path) > MAX_PASSPORT_BYTES:
+                continue
+            with open(path, "rb") as handle:
+                data = handle.read()
+            mark = _fingerprint(data)
+            passport = read_carry(data)
+            name = passport["name"]
+            if state.get(name, {}).get("mark") == mark:
+                continue                                    # the copy this PC saved or already loaded
+            if int(passport.get("made", 0)) < int(state.get(name, {}).get("made", 0)):
+                log(f"{name}: the copy in the folder is older than the one here (the other PC has not saved yet?) - left alone.")
+                continue
+            done = load_carry(conn, data, backup_dir=os.path.join(kit, "backups"), stopped=True)
+            # (its fingerprint as it is stored here: mates are numbered this world's way, so the file's own would differ
+            # and the character would be saved back, and loaded on the other PC again, after every session)
+            state[name] = {"mark": mark, "made": int(passport.get("made", 0)), "content": _content(conn, done["charid"])}
+            _write_sync_state(kit, state)
+            loaded += 1
+            look = done["summary"]
+            log(f"{name} arrived from your other PC (level {look.get('level', '?')} {look.get('job', '')})"
+                + ("" if done["new"] else "; the copy that was here is in backups."))
+        except (PassportError, OSError, ValueError) as e:
+            log(f"{filename}: not loaded ({e})")
+    return loaded
+
+
+def sync_out(conn, folder, kit, log=print):
+    """After the servers stop: each of this world's own characters is saved to the folder (only when it changed)."""
+    state, saved = _sync_state(kit), 0
+    os.makedirs(folder, exist_ok=True)
+    for charid, name in home_characters(conn):
+        try:
+            data = save_carry(conn, charid, stopped=True)
+            passport = unpack(data)
+            content = _fingerprint(json.dumps([passport["tables"], passport.get("squad")], sort_keys=True).encode("utf-8"))
+            if state.get(name, {}).get("content") == content and os.path.exists(os.path.join(folder, name + CARRY_EXT)):
+                continue                                    # nothing happened to it this session
+            path = os.path.join(folder, name + CARRY_EXT)
+            with open(path + ".part", "wb") as handle:
+                handle.write(data)
+            os.replace(path + ".part", path)
+            state[name] = {"mark": _fingerprint(data), "made": int(passport.get("made", 0)), "content": content}
+            _write_sync_state(kit, state)
+            saved += 1
+        except (PassportError, OSError) as e:
+            log(f"{name}: not saved to the character folder ({e})")
+    return saved
+
+
+def _main(argv):
+    """python launcher_passport.py sync-in|sync-out   (the launcher runs these around a play session when the option is on)"""
+    kit = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(kit, "config.json"), encoding="utf-8-sig") as handle:
+        cfg = json.load(handle)
+    folder = cfg.get("char_sync_dir") or ""
+    if len(argv) < 2 or argv[1] not in ("sync-in", "sync-out") or not cfg.get("char_sync") or not folder:
+        return 0
+    conn = connect(cfg)
+    try:
+        if argv[1] == "sync-in":
+            count = sync_in(conn, folder, kit)
+            print(f"character folder: {count} character(s) loaded" if count else "character folder: nothing new")
+        else:
+            count = sync_out(conn, folder, kit)
+            print(f"character folder: {count} character(s) saved" if count else "character folder: nothing changed")
+    finally:
+        conn.close()
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    raise SystemExit(_main(sys.argv))

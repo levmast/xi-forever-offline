@@ -42,8 +42,14 @@ Each comes from its official release page and keeps its own license.
 
 ## Our own work
 The launcher, tools, server modules (squad, bots, crowds, caskets, era experience, Crystal Boy questline and others)
-and the Gambits, Crystal Boy, followme, servermenu and squadpanel addons were written for this project.
+and the Gambits, GambitsV2, Crystal Boy, followme, servermenu and squadpanel addons were written for this project.
 Gambits began as the TitanGambits engine and was brought here by its author.
+
+## Contributors
+- **Levi Masterson ([levmast](https://github.com/levmast))**: the game switch fix for installs made with Square Enix's
+  official installer (Windows Installer descriptors lifted while the game runs, so the copy's DLLs load).
+- **[wildcabbagepatch](https://github.com/wildcabbagepatch)**: GambitsV2, the in-game Squad Rule Set editor, and its
+  server side (squad Rule Sets, job ability rules for squad mates, the `!gsq` command).
 
 ## Crystal Boy mini games
 

@@ -115,8 +115,27 @@ local function input_state(port, device, index, id)
     return 0
 end
 
-local function audio_batch(data, frames) return frames end
-local function audio_one(l, r) end
+-- Sound (1.5): the core's samples are collected here while it runs and handed to cb/audio.lua after the frame
+-- (M.audio_take). Stereo int16 frames; when nobody takes them the oldest are simply overwritten from the start.
+local AUDIO_CAP = 8192
+local function audio_batch(data, frames)
+    local n = tonumber(frames)
+    if st.audio and n > 0 and not null(data) then
+        local room = AUDIO_CAP - st.audio_n
+        local take = n < room and n or room
+        if take > 0 then
+            ffi.copy(st.audio + st.audio_n * 2, data, take * 4)
+            st.audio_n = st.audio_n + take
+        end
+    end
+    return frames
+end
+local function audio_one(l, r)
+    if st.audio and st.audio_n < AUDIO_CAP then
+        st.audio[st.audio_n * 2], st.audio[st.audio_n * 2 + 1] = l, r
+        st.audio_n = st.audio_n + 1
+    end
+end
 local function poll() end
 
 -- Core calls that may call back into Lua must not be JIT-compiled.
@@ -142,6 +161,7 @@ function M.open(path, dir, vars)
     core = lib
     st = { fmt = M.FMT_0RGB1555, frames_drawn = 0, vars = vars or {} }
     st.frame = ffi.new('uint8_t[?]', 256 * 256 * 4)
+    st.audio, st.audio_n = ffi.new('int16_t[?]', AUDIO_CAP * 2), 0
     if dir then st.dir_c = ffi.new('char[?]', #dir + 1, dir) end
     cbs.env   = ffi.cast('retro_environment_t', env)
     cbs.video = ffi.cast('retro_video_refresh_t', video)
@@ -181,6 +201,8 @@ function M.load_game(rom, path)
     local av = ffi.new('struct retro_system_av_info')
     core.retro_get_system_av_info(av)
     st.fps = (av.timing.fps > 1) and av.timing.fps or 59.7275
+    st.sample_rate = (av.timing.sample_rate > 1000) and math.floor(av.timing.sample_rate + 0.5) or 32768
+    st.audio_n = 0
     st.loaded = true
     st.frames_drawn = 0
     return true
@@ -193,6 +215,14 @@ function M.unload_game()
 end
 
 function M.fps() return st.fps or 59.7275 end
+function M.sample_rate() return st.sample_rate or 32768 end
+
+--- The sound collected since the last call: pointer to stereo int16 frames, and how many. Empties the collection.
+function M.audio_take()
+    local n = st.audio_n or 0
+    st.audio_n = 0
+    return st.audio, n
+end
 function M.run(n) if core and st.loaded and n > 0 then c_run(n) end end
 function M.reset() if core and st.loaded then c_reset() end end
 

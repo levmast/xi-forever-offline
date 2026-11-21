@@ -352,18 +352,21 @@
       "license": "GPL-2.0",
       "homepage": "https://docs.libretro.com/library/gambatte/",
       "into": "ashita",
-      "note": "The 32-bit (x86) build: Ashita runs inside the 32-bit game.",
+      "note": "The 32-bit (x86) build: Ashita runs inside the 32-bit game. The build the Crystal Boy add-on was tested with ships with the kit (libretro's own build of 2026-10-27, GPL v2, source at github.com/libretro/gambatte-libretro): a newer build crashed the add-on.",
       "source": {
-        "type": "url",
-        "url": "https://buildbot.libretro.com/nightly/windows/x86/latest/gambatte_libretro.dll.zip"
+        "type": "kit",
+        "path": "thirdparty-bundled/gambatte",
+        "version": "2026-10-27",
+        "sha256": "faa7f03e0d13813a6e6e4b1ce208b1b6520679d22e5a653ca5c29fbcdd8029aa"
       },
       "files": [
         [
-          "gambatte_libretro.dll",
-          "addons/crystalboy/cores/gambatte_libretro.dll"
+          "cores/",
+          "addons/crystalboy/cores/"
         ]
       ],
-      "check": "addons/crystalboy/cores/gambatte_libretro.dll"
+      "check": "addons/crystalboy/cores/gambatte_libretro.dll",
+      "refresh_if_installed": true
     },
     {
       "id": "journal",

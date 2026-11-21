@@ -54,6 +54,7 @@
 !/check-rebuild.ps1
 !/check-updates.ps1
 !/server_update.py
+!/team_update.py
 !/install-era-dats.ps1
 !/restore-original-dats.ps1
 !/get-reshade-packs.ps1
@@ -91,9 +92,11 @@
 !/addons-src/
 /addons-src/*
 !/addons-src/Gambits/
+!/addons-src/autobox/
 !/addons-src/followme/
 !/addons-src/servermenu/
 !/addons-src/squadpanel/
+!/addons-src/GambitsV2/
 !/addons-src/journal-era/
 
 # ---- server modules (copies kept with the kit) ----
@@ -159,6 +162,7 @@ __pycache__/
 *.exe
 *.dll
 !/thirdparty-bundled/*/plugins/*.dll
+!/thirdparty-bundled/*/cores/*.dll
 config.json
 desktop.ini
 Thumbs.db
@@ -173,3 +177,4 @@ Thumbs.db
 
 # face reference pictures downloaded from FFXIclopedia (not shipped)
 /art-src/faces/
+/dev/incoming/

@@ -593,10 +593,86 @@ def write_config(kit, values):
 
 
 # ----- the kit's own addons -----
-OWN_ADDONS = ("Gambits", "followme", "servermenu", "squadpanel")
+# (2026-11-19) "Gambits" is now the squad Rule Set editor (wildcabbagepatch's Gambits v2, first shipped as GambitsV2);
+# the addon that had the name before (your own character's rules, Parser, EXP Watch, Enemy Info) is "autobox".
+OWN_ADDONS = ("Gambits", "autobox", "followme", "servermenu", "squadpanel")
 STOCK_ADDONS = ("distance", "fps", "move", "timestamp", "tparty", "checker", "drawdistance", "allmaps")
 STOCK_PLUGINS = ("minimap",)
 START_ADDONS = ("Gambits", "servermenu", "crystalboy")          # loaded at startup on a new install
+
+
+def migrate_gambits_names(kit, ashita_dir, log=print):
+    """One time, on an install from before 2026-11-19: Ashita\\addons\\Gambits still holds the old engine (now "autobox")
+    and the squad editor may sit in addons\\GambitsV2. Both are moved to <kit>\\backups\\addons, the new Gambits and autobox
+    are copied in, and the start scripts follow: the main window keeps "/addon load Gambits" (now the squad editor; a
+    GambitsV2 line is dropped), the second window (dualbox.txt), whose character is driven by the old engine, loads
+    autobox instead. Player sheets stay where they are (config\\addons\\Gambits). Returns the messages."""
+    addons = os.path.join(ashita_dir, "addons")
+    if not os.path.isdir(addons):
+        return []
+    old = os.path.join(addons, "Gambits")
+    v2 = os.path.join(addons, "GambitsV2")
+    old_engine = os.path.isdir(old) and not os.path.exists(os.path.join(old, "squad_editor.lua"))
+    if not old_engine and not os.path.isdir(v2):
+        return []
+    if not os.path.exists(os.path.join(kit, "addons-src", "Gambits", "squad_editor.lua")) or \
+            not os.path.exists(os.path.join(kit, "addons-src", "autobox", "autobox.lua")):
+        return []                                  # (this kit does not have the renamed addons: leave everything alone)
+    keep = os.path.join(kit, "backups", "addons")
+    os.makedirs(keep, exist_ok=True)
+    tag = time.strftime("%Y%m%d-%H%M%S")
+    messages = []
+    if old_engine:
+        shutil.move(old, os.path.join(keep, f"Gambits-before-autobox-{tag}"))
+    if os.path.isdir(v2):
+        shutil.move(v2, os.path.join(keep, f"GambitsV2-{tag}"))
+    for name in ("Gambits", "autobox"):
+        shutil.copytree(os.path.join(kit, "addons-src", name), os.path.join(addons, name), dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns("*.before-*", "*.bak"))
+    scripts = os.path.join(ashita_dir, "scripts")
+    line_re = re.compile(r"^(\s*/addon\s+load\s+)(\S+)\s*$", re.I)
+    for name in (os.listdir(scripts) if os.path.isdir(scripts) else []):
+        if not name.lower().endswith(".txt"):
+            continue
+        path = os.path.join(scripts, name)
+        try:
+            with open(path, "r", encoding="utf-8-sig") as handle:
+                lines = handle.read().splitlines()
+        except OSError:
+            continue
+        second = name.lower() == "dualbox.txt"
+        out, changed = [], False
+        loaded = {m.group(2).lower() for m in (line_re.match(x) for x in lines) if m}
+        for line in lines:
+            m = line_re.match(line)
+            addon = m.group(2).lower() if m else ""
+            if addon == "gambitsv2":
+                changed = True
+                if "gambits" not in loaded and not second:
+                    out.append(m.group(1) + "Gambits")
+                    loaded.add("gambits")
+                continue
+            switch = re.match(r"^\s*/gambits\s+(on|off)\s*$", line, re.I)
+            if switch and old_engine:               # a start-up "/gambits off" was meant for the old engine
+                changed = True
+                if second:
+                    out.append("/autobox " + switch.group(1).lower())
+                continue
+            if addon == "gambits" and second and old_engine:
+                changed = True
+                if "autobox" not in loaded:
+                    out.append(m.group(1) + "autobox")
+                    loaded.add("autobox")
+                continue
+            out.append(line)
+        if changed:
+            with open(path, "w", encoding="utf-8", newline="\r\n") as handle:
+                handle.write("\n".join(out).rstrip("\n") + "\n")
+    messages.append("Gambits is now the squad Rule Set editor (/gambits). Your own character's rules moved to the add-on "
+                    "'autobox' (/autobox): switch it on in ADDONS > Addons if you use them. Your sheets are untouched.")
+    for line in messages:
+        log(line)
+    return messages
 
 
 def install_own_addons(kit, ashita_dir):
@@ -911,6 +987,101 @@ def existing_case(base, rel):
 
 
 # ----- Phoenix's Era-DATs (the same steps and backup layout as install-era-dats.ps1 / restore-original-dats.ps1) -----
+def reapply_era_dats(ffxi_dir, era_dir, backup, files, log=print):
+    """(2026-11-19, Altair) The Era-DATs are installed already (dat-backup exists), but a PlayOnline/FFXI update wrote its
+    own files over some of them. Copies back only the era files that differ. A game file that is neither the era file nor
+    the saved original is a newer original from the update: it replaces the saved one, so restore-original-dats.ps1
+    still gives back the current game files."""
+    import filecmp
+    changed = 0
+    for index, rel in enumerate(files, 1):
+        src, dest = os.path.join(era_dir, rel), existing_case(ffxi_dir, rel)
+        if os.path.exists(dest) and filecmp.cmp(src, dest, shallow=False):
+            continue
+        saved = os.path.join(backup, rel)
+        if os.path.exists(dest) and not (os.path.exists(saved) and filecmp.cmp(saved, dest, shallow=False)):
+            if os.path.exists(saved) or os.path.exists(dest):
+                os.makedirs(os.path.dirname(saved), exist_ok=True)
+                shutil.copy2(dest, saved)
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        shutil.copy2(src, dest)
+        changed += 1
+        if index % 500 == 0:
+            log(f"Era-DATs: checked {index}/{len(files)}")
+    if changed == 0:
+        return ["The Era-DATs are installed and up to date."]
+    return [f"Era-DATs put back: {changed} file(s) a game update had replaced (the update's files are saved in dat-backup)."]
+
+
+def _era_files(era_dir):
+    files = []
+    for rom in ("ROM", "ROM2", "ROM3", "ROM4"):
+        for root, _dirs, names in os.walk(os.path.join(era_dir, rom)):
+            files += [os.path.relpath(os.path.join(root, n), era_dir) for n in names]
+    return files
+
+
+def _era_state_path(kit):
+    return os.path.join(kit, "backups", "era-state.json")
+
+
+def check_era_dats(kit, ffxi_dir, log=print):
+    """(2026-11-19, Yumainai, Altair) An FFXI/PlayOnline update quietly writes retail files over the era ones (wrong monster
+    names, Home Points that freeze...). On every PLAY: files whose size/time changed since the last PLAY are compared with
+    the era copy, and the ones an update replaced are put back (reapply_era_dats). Nothing happens when the era files were
+    never installed or were removed on purpose (no dat-backup). Returns the messages."""
+    import filecmp, json
+    era_dir, backup = os.path.join(kit, "Era-DATs"), os.path.join(kit, "dat-backup")
+    if not ffxi_dir or not os.path.isdir(backup) or not os.path.isdir(os.path.join(ffxi_dir, "ROM")):
+        return []
+    files = _era_files(era_dir)
+    if not files:
+        return []
+    try:
+        with open(_era_state_path(kit), "r", encoding="utf-8") as handle:
+            state = json.load(handle)
+    except (OSError, ValueError):
+        state = {}
+    drifted = []
+    for rel in files:
+        dest = existing_case(ffxi_dir, rel)
+        try:
+            st = os.stat(dest)
+        except OSError:
+            drifted.append(rel)
+            continue
+        if state.get(rel) == [st.st_size, st.st_mtime_ns]:
+            continue
+        src = os.path.join(era_dir, rel)
+        if st.st_size != os.path.getsize(src) or not filecmp.cmp(src, dest, shallow=False):
+            drifted.append(rel)
+    if not drifted:
+        return []
+    log(f"Era-DATs: {len(drifted)} game file(s) changed since the last PLAY (a game update?) - checking them.")
+    return reapply_era_dats(ffxi_dir, era_dir, backup, drifted, log)
+
+
+def record_era_state(kit, ffxi_dir):
+    """Remembers size and time of every era file in the game (after our own patches), so the next PLAY only looks at the
+    files that changed since."""
+    import json
+    era_dir = os.path.join(kit, "Era-DATs")
+    if not ffxi_dir or not os.path.isdir(os.path.join(kit, "dat-backup")):
+        return
+    state = {}
+    for rel in _era_files(era_dir):
+        try:
+            st = os.stat(existing_case(ffxi_dir, rel))
+        except OSError:
+            continue
+        state[rel] = [st.st_size, st.st_mtime_ns]
+    path = _era_state_path(kit)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".tmp", "w", encoding="utf-8") as handle:
+        json.dump(state, handle)
+    os.replace(path + ".tmp", path)
+
+
 def install_era_dats(kit, ffxi_dir, era_dir=None, log=print):
     """Copies Era-DATs\\ROM..ROM4 into the game folder. Every file it replaces is saved in <kit>\\dat-backup first and the
     new ones are listed in dat-backup\\new-files.txt, so restore-original-dats.ps1 can undo it."""
@@ -918,14 +1089,14 @@ def install_era_dats(kit, ffxi_dir, era_dir=None, log=print):
     backup = os.path.join(kit, "dat-backup")
     if not os.path.isdir(os.path.join(ffxi_dir, "ROM")):
         raise RuntimeError("That is not the FFXI game folder (no ROM folder).")
-    if os.path.isdir(backup):
-        return ["The Era-DATs are already installed (dat-backup exists). Run restore-original-dats.ps1 to undo them."]
     files = []
     for rom in ("ROM", "ROM2", "ROM3", "ROM4"):
         for root, _dirs, names in os.walk(os.path.join(era_dir, rom)):
             files += [os.path.relpath(os.path.join(root, n), era_dir) for n in names]
     if not files:
         raise RuntimeError("The Era-DATs are not downloaded yet.")
+    if os.path.isdir(backup):
+        return reapply_era_dats(ffxi_dir, era_dir, backup, files, log)
     new = []
     for index, rel in enumerate(files, 1):
         dest = existing_case(ffxi_dir, rel)

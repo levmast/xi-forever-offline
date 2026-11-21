@@ -1612,13 +1612,13 @@ class RatesTab(tk.Frame):
             ttk.Spinbox(inner, from_=field[5], to=field[6], increment=1 if field[7] == "int" else 0.25,
                         textvariable=var, width=8).grid(row=row, column=1, padx=6, pady=2)
             row += 1
-        for k in (2, 20, 18, 23, 0, 24):        # era exp tables, fast travel, full bags, short quest waits, all crafts, seasonal events
+        for k in (2, 20, 18, 25, 23, 0, 24):    # era exp tables, fast travel, full bags, item stacks, short quest waits, all crafts, seasonal events
             R[k], row = row, row + 1
         row = header("World", row)
         for k in (3, 1, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14):
             R[k], row = row, row + 1
         row = header("Squad and AI", row)
-        for k in (15, 16, 19, 21, 22, 17):
+        for k in (15, 16, 19, 26, 21, 22, 17):   # (26: squad gear, you keep the item)
             R[k], row = row, row + 1
         self.all_crafts = tk.BooleanVar(value=rates.get("all_crafts", True))
         tk.Checkbutton(inner, text="Every craft can reach 100 (off = only one, like the retail rule)", variable=self.all_crafts, bg=BG, fg=FG,
@@ -1704,6 +1704,12 @@ class RatesTab(tk.Frame):
                        "wardrobe rewards) add space. Bags never shrink.",
                        variable=self.full_bags, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
                        wraplength=520, justify="left").grid(row=R[18], column=0, columnspan=2, sticky="w", padx=6, pady=2)
+        self.modern_stacks = tk.BooleanVar(value=rates.get("modern_stacks", True))
+        tk.Checkbutton(inner, text="Modern item stacks: items stack as in today's game (sheepskin, goblin helms and the like "
+                       "to 12, and some to 99). Off = the era: most of those don't stack at all. Empty or split your stacks "
+                       "of those items before switching this off.",
+                       variable=self.modern_stacks, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
+                       wraplength=520, justify="left").grid(row=R[25], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         on = all(str(self.vars[k].get()).strip() not in ("0", "0.0") for k in self.FAST_TRAVEL)
         self.fast_travel = tk.BooleanVar(value=on)
         tk.Checkbutton(inner, text="Fast travel: Home Point and Survival Guide teleports (touch one once, then teleport to it "
@@ -1717,6 +1723,11 @@ class RatesTab(tk.Frame):
                        "from monsters you defeat with a squad Blue Mage out. Below 18 everything stays automatic.",
                        variable=self.spell_scrolls, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
                        wraplength=520, justify="left").grid(row=R[19], column=0, columnspan=2, sticky="w", padx=6, pady=2)
+        self.squad_keep_gear = tk.BooleanVar(value=rates.get("squad_keep_gear", False))
+        tk.Checkbutton(inner, text="Squad gear: you keep the item. Trading a piece to a mate (or !squad give) unlocks it for "
+                       "the whole squad and you keep yours. Off = the squad takes the piece (one-of-a-kind gear is always kept).",
+                       variable=self.squad_keep_gear, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
+                       wraplength=520, justify="left").grid(row=R[26], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         self.short_quest_waits = tk.BooleanVar(value=rates.get("short_quest_waits", True))
         tk.Checkbutton(inner, text="Short quest waits: Chocobo's Wounds 1 minute between feedings (era: a game day each), "
                        "Forge Your Destiny 1 hour at the forge (era: three game days). Off = the era waits.",
@@ -1830,7 +1841,7 @@ class RatesTab(tk.Frame):
         return next((k for k, v in self.EVENTS_LABELS.items() if v == label), "date")
 
     BOOL_KEYS = ("all_crafts", "ah_sim", "era_exp", "conquest_sim", "crowds", "crowds_chat", "crowds_chat_ai", "crowds_field",
-                 "bots", "squad_chat", "full_bags", "spell_scrolls", "short_quest_waits")
+                 "bots", "squad_chat", "full_bags", "modern_stacks", "spell_scrolls", "squad_keep_gear", "short_quest_waits")
     TEXT_KEYS = (("crowds_per_zone", "crowds_size"), ("crowds_chat_amount", "crowds_chat_amount"),
                  ("crowds_field_parties", "crowds_field_parties"), ("bots_roster", "bots_roster"), ("bots_online", "bots_online"),
                  ("bots_growth", "bots_growth"), ("squad_call_cooldown", "squad_call_cooldown"))
@@ -1939,7 +1950,9 @@ class RatesTab(tk.Frame):
         rates["squad_chat"] = bool(self.squad_chat.get())
         rates["squad_call_cooldown"] = core.clean_call_cooldown(self.squad_call_cooldown.get())
         rates["full_bags"] = bool(self.full_bags.get())
+        rates["modern_stacks"] = bool(self.modern_stacks.get())
         rates["spell_scrolls"] = bool(self.spell_scrolls.get())
+        rates["squad_keep_gear"] = bool(self.squad_keep_gear.get())
         rates["short_quest_waits"] = bool(self.short_quest_waits.get())
         rates["events"] = self.events_value()
         rates["bots_head_start"] = bool(self.bots_head_start.get()) and not self.head_start_done
@@ -2359,16 +2372,50 @@ class UpdatesTab(tk.Frame):
         frame = tk.Frame(self, bg=PANEL, highlightbackground=BORDER, highlightthickness=1)
         frame.pack(fill="x", padx=14, pady=6)
         tk.Label(frame, text="Updates from your team", bg=PANEL, fg=FG, font=(UI_FONT, 12, "bold")).pack(anchor="w", padx=12, pady=(10, 2))
-        tk.Label(frame, text=("Contributors send their changes from their launcher; each one arrives as a pull request on GitHub. Review it "
-                              "there and merge it (or ask for changes), then pull here and publish as usual. Who can send what is in "
-                              "contributors.json: edit it, commit and push to add or remove someone."),
+        tk.Label(frame, text=("Contributors send their changes from their launcher; each one arrives as a pull request on GitHub. "
+                              "Add to my build brings every waiting update onto this PC (your own edits are saved first; if anything "
+                              "clashes it is cancelled and nothing changes), rebuilds the server when needed and copies new add-ons "
+                              "into Ashita. Try it in game, then Send to GitHub and publish as usual. Undo goes back. Who can send "
+                              "what is in contributors.json."),
                  bg=PANEL, fg=DIM, wraplength=880, justify="left", font=(UI_FONT, 9)).pack(anchor="w", padx=12, pady=(0, 8))
         bar = tk.Frame(frame, bg=PANEL)
         bar.pack(anchor="w", padx=12, pady=(0, 12))
         tk.Button(bar, text="Show waiting updates", command=self.team_check, bg=PANEL2, fg=FG, relief="flat",
                   padx=12, pady=5).pack(side="left", padx=(0, 8))
+        # (2026-11-19) the same safe steps as the Phoenix update, for the team's pull requests: team_update.py
+        tk.Button(bar, text="Add to my build", command=self.team_add, bg=ACCENT, fg="white", relief="flat",
+                  padx=12, pady=5).pack(side="left", padx=(0, 8))
+        tk.Button(bar, text="Undo", command=self.team_undo, bg=PANEL2, fg=FG, relief="flat",
+                  padx=12, pady=5).pack(side="left", padx=(0, 8))
+        tk.Button(bar, text="Send to GitHub", command=self.team_push, bg=PANEL2, fg=FG, relief="flat",
+                  padx=12, pady=5).pack(side="left", padx=(0, 8))
         tk.Button(bar, text="Open on GitHub", command=lambda: self.app.open_url(f"https://github.com/{KIT_REPO_NAME}/pulls"),
                   bg=PANEL2, fg=FG, relief="flat", padx=12, pady=5).pack(side="left", padx=(0, 8))
+
+    def team_add(self):
+        if self.app.running:
+            messagebox.showinfo("Updates from your team", "Close the game first (the servers must be stopped).")
+            return
+        if messagebox.askyesno("Updates from your team",
+                               "Add every waiting update to the build on this PC?\n\n"
+                               "Your own uncommitted edits are saved as a local commit first. If anything clashes, it is "
+                               "cancelled and nothing changes. The server is rebuilt when the update needs it.\n\n"
+                               "Nothing is sent to GitHub or to players by this."):
+            self.run_script("team_update.py", ["update"])
+
+    def team_undo(self):
+        if self.app.running:
+            messagebox.showinfo("Updates from your team", "Close the game first (the servers must be stopped).")
+            return
+        if messagebox.askyesno("Updates from your team", "Go back to how both folders were before the last 'Add to my build'?"):
+            self.run_script("team_update.py", ["undo"])
+
+    def team_push(self):
+        if messagebox.askyesno("Send to GitHub",
+                               "Send the commits on this PC to GitHub (launcher to main, server to dev)?\n\n"
+                               "Only committed work is sent. Merged team updates are marked as merged on GitHub. "
+                               "Players get nothing until you publish."):
+            self.run_script("team_update.py", ["push"])
 
     def team_check(self):
         def work():
@@ -2399,18 +2446,15 @@ class UpdatesTab(tk.Frame):
         frame = tk.Frame(self.contrib_frame, bg=PANEL, highlightbackground=BORDER, highlightthickness=1)
         frame.pack(fill="x", padx=14, pady=6)
         tk.Label(frame, text=f"Contributor: {self.contributor}", bg=PANEL, fg=FG, font=(UI_FONT, 12, "bold")).pack(anchor="w", padx=12, pady=(10, 2))
-        tk.Label(frame, text=("Change and test in game as usual, then send. Your update goes to Hurami for review as a pull request on "
-                              "GitHub; nothing reaches players until it is merged and published. You can send: " +
-                              (", ".join(lc.AREAS[a]["label"] for a in areas) or "nothing yet") + "."),
+        tk.Label(frame, text=("Change and test as usual, then press Send. The launcher finds everything you changed (" +
+                              (", ".join(lc.AREAS[a]["label"] for a in areas) or "nothing yet") +
+                              "), you untick what shouldn't go and add new files, and it goes to Hurami for review on GitHub. "
+                              "Nothing reaches players until it is merged and published."),
                  bg=PANEL, fg=DIM, wraplength=880, justify="left", font=(UI_FONT, 9)).pack(anchor="w", padx=12, pady=(0, 8))
         bar = tk.Frame(frame, bg=PANEL)
         bar.pack(anchor="w", padx=12, pady=(0, 12))
-        for area in areas:
-            label = lc.AREAS[area]["label"]
-            tk.Button(bar, text=f"Send {label} update to Hurami...", command=lambda a=area: self.contrib_send(a), bg=ACCENT, fg="white",
-                      relief="flat", padx=14, pady=5).pack(side="left", padx=(0, 8))
-            tk.Button(bar, text=f"What changed in {label}", command=lambda a=area: self.contrib_check(a), bg=PANEL2, fg=FG,
-                      relief="flat", padx=12, pady=5).pack(side="left", padx=(0, 8))
+        tk.Button(bar, text="Send an update to Hurami...", command=self.contrib_send_all, bg=ACCENT, fg="white",
+                  relief="flat", padx=14, pady=5, state="normal" if areas else "disabled").pack(side="left", padx=(0, 8))
         tk.Button(bar, text="My sent updates", command=self.contrib_mine, bg=PANEL2, fg=FG, relief="flat", padx=12, pady=5).pack(side="left", padx=(0, 8))
         tk.Button(bar, text="Sign out", command=self.contrib_sign_out, bg=PANEL2, fg=FG, relief="flat", padx=12, pady=5).pack(side="left")
 
@@ -2453,13 +2497,16 @@ class UpdatesTab(tk.Frame):
         self.write("Contributor mode is off.")
 
     def contrib_check(self, area, then=None):
+        import launcher_contrib as lc
+        self.write(f"Looking for your changed {lc.AREAS[area]['label']} files (the server can take a minute)...")
+
         def work():
             try:
                 import launcher_contrib as lc
                 token, login, areas = lc.sign_in()       # the list on GitHub decides, every time
                 if area not in areas:
                     raise RuntimeError(f"{login} can't send {lc.AREAS[area]['label']} updates (not on the contributor list for it).")
-                found = lc.check(token, area, self.app.cfg)
+                found = lc.check(token, area, self.app.cfg, kit_dir=HERE)
             except Exception as e:
                 self.lines.put(("line", f"Could not check: {e}"))
                 return
@@ -2474,9 +2521,34 @@ class UpdatesTab(tk.Frame):
                 self.after(0, lambda: then(token, login, found))
         threading.Thread(target=work, daemon=True).start()
 
+    def contrib_send_all(self):
+        """One button: checks every area this contributor may send and opens one dialog with all their changes."""
+        import launcher_contrib as lc
+        self.write("Looking for everything you changed (the server folder can take a minute)...")
+
+        def work():
+            try:
+                token, login, areas = lc.sign_in()       # the list on GitHub decides, every time
+                if not areas:
+                    raise RuntimeError(f"{login} is not on the contributor list.")
+            except Exception as e:
+                self.lines.put(("line", f"Could not check: {e}"))
+                return
+            founds = {}
+            for area in areas:
+                try:
+                    founds[area] = lc.check(token, area, self.app.cfg, kit_dir=HERE)
+                    d = founds[area]["diff"]
+                    self.lines.put(("line", f"{lc.AREAS[area]['label']}: {len(d['changed'])} changed, {len(d['added'])} new"))
+                except Exception as e:
+                    self.lines.put(("line", f"{lc.AREAS[area]['label']}: skipped ({e})"))
+            if founds:
+                self.after(0, lambda: SendUpdateDialog(self.app, token, login, founds))
+        threading.Thread(target=work, daemon=True).start()
+
     def contrib_send(self, area):
         def ready(token, login, found):
-            if not (found["diff"]["changed"] or found["diff"]["added"]):
+            if area == "gambits" and not (found["diff"]["changed"] or found["diff"]["added"]):
                 messagebox.showinfo("Send update", "Nothing to send: your files are the same as the released ones.", parent=self)
                 return
             SendUpdateDialog(self.app, token, login, area, found)
@@ -2686,42 +2758,93 @@ class UpdatesTab(tk.Frame):
 
 
 class SendUpdateDialog(tk.Toplevel):
-    """Contributor mode: what you are sending, a title and a note for Hurami, then Send (launcher_contrib.send)."""
+    """Contributor mode: everything you changed (all your areas) in one list, a title and a note for Hurami, then Send
+    (launcher_contrib.send_all: one pull request per repo)."""
 
-    def __init__(self, app, token, login, area, found):
+    def __init__(self, app, token, login, founds, *legacy):
         super().__init__(app)
         import launcher_contrib as lc
-        self.app, self.lc, self.token, self.login, self.area, self.found = app, lc, token, login, area, found
-        label = lc.AREAS[area]["label"]
-        self.title(f"Send {label} update to Hurami")
-        self.geometry("700x560")
+        if legacy:                                   # old call: (area, found)
+            founds = {founds: legacy[0]}
+        self.app, self.lc, self.token, self.login, self.founds = app, lc, token, login, founds
+        self.title("Send an update to Hurami")
+        self.geometry("780x700")
         self.configure(bg=BG)
         self.q = queue.Queue()
-        d = found["diff"]
-        tk.Label(self, text="Files going in this update:", bg=BG, fg=FG, font=(UI_FONT, 10, "bold")).pack(anchor="w", padx=14, pady=(12, 2))
-        tk.Label(self, text="\n".join([f"changed  {r}" for r in d["changed"]] + [f"new      {r}" for r in d["added"]]),
-                 bg=BG, fg=DIM, justify="left", font=(MONO_FONT, 9)).pack(anchor="w", padx=14)
+        tk.Label(self, text="Files going in this update. Click a file to leave it out; Add files... for new ones.",
+                 bg=BG, fg=FG, font=(UI_FONT, 10, "bold"), wraplength=740, justify="left").pack(anchor="w", padx=14, pady=(12, 2))
+        box = tk.Frame(self, bg=BG)
+        box.pack(fill="x", padx=14)
+        self.files = tk.Listbox(box, selectmode="multiple", height=11, bg=PANEL, fg=FG, selectbackground=ACCENT, relief="flat",
+                                font=(MONO_FONT, 9), activestyle="none", exportselection=False)
+        scroll = tk.Scrollbar(box, command=self.files.yview)
+        self.files.configure(yscrollcommand=scroll.set)
+        self.files.pack(side="left", fill="x", expand=True)
+        scroll.pack(side="left", fill="y")
+        self.rows = []
+        for area, found in founds.items():
+            for rel in found["diff"]["changed"]:
+                self.add_row(area, rel, "changed")
+            for rel in found["diff"]["added"]:
+                self.add_row(area, rel, "new")
+        if not self.rows:
+            self.files.insert("end", "(no changed files found: use Add files...)")
+        row = tk.Frame(self, bg=BG)
+        row.pack(anchor="w", padx=14, pady=(4, 0))
+        tk.Button(row, text="Add files...", command=self.add_files, bg=PANEL, fg=FG, relief="flat", padx=12).pack(side="left")
+        tk.Label(row, text="Launcher and Gambits files go to the kit repo, server files to the server repo (one review each).",
+                 bg=BG, fg=DIM, font=(UI_FONT, 8)).pack(side="left", padx=10)
         tk.Label(self, text="Title (one line: what this update does)", bg=BG, fg=FG).pack(anchor="w", padx=14, pady=(10, 2))
-        self.subject = tk.StringVar(value=f"{label}: ")
+        self.subject = tk.StringVar(value="")
         tk.Entry(self, textvariable=self.subject, bg=PANEL, fg=FG, insertbackground=FG, relief="flat").pack(fill="x", padx=14)
         tk.Label(self, text="Note for Hurami (what changed, how you tested it)", bg=BG, fg=FG).pack(anchor="w", padx=14, pady=(10, 2))
-        self.note = tk.Text(self, height=7, bg=PANEL, fg=FG, insertbackground=FG, relief="flat", wrap="word", font=(UI_FONT, 9))
+        self.note = tk.Text(self, height=6, bg=PANEL, fg=FG, insertbackground=FG, relief="flat", wrap="word", font=(UI_FONT, 9))
         self.note.pack(fill="x", padx=14)
         bar = tk.Frame(self, bg=BG)
         bar.pack(anchor="w", padx=14, pady=8)
         self.go = tk.Button(bar, text="Send", command=self.send, bg=ACCENT, fg="white", relief="flat", padx=18)
         self.go.pack(side="left")
-        self.link = None
-        self.open_button = tk.Button(bar, text="Open on GitHub", command=lambda: self.link and self.app.open_url(self.link),
+        self.links = []
+        self.open_button = tk.Button(bar, text="Open on GitHub", command=lambda: [self.app.open_url(u) for u in self.links],
                                      bg=PANEL, fg=FG, relief="flat", padx=12, state="disabled")
         self.open_button.pack(side="left", padx=8)
         self.log = tk.Text(self, bg=PANEL, fg=FG, relief="flat", font=(MONO_FONT, 9), wrap="word", state="disabled")
         self.log.pack(fill="both", expand=True, padx=14, pady=(4, 12))
         self.after(200, self.pump)
 
+    def add_row(self, area, rel, kind):
+        if (area, rel) in self.rows:
+            return
+        if not self.rows:
+            self.files.delete(0, "end")
+        self.rows.append((area, rel))
+        where = self.lc.AREAS[area].get("short", area)
+        self.files.insert("end", f"{kind:<8} {where:<9} {rel}")
+        self.files.selection_set("end")
+
+    def add_files(self):
+        start = next(iter(self.founds.values()))["folder"]
+        paths = filedialog.askopenfilenames(parent=self, title="Add files to this update", initialdir=start)
+        for path in paths or ():
+            area = self.lc.area_for_path(self.founds, path)
+            if area is None:
+                folders = ", ".join(f["folder"] for f in self.founds.values())
+                messagebox.showerror("Add files", f"{path} is not in one of your folders ({folders}).", parent=self)
+                continue
+            try:
+                rel = self.lc.add_file(self.founds[area], path)
+            except Exception as e:
+                messagebox.showerror("Add files", str(e), parent=self)
+                continue
+            self.add_row(area, rel, "new" if rel in self.founds[area]["diff"]["added"] else "changed")
+
     def send(self):
+        chosen = [self.rows[i] for i in self.files.curselection() if i < len(self.rows)]
+        if not chosen:
+            messagebox.showinfo("Send update", "Pick at least one file to send.", parent=self)
+            return
         title = self.subject.get().strip()
-        if len(title) < 4 or title.endswith(":"):
+        if len(title) < 4:
             messagebox.showinfo("Send update", "Add a title that says what the update does.", parent=self)
             return
         self.go.configure(state="disabled")
@@ -2729,8 +2852,9 @@ class SendUpdateDialog(tk.Toplevel):
 
         def work():
             try:
-                url = self.lc.send(self.token, self.login, self.area, self.found, title, note, log=lambda m: self.q.put(m))
-                self.q.put(("link", url))
+                urls = self.lc.send_all(self.token, self.login, self.founds, chosen, title, note, log=lambda m: self.q.put(m))
+                for url in urls:
+                    self.q.put(("link", url))
                 self.q.put("Sent! Hurami gets it on GitHub. You'll get GitHub notifications when he comments or merges it.")
             except Exception as e:
                 self.q.put(f"Stopped: {e}")
@@ -2743,7 +2867,7 @@ class SendUpdateDialog(tk.Toplevel):
                 item = self.q.get_nowait()
                 if isinstance(item, tuple):
                     if item[0] == "link":
-                        self.link = item[1]
+                        self.links.append(item[1])
                         self.open_button.configure(state="normal")
                     else:
                         self.go.configure(state="normal")
@@ -2940,6 +3064,15 @@ class App(tk.Tk):
                   selectbackground=[("readonly", PANEL2)], selectforeground=[("readonly", FG)])
         style.configure("TSpinbox", fieldbackground=PANEL2, background=PANEL2, foreground=FG, arrowcolor=ACCENT,
                         bordercolor=BORDER, lightcolor=PANEL2, darkcolor=PANEL2)
+        # (Altair 2026-11-19: "Experience from monsters" was 0.0 and he never touched it) the mouse wheel changes a
+        # number box or a drop-down under the pointer, so scrolling a page of settings quietly changed them: four
+        # notches took the first rate from 1.0 to 0. The wheel no longer changes values; arrows and typing still do.
+        for widget_class in ("TSpinbox", "TCombobox", "Spinbox"):
+            for wheel in ("<MouseWheel>", "<Shift-MouseWheel>", "<Button-4>", "<Button-5>"):
+                try:
+                    self.unbind_class(widget_class, wheel)
+                except tk.TclError:
+                    pass
         style.configure("Vertical.TScrollbar", background=BORDER, troughcolor=BG, arrowcolor=DIM, bordercolor=BG,
                         lightcolor=BORDER, darkcolor=BORDER)
         style.configure("Solo.Horizontal.TProgressbar", troughcolor=PANEL, background=ACCENT, bordercolor=BORDER,
@@ -3411,15 +3544,19 @@ class App(tk.Tk):
                 return
         self.dl_busy = True
 
+        self.say(f"{item['name']}: downloading...")
+
         def work():
+            # (Altair 2026-11-19: Reinstall / update showed nothing, its lines only went to the LOGS panel on the Play page)
             try:
                 version = tp.install(item, HERE, self.ashita, log=self.say, server=self.cfg.get("server_dir"))
-                self.say(f"{item['name']} {version} is ready.")
+                done = f"{item['name']} {version} is ready."
             except Exception as e:
-                self.say(f"{item['name']}: not installed ({e}).")
-            finally:
-                self.dl_busy = False
-                self.after(0, self.show_downloads)
+                done = f"{item['name']}: not installed ({e})."
+            self.dl_busy = False
+            self.say(done)
+            self.after(0, self.show_downloads)
+            self.after(0, lambda: messagebox.showinfo("Add-ons", done))
         threading.Thread(target=work, daemon=True).start()
 
     def apply_download_patch(self, item):
@@ -3727,6 +3864,11 @@ class App(tk.Tk):
         except Exception as e:
             self.say(f"Could not check Ashita's target offset ({e}).")
 
+        try:                                  # (2026-11-19) Gambits -> autobox, GambitsV2 -> Gambits: once, every install
+            import launcher_setup as _names
+            _names.migrate_gambits_names(HERE, cfg.get("ashita_dir", ""), log=self.say)
+        except Exception as e:
+            self.say(f"Could not rename the Gambits add-ons ({e}) - starting anyway.")
         if cfg.get("mariadb_dir"):            # a player install: the kit's own MariaDB, started here (no Windows service)
             import launcher_setup
             try:                              # a loader the server needs (e.g. after updating from an older launcher)
@@ -3739,8 +3881,20 @@ class App(tk.Tk):
                 launcher_setup.install_own_addons(HERE, cfg["ashita_dir"])
             except Exception as e:
                 self.say(f"Could not refresh the addons ({e}) - starting anyway.")
+            try:                              # era game files an FFXI update wrote over (Yumainai, Altair 2026-11-19)
+                for line in launcher_setup.check_era_dats(HERE, cfg.get("ffxi_client_dir", ""), log=self.say):
+                    self.say(line)
+            except PermissionError:
+                self.say("Era-DATs: Windows did not let the launcher put the era game files back. "
+                         "Run the launcher as administrator once (right-click > Run as administrator).")
+            except Exception as e:
+                self.say(f"Could not check the era game files ({e}) - starting anyway.")
             import launcher_client            # our game-file changes, again if an update or the era pack replaced them
             launcher_client.apply_all(HERE, cfg.get("ffxi_client_dir", ""), cfg["server_dir"], log=self.say)
+            try:
+                launcher_setup.record_era_state(HERE, cfg.get("ffxi_client_dir", ""))
+            except Exception:
+                pass
             started = launcher_setup.start_portable(cfg)
             if started is not None:
                 self.db_proc = started
@@ -3779,6 +3933,11 @@ class App(tk.Tk):
 
         self.say("Applying your rates...")
         try:
+            if float(self.rates.get("map.EXP_RATE", 1) or 0) <= 0:
+                self.say("Note: 'Experience from monsters' is 0 on CONFIG > Rates, so monsters give no experience. Set it to 1 for the normal amount.")
+        except (TypeError, ValueError):
+            pass
+        try:
             for note in core.apply_rates(cfg["server_dir"], dict(self.rates, coop_hosting=hosting)):
                 self.say(note)
         except Exception as e:
@@ -3798,6 +3957,8 @@ class App(tk.Tk):
             self.say(f"Could not write kit_paths.lua ({e}) - squad chat and Crystal Boy rewards use the default folders.")
 
         self.conquest_ticked = self.run_conquest("tick")      # catch the world up on the time you were away (servers are not running yet)
+        self.run_char_sync("sync-in")                         # (off by default) characters your other PC saved to the shared folder
+        self.run_stack_mode()                                 # item stacks on the server: today's sizes (default) or the era's
 
         # broken "what a character wears" rows crash the login (2026-11-07): remove them while the servers are down
         try:
@@ -4014,12 +4175,22 @@ class App(tk.Tk):
     def launch_extra(self, boot, log_name):
         """Opens one more game window with the given boot file, next to the one already running."""
         cli = os.path.join(self.ashita, "Ashita-cli.exe")
+        self.fix_shot_dir(boot)
         log = open(os.path.join(LOGS, log_name), "wb")
         self.logfiles.append(log)
         if linux is not None:
             linux.start_game(HERE, self.cfg, self.ashita, boot, log)
             return
         subprocess.Popen([cli, boot], cwd=self.ashita, stdout=log, stderr=subprocess.STDOUT, creationflags=core.NO_WINDOW)
+
+    def fix_shot_dir(self, boot):
+        """Points a boot file's screenshot folder (registry 0042) at the real game folder. The main boot file gets this
+        with the graphics settings; the GM and second-character files did not, and PrintScreen froze the game there."""
+        try:
+            if self.ashita and boot:
+                core.apply_shot_dir(os.path.join(self.ashita, "config", "boot", boot), self.cfg.get("ffxi_client_dir"))
+        except Exception:
+            pass
 
     def start_gm(self):
         """Opens the game as the GM account (set up on the Settings page). With the servers off it starts them too, like PLAY."""
@@ -4034,9 +4205,58 @@ class App(tk.Tk):
             return
         if self.running:
             return
+        self.fix_shot_dir(boot)
         self.launch_boot = boot
         self.select_tab(0)          # shows the Play page and highlights it in the top bar
         self.start()
+
+    def run_stack_mode(self):
+        # Rates tab, "Modern item stacks": stack_mode.py sets the stack size of the items on Phoenix's era list in the
+        # server's item table before the servers start (an update puts the era values back, so this runs on every PLAY).
+        # The game's own item files are done by launcher_client.apply_all with the other game-file changes.
+        script = os.path.join(HERE, "stack_mode.py")
+        if not os.path.exists(script):
+            return
+        try:
+            mode = "modern" if self.rates.get("modern_stacks", True) else "era"
+            done = subprocess.run(core.py_cmd(script, "db", mode), cwd=HERE, capture_output=True, text=True, timeout=90,
+                                  creationflags=core.NO_WINDOW)
+            lines = (done.stdout or "").strip().splitlines()
+            if done.returncode != 0:
+                errors = (done.stderr or "").strip().splitlines()
+                self.say("Item stacks were not set on the server: " + (errors[-1] if errors else "unknown") + " - continuing.")
+            elif lines and "already" not in lines[-1]:
+                self.say(lines[-1][:1].upper() + lines[-1][1:])
+            # a player install does the game files in launcher_client.apply_all; this PC (no kit MariaDB) does them here
+            if not core.load_config(os.path.join(HERE, "config.json")).get("mariadb_dir"):
+                done = subprocess.run(core.py_cmd(script, "dats", mode), cwd=HERE, capture_output=True, text=True, timeout=120,
+                                      creationflags=core.NO_WINDOW)
+                lines = (done.stdout or "").strip().splitlines()
+                if done.returncode != 0:
+                    errors = (done.stderr or "").strip().splitlines()
+                    self.say("Item stacks were not set in the game files: " + (errors[-1] if errors else "unknown") + " - continuing.")
+                elif lines and not lines[-1].startswith("item stacks: 0 changed"):
+                    self.say(lines[-1][:1].upper() + lines[-1][1:])
+        except Exception as e:
+            self.say(f"Item stacks were not set on the server: {e}")
+
+    def run_char_sync(self, mode):
+        # CO-OP page, "PLAY ON ANOTHER PC", automatic (off by default): launcher_passport.py loads the characters your other
+        # PC saved to the shared folder before the servers start ("sync-in") and saves yours after they stop ("sync-out").
+        try:
+            cfg = core.load_config(os.path.join(HERE, "config.json"))
+            if not cfg.get("char_sync") or not cfg.get("char_sync_dir"):
+                return
+            done = subprocess.run(core.py_cmd(os.path.join(HERE, "launcher_passport.py"), mode), cwd=HERE, capture_output=True,
+                                  text=True, timeout=120, creationflags=core.NO_WINDOW)
+            lines = (done.stdout or "").strip().splitlines()
+            if done.returncode != 0:
+                errors = (done.stderr or "").strip().splitlines()
+                self.say("The character folder had a problem: " + (errors[-1] if errors else "unknown") + " - continuing without it.")
+            for line in lines:
+                self.say(line[:1].upper() + line[1:])
+        except Exception as e:
+            self.say(f"The character folder was not used: {e}")
 
     def run_conquest(self, mode):
         # The conquest simulator (conquest_sim.py) edits the conquest table. "tick" runs before the servers start, "stamp" after they stop.
@@ -4223,6 +4443,7 @@ class App(tk.Tk):
         if getattr(self, "conquest_ticked", False):
             self.run_conquest("stamp")                         # the session is over: note the time so the tally is not repeated
             self.conquest_ticked = False
+        self.run_char_sync("sync-out")                         # (off by default) your characters go to the shared folder
         for f in self.logfiles:
             try:
                 f.close()

@@ -5,6 +5,7 @@ character itself); this file is only the page. Anything slow (the database, the 
 its result comes back through a queue, so the window never freezes.
 """
 import copy
+import json
 import os
 import queue
 import threading
@@ -305,7 +306,131 @@ class CoopTab(tk.Frame):
         self.button(row, "coop_load", self.restore_character, "RESTORE").pack(side="left", padx=8)
         tk.Label(parent, text="A backup file of the character picked above, to restore in this same world.", bg=BG, fg=DIM,
                  font=SMALL, anchor="w").pack(fill="x", pady=(2, 0))
+        self.build_carry(parent)
         self.show_away()
+
+    # ----- one player, several PCs (2026-11-20): the character and its squad move, each PC keeps its own world -----
+    def build_carry(self, parent):
+        tk.Frame(parent, bg=BORDER, height=1).pack(fill="x", pady=(10, 6))
+        tk.Label(parent, text="PLAY ON ANOTHER PC", bg=BG, fg=DIM, font=(_UI_FONT, 8, "bold"), anchor="w").pack(fill="x")
+        row = tk.Frame(parent, bg=BG)
+        row.pack(fill="x", pady=(2, 0))
+        self.button(row, "coop_carry_save", self.carry_save, "SAVE FOR ANOTHER PC").pack(side="left")
+        self.button(row, "coop_carry_load", self.carry_load, "LOAD FROM ANOTHER PC").pack(side="left", padx=8)
+        tk.Label(parent, text="Takes the character picked above and its squad mates to your other PC. Each PC keeps its own world "
+                 "(settings, bot players, linkshells).", bg=BG, fg=DIM, font=SMALL, anchor="w", justify="left",
+                 wraplength=520).pack(fill="x", pady=(2, 0))
+        row = tk.Frame(parent, bg=BG)
+        row.pack(fill="x", pady=(4, 0))
+        self.carry_auto = tk.BooleanVar(value=bool(self.cfg.get("char_sync")))
+        tk.Checkbutton(row, text="Do it automatically: load on PLAY, save on STOP", variable=self.carry_auto, command=self.carry_toggle,
+                       bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG, font=FONT).pack(side="left")
+        self.button(row, "coop_carry_folder", self.carry_pick_folder, "FOLDER...").pack(side="left", padx=8)
+        self.carry_folder_text = tk.StringVar()
+        tk.Label(parent, textvariable=self.carry_folder_text, bg=BG, fg=DIM, font=SMALL, anchor="w", justify="left",
+                 wraplength=520).pack(fill="x")
+        self.carry_show_folder()
+
+    def carry_set(self, key, value):
+        self.cfg[key] = value
+        path = os.path.join(self.kit, "config.json")
+        with open(path, encoding="utf-8-sig") as handle:
+            saved = json.load(handle)
+        saved[key] = value
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(saved, handle, indent=2)
+
+    def carry_show_folder(self):
+        folder = self.cfg.get("char_sync_dir") or ""
+        self.carry_folder_text.set(("Folder: " + folder) if folder else
+                                   "Off. To use it, pick a folder that both PCs share (OneDrive, Dropbox, Google Drive...).")
+
+    def carry_pick_folder(self):
+        folder = filedialog.askdirectory(title="A folder that both PCs share (OneDrive, Dropbox, Google Drive...)", parent=self)
+        if not folder:
+            return False
+        self.carry_set("char_sync_dir", os.path.normpath(folder))
+        self.carry_show_folder()
+        return True
+
+    def carry_toggle(self):
+        on = bool(self.carry_auto.get())
+        if on and not self.cfg.get("char_sync_dir") and not self.carry_pick_folder():
+            self.carry_auto.set(False)
+            return
+        if on and not messagebox.askyesno(
+                "Automatic", "From now on, on this PC:\n\n  - STOP saves your characters and their squads to the folder\n"
+                "  - PLAY loads a character that your other PC saved there (a backup of the copy here is kept first)\n\n"
+                "Switch it on on the other PC too, with the same folder, and let the folder finish syncing before you press PLAY "
+                "there. The newest save wins: play on one PC at a time.\n\nSwitch it on?", parent=self):
+            self.carry_auto.set(False)
+            return
+        self.carry_set("char_sync", on)
+        self.note("Automatic character folder: " + ("on." if on else "off."))
+
+    def carry_save(self):
+        charid = self.picked_character()
+        if charid is None:
+            messagebox.showinfo("Save for another PC", "Pick a character first (Character, above).", parent=self)
+            return
+        name = self.character.get()
+        path = filedialog.asksaveasfilename(title="Save " + name + " for another PC", defaultextension=pp.CARRY_EXT,
+                                            filetypes=[("XI: Forever Offline character", "*" + pp.CARRY_EXT)],
+                                            initialdir=self.cfg.get("char_sync_dir") or None, initialfile=name + pp.CARRY_EXT, parent=self)
+        if not path:
+            return
+
+        def work():
+            conn = self.connect()
+            try:
+                data = pp.save_carry(conn, charid, stopped=not getattr(self.app, "running", False))
+            finally:
+                conn.close()
+            with open(path, "wb") as handle:
+                handle.write(data)
+            return path
+
+        self.job(work, lambda saved: self.note(f"Saved {name} and its squad to {saved}. Load that file on your other PC."), f"Saving {name}...")
+
+    def carry_load(self):
+        path = filedialog.askopenfilename(title="A file made with SAVE FOR ANOTHER PC",
+                                          filetypes=[("XI: Forever Offline character", "*" + pp.CARRY_EXT)],
+                                          initialdir=self.cfg.get("char_sync_dir") or None, parent=self)
+        if not path:
+            return
+        try:
+            with open(path, "rb") as handle:
+                data = handle.read()
+            passport = pp.read_carry(data)
+        except (OSError, pp.PassportError) as e:
+            messagebox.showwarning("Load from another PC", str(e), parent=self)
+            return
+        if getattr(self.app, "running", False):
+            messagebox.showinfo("Load from another PC", "Press STOP first: a character is loaded while the game is closed.", parent=self)
+            return
+        look, name = passport.get("summary", {}), passport["name"]
+        mates = len(look.get("squad") or [])
+        here = any(n == name for _c, n in self.characters)
+        text = (f"{name} (level {look.get('level', '?')} {look.get('job', '')}, {look.get('gil', 0):,} gil, {mates} squad mate(s)), saved "
+                f"{when(passport.get('made'))}.\n\n")
+        text += (f"{name} is already in this world: the copy here is REPLACED by the one in the file (a backup of it is kept in the "
+                 "backups folder)." if here else f"{name} joins your account in this world as a new character.")
+        if not messagebox.askyesno("Load from another PC", text + "\n\nLoad it?", icon="warning" if here else "question", parent=self):
+            return
+
+        def work():
+            conn = self.connect()
+            try:
+                return pp.load_carry(conn, data, backup_dir=os.path.join(self.kit, "backups"), stopped=True)
+            finally:
+                conn.close()
+
+        def done(result):
+            extra = " ".join(result.get("notes") or [])
+            self.note(f"{name} was loaded" + (" as a new character." if result["new"] else "; the old copy is in backups.") + (" " + extra if extra else ""))
+            self.refresh()
+
+        self.job(work, done, f"Loading {name}...")
 
     def say_info(self, text):
         self.info.configure(state="normal")
