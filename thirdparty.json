@@ -336,6 +336,28 @@
       "check": "addons/chains/chains.lua"
     },
     {
+      "id": "tcrossbar",
+      "name": "tCrossBar",
+      "author": "ThornyFFXI",
+      "license": "MIT",
+      "homepage": "https://github.com/ThornyFFXI/tCrossBar",
+      "into": "ashita",
+      "note": "Controller macros with an on-screen crossbar (DualSense, Xbox and Switch Pro mappings). Needs a gamepad; type /tc in game to set it up.",
+      "source": {
+        "type": "github_release",
+        "repo": "ThornyFFXI/tCrossBar",
+        "tag": "v2.21",
+        "asset": "^tCrossBar-v[0-9.]+\\.zip$"
+      },
+      "files": [
+        [
+          "addons/tCrossBar/",
+          "addons/tCrossBar/"
+        ]
+      ],
+      "check": "addons/tCrossBar/tCrossBar.lua"
+    },
+    {
       "id": "nameplate",
       "name": "Nameplate",
       "author": "Shirk (HealsCodes) / BunnyBox Productions",

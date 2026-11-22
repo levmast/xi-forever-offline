@@ -395,7 +395,7 @@ check(cmd('/gv2') == true and GV.open[1] == true, '/gv2 is handled (blocked) and
 check(cmd('/gambits help') == true and cmd('/autobox') == false, '/gambits is this addon\'s command; /autobox (the old engine) is not touched')
 check(cmd('/GV2 help') == true, 'the command is not case sensitive')
 local ok1, t1 = run_until(function() return Ed._S.server and Ed._S.cat ~= nil and #Ed._S.sets > 0 end, 30)
-check(ok1 and Ed._S.server.version == 6 and Ed._S.mates[1].name == 'Mira', string.format('opening asks the server: hello (version %s), Mira, sets, choices (%.1f s)',
+check(ok1 and Ed._S.server.version == 7 and Ed._S.mates[1].name == 'Mira', string.format('opening asks the server: hello (version %s), Mira, sets, choices (%.1f s)',
       tostring(Ed._S.server and Ed._S.server.version), t1))
 check(balanced(gui) and gui.title:find('Gambits v2', 1, true), 'the window draws balanced (colours, style, IDs, children, window)')
 check(not visible_has('GSQ|') and not visible_has('command error') and not visible_has('^>>'), 'no GSQ answer, refusal or error line is visible')
@@ -945,7 +945,8 @@ check(#Ed.spell_choices(whmCat, nil) > #choices, 'without a mate (no level known
 -- a saved spell above the level: kept unchanged, explained
 local keepRule = { on = true, target = 'PARTY', cond = 'HPP_LT', arg = '40', kind = 'spell', name = 'CURE_IV' }
 local note = Ed.spell_note(keepRule, whmCat, mira)
-check(note and note:find('not in Mira', 1, true) and note:find('kept as saved', 1, true), 'a saved Cure IV (above level 25): ' .. tostring(note))
+-- (0.3.1) with the job's own list (an older server's catalog) the note says when it starts working
+check(note and note:find('Mira learns Cure IV at level 41', 1, true) and note:find('kept as saved', 1, true), 'a saved Cure IV (above level 25): ' .. tostring(note))
 check(Ed.spell_note({ kind = 'spell', name = 'CURE_II' }, whmCat, mira) == nil, 'no note for a spell Mira has')
 check(Ed.spell_note({ kind = 'spell', name = 'SHANTOTTO' }, whmCat, mira):find('Trust spell', 1, true), 'a saved Trust spell is explained, not removed')
 Ed._S.mates = { { slot = 1, id = 11, name = 'Mira', job = 'WHM', level = 25, chosen = 0, out = true } }
@@ -1062,9 +1063,10 @@ check(rejected == #oldWay and format_problem('50%% escaped') == nil and format_p
 local function hover_all(views)
     gui.errors, gui.tips, gui.wrapped, gui.formats = {}, {}, {}, 0
     gui.IsItemHovered = function() return true end
-    for _, v in ipairs(views) do Ed._S.view = v; step() end
+    -- (0.3.1) 'ws' = the Weapon Skills section open (it was a second tab)
+    for _, v in ipairs(views) do Ed._S.wsOpen = v == 'ws'; step() end
     gui.IsItemHovered = function() return false end
-    Ed._S.view = 'rules'
+    Ed._S.wsOpen = false
 end
 local function has_tip(text) for _, t in ipairs(gui.tips) do if t == text then return true end end return false end
 local function any_tip(part) for _, t in ipairs(gui.tips) do if t:find(part, 1, true) then return true end end return false end

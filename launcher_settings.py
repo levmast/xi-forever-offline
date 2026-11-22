@@ -33,6 +33,11 @@ S("crowds_chat", "world", "Town crowds", SWITCH, "Crowd chat",
   tip="Party-wanted shouts, people selling crafted items, and small talk near you.")
 S("crowds_chat_amount", "world", "Town crowds", CHOICE, "Chat amount",
   options=(("quiet", "Quiet"), ("normal", "Normal"), ("busy", "Busy")))
+S("crowd_gates", "world", "Town crowds", SWITCH, "Come and go through the gates",
+  tip="Newcomers walk in from the zone lines and Mog House doors, and people leaving walk out through them or warp "
+      "from the Home Point. Off = everyone appears and fades by the Home Point.")
+S("crowd_meet", "world", "Town crowds", SWITCH, "Stop for each other",
+  tip="Two adventurers walking past each other may stop, turn and wave before going on.")
 S("crowds_field_parties", "world", "Field parties", COUNT, "Parties per area", dev=True, lo=0, hi=3, step=1,
   tip="Players get this from their world choice.")
 S("bots_online", "world", "Bot players", COUNT, "Online at a time", lo=0, hi=550, step=10,
@@ -44,6 +49,17 @@ S("bots_growth", "world", "Bot players", CHOICE, "Bot growth",
   tip="Bots level, craft and earn gil while you are not playing.")
 S("bots_pass_loot", "world", "Bot players", SWITCH, "Bots pass all loot",
   tip="Bot players in your party pass every drop at once, so it comes to you without waiting for the lot timer.")
+S("bot_social", "world", "Bot players", SWITCH, "Emotes and greetings",
+  tip="Bot players cheer level ups, bow when they join you, wave goodbye, panic when badly hurt, and trade emotes with "
+      "each other in town.")
+S("bot_memory", "world", "Bot players", SWITCH, "Remember where they died",
+  tip="After dying twice in an area a bot hunts somewhere else for a while, and it keeps away from the camp it died at.")
+S("bot_story", "world", "Bot players", SWITCH, "Life stories",
+  tip="Each bot keeps its milestones between play sessions (!bots story Name), so in a chat it still knows what it did "
+      "yesterday.")
+S("bot_gates", "world", "Bot players", SWITCH, "Use the town gates",
+  tip="A bot going hunting runs to the town gate first, and one coming home arrives at the gate and walks in. "
+      "Off = they leave from and return to their spot.")
 S("bots_head_start", "world", "Bot players", SWITCH, "One-time head start",
   tip="The starting bots get a few months of history - levels 1-75 (most 10-30), subjobs, crafts, gil, gear - as if the "
       "server had been running a while. Used at your next PLAY, then this switch goes away.")
@@ -111,6 +127,9 @@ S("map.BLUE_LEARN_MULTIPLIER", "rules", "Skills and crafting", RATE, "Learning b
 S("map.CRAFT_CHANCE_MULTIPLIER", "rules", "Skills and crafting", RATE, "Crafting skill-ups")
 S("map.CRAFT_HQ_CHANCE_MULTIPLIER", "rules", "Skills and crafting", RATE, "High-quality crafts")
 S("map.FISHING_SKILL_MULTIPLIER", "rules", "Skills and crafting", RATE, "Fishing skill-ups")
+S("map.FISHING_MINIGAME", "rules", "Skills and crafting", FLAG, "Fishing minigame",
+  tip="On = today's fishing, where you fight the fish on screen. Off = era fishing: no fight, the catch is decided as "
+      "soon as the fish bites (your skill still decides lost catches and broken lines or rods).")
 S("all_crafts", "rules", "Skills and crafting", SWITCH, "Every craft can reach 100",
   tip="Off = only one craft can reach 100, like the retail rule.")
 S("full_bags", "rules", "Comforts", SWITCH, "Full bags from the start",
@@ -125,6 +144,18 @@ S("short_quest_waits", "rules", "Comforts", SWITCH, "Short quest waits",
       "(era: three game days), Aht Urhgan missions about 1 minute between missions (era: a game day or Japanese "
       "midnight). Off = the era waits.")
 S("main.NEW_CHARACTER_CUTSCENE", "rules", "Comforts", FLAG, "New-character cutscenes")
+# (2026-11-22, suggestions) out of era, so off by default
+S("main.CASKET_SHOW_CODE", "rules", "Comforts", FLAG, "Caskets tell you the code",
+  tip="A locked treasure casket tells your party its two-digit combination when you touch it; enter it to open. "
+      "Off = the era's guessing game.")
+S("main.GUILD_SHOPS_ALWAYS_STOCKED", "rules", "Comforts", FLAG, "Guild shops never run out",
+  tip="Everything a guild shop stocks is back to its usual amount whenever you shop there, even right after you bought "
+      "it out. Prices stay the game's own. Off = the era: stock refills a little each day.")
+S("map.FULL_MERITS", "rules", "Comforts", FLAG, "Full merits",
+  tip="Every merit can be raised to its own maximum. Off = the era's group limits (for example only one attribute "
+      "to 5/5, and only a few combat skills to 8/8).")
+S("map.MAX_MERIT_POINTS", "rules", "Comforts", NUMBER, "Merit points you can hold", step=5,
+  tip="30 = the default here (the earliest era held 10). Up to 99.")
 
 # ---------------------------------------------------------------- Rules > Tetra Master (2026-11-21)
 S("main.TM_CARD_DROP_RATE", "rules", "Tetra Master", RATE, "Cards from monsters",

@@ -310,7 +310,16 @@ def init_mariadb(mariadb_dir, root_password, port, run=subprocess.run):
                  **({} if IS_WINDOWS else {"env": mariadb_env(mariadb_dir), "cwd": base}))
     if result.returncode != 0:
         out = ((result.stderr or "") + "\n" + (result.stdout or "")).strip()
-        raise RuntimeError("mariadb-install-db failed: " + (out if len(out) <= 700 else out[:350] + " ... " + out[-350:]))
+        saved = ""
+        if len(out) > 700:      # the middle is cut below, and that is often where the reason is: keep all of it in a file
+            try:
+                with open(os.path.join(mariadb_dir, "install-db.log"), "w", encoding="utf-8", errors="replace") as f:
+                    f.write(out + "\n")
+                saved = " (all of it: %s)" % os.path.join(mariadb_dir, "install-db.log")
+            except OSError:
+                pass
+        raise RuntimeError("mariadb-install-db failed" + saved + ": "
+                           + (out if len(out) <= 700 else out[:350] + " ... " + out[-350:]))
     return "Database folder created."
 
 

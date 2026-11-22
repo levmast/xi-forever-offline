@@ -245,9 +245,10 @@ local function isRefresh(command)
     return command:find('^/say !squad panel') ~= nil or command:find('^/say !squad sheet') ~= nil;
 end
 
-local function enqueue(command, delay)
+-- who: (1.26c) the character a command is meant for; it is dropped if someone else is logged in when it is due
+local function enqueue(command, delay, who)
     if not isRefresh(command) then S.lastClick = now(); end
-    S.queue[#S.queue + 1] = { at = now() + (delay or 0), command = command };
+    S.queue[#S.queue + 1] = { at = now() + (delay or 0), command = command, who = who };
 end
 
 -- (1.26d) one refresh is enough: a new ask replaces one still waiting in the queue, so five quick clicks
@@ -321,9 +322,20 @@ local function pump(t)
     local function isAction(command) return command:find('^/say !') ~= nil and not command:find('^/say !squad panel'); end
     if isAction(S.queue[pick].command) and t - S.lastSend < 2.2 then return; end
     local first = table.remove(S.queue, pick);
+    if first.who then   -- (1.26c) meant for one character: not for whoever is logged in now, if that is someone else
+        local ok, name = pcall(function() return AshitaCore:GetMemoryManager():GetParty():GetMemberName(0); end);
+        name = (ok and tostring(name or '') or ''):match('^%s*(.-)%s*$') or '';
+        if (name:gsub('[^%w_]', '_')) ~= first.who then return; end
+    end
     S.lastSend = t;
     S.sendGap = isAction(first.command) and 2.2 or 0.6;
     S.hideUntil = t + 6;   -- (1.25: was 2.5 s; a busy server answers later than that)
+    -- (1.26c) every /autobox line this menu sends is counted, so the command event can tell ours from the player's
+    -- even when the game runs a queued command later than the next one is sent
+    if first.command:find('^/autobox ') then
+        S.ownAutobox = S.ownAutobox or {};
+        S.ownAutobox[#S.ownAutobox + 1] = { text = first.command, at = t };
+    end
     pcall(function() chat:QueueCommand(1, first.command); end);
 end
 
@@ -1577,6 +1589,83 @@ local function autoboxLoaded()
     return ok and found == true;
 end
 
+-- (1.26c, 2026-11-21: Altair's Monk used Boost by itself while MY AUTO showed OFF) autobox keeps its own master switch per
+-- character, across sessions, and MY AUTO switches it on. When the menu then wants it off again (MY AUTO off, Stop, or a new
+-- session after the game was closed with MY AUTO on) while autobox is not running, no /autobox off could be sent: the switch
+-- stayed on, and the next time autobox was loaded (by hand, for its Parser or EXP Watch) your rules ran while this menu said
+-- OFF. That /autobox off is now kept, for that character only and across restarts, until autobox runs while that character
+-- is logged in. It is dropped when you switch autobox yourself (/autobox on|off|toggle: your choice wins), when you switch
+-- MY AUTO on, or when autobox's own saved switch for the character is already off.
+-- autobox's flag file holds the time it was loaded; one older than this menu's own load is left over from an earlier game.
+-- Known limit: both game windows share that flag file, so with the second window's autobox running the main window cannot
+-- tell whether its own autobox runs.
+local function autoboxStamp()
+    local ok, stamp = pcall(function ()
+        local base = AshitaCore:GetInstallPath();
+        if not base:match('[/\\]$') then base = base .. '\\'; end
+        local f = io.open(base .. 'config\\addons\\Gambits\\autobox_loaded.flag', 'r');
+        if not f then return nil; end
+        local text = f:read('*l');
+        f:close();
+        return tonumber(text);
+    end);
+    if not ok or not stamp then return nil; end
+    if S.menuLoadedAt and stamp < S.menuLoadedAt - 30 then return nil; end   -- (the start script loads its addons within seconds)
+    return stamp;
+end
+
+-- The kept /autobox off is one small file per character: config/addons/servermenu/autobox_off_owed_<name>.flag (a file of its
+-- own, not settings.cfg: both game windows load this menu, and each rewrites the whole settings file).
+-- owedAutoboxOff(name) -> is one kept;  owedAutoboxOff(name, true|false) -> keep it / drop it.
+local function owedAutoboxOff(name, keep)
+    local base = installPath();
+    if not base or not name or name == '' or name == 'default' then return false; end
+    local path = base .. 'config/addons/servermenu/autobox_off_owed_' .. name .. '.flag';
+    if keep == nil then
+        local f = io.open(path, 'r');
+        if f then f:close(); return true; end
+        return false;
+    elseif keep then
+        mkdir(base .. 'config/addons/servermenu/');
+        local f = io.open(path, 'w');
+        if f then f:write(tostring(os.time())); f:close(); end
+        return true;
+    end
+    os.remove(path);
+    return false;
+end
+
+-- autobox's own saved master switch for the character logged in now (its characters/<name>_<id>/switches.lua):
+-- true, false, or nil when it cannot be read
+local function savedAutoboxOn()
+    local ok, on = pcall(function ()
+        local party = AshitaCore:GetMemoryManager():GetParty();
+        local stem = tostring(party:GetMemberName(0) or ''):gsub('[^%w_%-]', '_');
+        local f = io.open(installPath() .. 'config/addons/Gambits/characters/' .. stem .. '_' .. tostring(party:GetMemberServerId(0)) .. '/switches.lua', 'r');
+        if not f then return nil; end
+        local value = f:read('*a'):match('Player%s*=%s*(%a+)');
+        f:close();
+        if value == 'true' then return true; elseif value == 'false' then return false; end
+        return nil;
+    end);
+    if ok then return on; end
+    return nil;
+end
+
+-- drops the /autobox off lines still waiting in the queue (you switched autobox yourself: your choice wins)
+local function dropQueuedAutoboxOff()
+    for i = #S.queue, 1, -1 do if S.queue[i].command == '/autobox off' then table.remove(S.queue, i); end end
+end
+
+-- the kept /autobox off for this character, sent once autobox runs (and a character exists: before that autobox refuses it)
+local function sendOwedAutoboxOff(name)
+    if myAutoOn() or not owedAutoboxOff(name) or not autoboxStamp() then return; end
+    owedAutoboxOff(name, false);
+    if savedAutoboxOn() == false then return; end   -- already off (switched some other way): nothing to send
+    enqueue('/autobox off', 0.5, name);
+    enqueue('/autobox off', 3.0, name);
+end
+
 -- AutoBot reads this file before it rests anyone. Written on every toggle and
 -- forced to "off" at addon load, so resting is never on by accident.
 local function auto_flag_character()
@@ -1642,6 +1731,8 @@ local function syncAutoFlag()
         return
     end
 
+    sendOwedAutoboxOff(name)
+
     if name == auto_flag_synced then
         return
     end
@@ -1668,6 +1759,7 @@ local function syncAutoFlag()
         return
     end
 
+    local lastSession = probe:read('*l')   -- what MY AUTO was when this character's last session ended
     probe:close()
 
     if not myAutoOn() then
@@ -1675,8 +1767,15 @@ local function syncAutoFlag()
         -- startup script's /autobox off runs before a character exists, where it
         -- is refused. Send it again now that there is one.
         if autoboxLoaded() then
-            enqueue('/autobox off', 0.5)
-            enqueue('/autobox off', 3.0)
+            enqueue('/autobox off', 0.5, name)   -- (1.26c: for this character only)
+            enqueue('/autobox off', 3.0, name)
+        end
+        -- (1.26c) the game was closed with MY AUTO on: keep the off for this character until autobox runs; if it runs
+        -- now, the two lines above are that off
+        if autoboxStamp() then
+            owedAutoboxOff(name, false)
+        elseif lastSession == 'on' then
+            owedAutoboxOff(name, true)
         end
     end
 
@@ -1700,6 +1799,7 @@ local function setMyAuto(on)
     local job = on and myAutoJob() or (S.autoJob or myAutoJob());
     S.autoJob = on and job or nil;
     if on then
+        owedAutoboxOff(auto_flag_character(), false);   -- (1.26c) MY AUTO on: nothing is kept back any more
         enqueue('/addon load autobot', 0.1);
         enqueue('/addon load autobox', 0.3);   -- (its rules; loading it twice only prints a notice)
         enqueue('/ab resume', 0.9);
@@ -1728,7 +1828,8 @@ local function setMyAuto(on)
         enqueue('/ab job ' .. job .. ' report', 6.6);
         ask(7.0);
     else
-        if autoboxLoaded() then enqueue('/autobox off'); end
+        if autoboxLoaded() then enqueue('/autobox off', 0, auto_flag_character()); end   -- (1.26c: for this character only)
+        if not autoboxStamp() then owedAutoboxOff(auto_flag_character(), true); end   -- (1.26c) autobox not running: send it when it is
         enqueue('/ab combat autotarget off', 0.2);
         enqueue('/ab combat autoengage off', 0.4);
         enqueue('/ab combat approach off', 0.6);
@@ -2515,6 +2616,7 @@ end
 
 -- ---------------------------------------------------------------- events
 ashita.events.register('load', 'servermenu_load', function ()
+    S.menuLoadedAt = os.time();   -- (1.26c) an autobox flag older than this is left over from an earlier game
     local hadWide, hadCfg = loadCfg();
     -- auto mode always starts off at login (phoenixsolo sends the off switches), so the tab must say OFF
     if S.cfg.auto_me ~= 'false' then S.cfg.auto_me = 'false'; S.cfgDirty = true; end
@@ -2579,6 +2681,20 @@ ashita.events.register('command', 'servermenu_command', function (e)
     if #args == 0 then return; end
     local first = args[1]:lower();
     local sub = (args[2] or ''):lower();
+    -- (1.26c) you switched autobox yourself (not a line this menu sent): your choice wins, the kept /autobox off is dropped
+    if first == '/autobox' and (sub == 'on' or sub == 'off' or sub == 'toggle') then
+        local t, own = now(), false;
+        for i = #(S.ownAutobox or {}), 1, -1 do
+            local o = S.ownAutobox[i];
+            if t - o.at > 5 then table.remove(S.ownAutobox, i);                      -- (the game runs it within a frame or two)
+            elseif not own and o.text == e.command then table.remove(S.ownAutobox, i); own = true; end
+        end
+        if not own then
+            owedAutoboxOff(auto_flag_character(), false);
+            dropQueuedAutoboxOff();
+        end
+        return;
+    end
     if first == '/sq' or first == '/squadpanel' then
         e.blocked = true;
         setTab('Squad');

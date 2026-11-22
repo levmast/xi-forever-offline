@@ -1,6 +1,6 @@
 addon.name    = 'crystalboy'
 addon.author  = 'XI: Forever Offline'
-addon.version = '1.8'
+addon.version = '1.8c'
 addon.desc    = 'Crystal Boy: play your Game Boy cartridges inside FFXI.'
 addon.link    = ''
 
@@ -32,6 +32,7 @@ local DEFAULTS = {
     palette = 'auto',     -- gambatte colorization: auto, GBC, SGB, internal, disabled
     sound = true,         -- (1.5) the game's sound
     volume = 60,          -- 0-100
+    jit = true,           -- (1.8c) false = the add-on's own Lua runs without LuaJIT's compiler (/cb jit off)
 }
 
 local P = {}       -- paths
@@ -110,7 +111,21 @@ local function load_settings()
     S.slot = math.max(1, math.min(3, tonumber(S.slot) or 1))
     S.volume = math.max(0, math.min(100, tonumber(S.volume) or 60))
     S.sound = S.sound ~= false
+    S.jit = S.jit ~= false
     S.binds = input.load(t.binds) -- (older versions kept window key codes in S.keys: replaced by the defaults)
+end
+
+-- (1.8c) Test switch for a hard fault that lands on a different step every time (Ricc): /cb jit off runs the add-on's
+-- own Lua without LuaJIT's compiler. The emulator core is native code either way, so games run the same.
+local function apply_jit()
+    if type(jit) ~= 'table' or not jit.off or not jit.on then return false end
+    if S.jit == false then
+        jit.off()
+        if jit.flush then jit.flush() end
+    else
+        jit.on()
+    end
+    return true
 end
 
 local function load_rules()
@@ -459,7 +474,7 @@ local function tick()
     end
     if now_s() >= G.next_flush then
         G.next_flush = now_s() + 3
-        flush_save()
+        trace.step('save flush'); flush_save(); trace.step('save flush done')   -- (1.8b, Ricc's crash after 'audio done')
     end
     if G.rec and now_s() >= G.rec.next then
         -- recorder: the game's working memory once a second, so the "finished" bytes can be found afterwards
@@ -474,7 +489,7 @@ local function tick()
     if now_s() >= G.next_ram_check then
         G.next_ram_check = now_s() + 2
         local rule = G.game and G.game.header and G.rules[G.game.header.title]
-        if rule then check_done('check') end
+        if rule then trace.step('ram check'); check_done('check'); trace.step('ram check done') end
     end
 end
 
@@ -609,6 +624,7 @@ local HELP = {
     '/cb snap <name>     memory snapshot       /cb diff <a> <b> [ram]  what changed',
     '/cb record          record the game memory once a second (start / stop)',
     '/cb done            which games this character has completed',
+    '/cb jit [on|off]    test mode for crashes: off runs the add-on without the Lua compiler',
     'Click the window to play (keys and controller then go to the Crystal Boy only); click the game to give them back.',
     'Default keys: arrows, X = A, Z = B, Enter = Start, Backspace = Select, Space = fast, F5/F7 = save/load state.',
     'Change keys and controller buttons with the Controls button in the window.',
@@ -627,6 +643,8 @@ ashita.events.register('load', 'cb_load', function()
     retro.trace = trace.log
     trace.log('addon ' .. addon.version .. ' loaded')
     load_settings()
+    if S.jit == false then apply_jit() end
+    trace.log('compiler ' .. (S.jit and 'on' or 'off'))
     load_rules()
     load_cart_config()
     screen.init(require('d3d8'))
@@ -682,6 +700,16 @@ ashita.events.register('command', 'cb_command', function(e)
         G.audio_failed = nil
         if not S.sound then pcall(audio.flush) end
         save_settings(); say('Sound ' .. (S.sound and 'on' or 'off'))
+    elseif sub == 'jit' then
+        if a[3] == 'on' or a[3] == 'off' then
+            S.jit = a[3] == 'on'
+            save_settings()
+            trace.log('compiler ' .. (S.jit and 'on' or 'off') .. ' (command)')
+            if apply_jit() then say('Compiler ' .. (S.jit and 'on' or 'off') .. ' (remembered for next time).')
+            else say('This game build has no compiler switch.') end
+        else
+            say('Compiler is ' .. (S.jit and 'on' or 'off') .. '. /cb jit off = test mode for crashes, /cb jit on = normal.')
+        end
     elseif sub == 'volume' then
         S.volume = math.max(0, math.min(100, tonumber(a[3]) or S.volume)); save_settings(); say('Volume ' .. S.volume)
     elseif sub == 'speed' then

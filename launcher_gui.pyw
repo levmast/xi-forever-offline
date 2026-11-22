@@ -6,6 +6,7 @@ from tkinter import ttk, messagebox, simpledialog, filedialog
 HERE = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))  # the kit folder
 sys.path.insert(0, HERE)
 import launcher_core as core
+import launcher_gamepad as gp
 
 IS_WINDOWS = os.name == "nt"
 UI_FONT, MONO_FONT = core.ui_fonts()
@@ -61,10 +62,11 @@ LIST_HINT_SECOND = "Tick what you want loaded in the second window (dualbox). Ch
 # The page buttons along the bottom: (picture in assets\\ui, name, the pages it opens). A button for several pages opens the one you were last on
 # in it. A page that is in none of them gets a MORE button, so nothing is ever unreachable.
 NAV_BUTTONS = (("home", "HOME", ("Play",)), ("squad", "SQUADS", ("Squad",)), ("coop", "CO-OP", ("Co-op",)),
-               ("config", "CONFIG", ("Rates", "Graphics", "Shaders")),
+               ("config", "CONFIG", ("Rates", "Graphics", "Shaders", "Controller")),
                ("addons", "ADDONS", ("Addons", "Plugins", "Other")), ("settings", "SETTINGS", ("Settings",)))
 PRESS_ANCHOR = 0.38      # press pictures are wider than the frame is tall: keep the part 38% of the way down (sky and skyline are above, people below)
 PRESS_NOTE = ""
+ONCE_TAG = "__once"      # a press picture with this in its name (xifo__once.png) is a one-time banner: see load_once
 
 
 def fit_picture(img, width, height, anchor=0.5):
@@ -80,7 +82,7 @@ def fit_picture(img, width, height, anchor=0.5):
 
 def press_anchor(name):
     """A picture called  castle__top.jpg  keeps its top, castle__bottom.jpg its bottom, castle__center.jpg its middle."""
-    stem = os.path.splitext(name)[0].lower()
+    stem = os.path.splitext(name)[0].lower().replace(ONCE_TAG, "")
     for tag, value in (("__top", 0.0), ("__center", 0.5), ("__middle", 0.5), ("__bottom", 1.0)):
         if stem.endswith(tag):
             return value
@@ -93,7 +95,7 @@ def load_press():
     global PRESS_NOTE
     folder = os.path.join(ASSETS, "press")
     try:
-        names = sorted(n for n in os.listdir(folder) if n.lower().endswith((".png", ".jpg", ".jpeg")))
+        names = sorted(n for n in os.listdir(folder) if n.lower().endswith((".png", ".jpg", ".jpeg")) and ONCE_TAG not in n.lower())
     except OSError:
         return []
     if not names:
@@ -110,6 +112,26 @@ def load_press():
         except Exception:
             continue
     return pictures
+
+
+def load_once(cfg):
+    """A one-time banner: a picture in assets\\press with __once in its name (xifo__once.png) is shown first on ONE start of the launcher
+    and is never part of the rotation. config.json remembers the ones that have been shown ("banners_seen"), so to see one again, take
+    its name out of that list. With several waiting, each start shows the next. Returns (picture, file name) or (None, None)."""
+    folder = os.path.join(ASSETS, "press")
+    seen = {str(s).lower() for s in (cfg.get("banners_seen") or [])}
+    try:
+        names = sorted(n for n in os.listdir(folder)
+                       if n.lower().endswith((".png", ".jpg", ".jpeg")) and ONCE_TAG in n.lower() and n.lower() not in seen)
+    except OSError:
+        return None, None
+    for name in names:
+        try:
+            from PIL import Image, ImageTk
+            return ImageTk.PhotoImage(fit_picture(Image.open(os.path.join(folder, name)), GALLERY_W, GALLERY_H, press_anchor(name))), name
+        except Exception:
+            continue
+    return None, None
 
 
 def load_ui_images(name):
@@ -599,6 +621,17 @@ class RulesEditor(tk.Toplevel):
         style.configure("Rules.Treeview", background=PANEL, fieldbackground=PANEL, foreground=FG, rowheight=24, borderwidth=0)
         style.map("Rules.Treeview", background=[("selected", ACCENT)], foreground=[("selected", "white")])
         style.configure("Rules.Treeview.Heading", background=PANEL2, foreground=FG, relief="flat")
+        # (2026-11-22, wildthing: players looked here for a way to add spells) what this editor is, and where the rest lives
+        note = tk.Frame(self, bg=PANEL2)
+        note.pack(fill="x", padx=12, pady=(12, 0))
+        tk.Label(note, text="Job rules are the built-in behaviour every squad mate of a job follows: when it uses the abilities "
+                            "and spells its job already knows. They can't add new spells or choose them for one mate. For that, "
+                            "use Gambits: type /gambits in the game to give one mate your own Rule Sets (spells, targets, "
+                            "conditions, weapon skills). When a Gambits Rule Set is applied to a mate, it decides that mate's actions.",
+                 bg=PANEL2, fg=FG, wraplength=820, justify="left").pack(side="left", padx=10, pady=8)
+        tk.Button(note, text="Gambits guide", relief="flat", bg=ACCENT, fg="white", padx=10,
+                  command=lambda: __import__("webbrowser").open(
+                      "https://discord.com/channels/1571346961779400859/1573535859980894338")).pack(side="right", padx=10, pady=8)
         top = tk.Frame(self, bg=BG)
         top.pack(fill="x", padx=12, pady=(12, 4))
         tk.Label(top, text="Job", bg=BG, fg=FG).pack(side="left")
@@ -974,7 +1007,10 @@ class SquadTab(tk.Frame):
                  bg=BG, fg=DIM, justify="left").pack(anchor="w", padx=10, pady=(8, 4))
         tk.Label(page, text="Applies the next time you call the mate. Change it with the game closed here, or in the game (the Squad panel, /sq).",
                  bg=BG, fg=DIM, wraplength=470, justify="left").pack(anchor="w", padx=10)
-        tk.Button(page, text="Edit job rules...", command=self.open_rules, bg=ACCENT, fg="white", relief="flat", padx=14, pady=4).pack(anchor="w", padx=10, pady=12)
+        tk.Button(page, text="Edit job rules...", command=self.open_rules, bg=ACCENT, fg="white", relief="flat", padx=14, pady=4).pack(anchor="w", padx=10, pady=(12, 2))
+        tk.Label(page, text="Job rules set how every mate of a job behaves by default. To choose your own spells, targets and "
+                            "conditions for one mate, use Gambits instead (type /gambits in the game).",
+                 bg=BG, fg=DIM, wraplength=520, justify="left").pack(anchor="w", padx=10, pady=(0, 8))
 
     def build_greetings_page(self, pages):
         page = tk.Frame(pages, bg=BG)
@@ -1635,7 +1671,9 @@ class RatesTab(tk.Frame):
         for k in (2, 20, 18, 25, 23, 0, 24, 30, 31, 32, 33, 34):    # era exp tables, fast travel, full bags, item stacks, short quest waits, all crafts, seasonal events
             R[k], row = row, row + 1
         row = header("World", row)
-        for k in (3, 1, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 28):   # (28: bots pass all loot)
+        # (34-35: crowd members through the gates / stopping for each other; 36-39: bot players' emotes, death memory,
+        #  life stories, gate travel - the 2026-11-21 additions, extras.lua)
+        for k in (3, 1, 4, 5, 34, 35, 6, 7, 8, 9, 10, 11, 12, 13, 14, 28, 36, 37, 38, 39):   # (28: bots pass all loot)
             R[k], row = row, row + 1
         row = header("Squad and AI", row)
         for k in (15, 16, 19, 26, 29, 27, 21, 22, 17):   # (26: squad gear, you keep the item; 29: all gear; 27: training dummies)
@@ -1753,6 +1791,24 @@ class RatesTab(tk.Frame):
                        "you without waiting for the lot timer. Off = they leave it to the timer.",
                        variable=self.bots_pass_loot, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
                        wraplength=520, justify="left").grid(row=R[28], column=0, columnspan=2, sticky="w", padx=6, pady=2)
+        # (2026-11-21) one switch each for the crowd and bot player additions (extras.lua; in game: !extras)
+        for slot, key, text in (
+                (34, "crowd_gates", "Crowds use the gates: newcomers walk in from the zone lines and Mog House doors, and people "
+                                    "leaving walk out through them or warp from the Home Point. Off = they appear and fade by the Home Point."),
+                (35, "crowd_meet", "Crowds stop for each other: two adventurers walking past each other may stop, turn and wave."),
+                (36, "bot_social", "Bot emotes: bot players cheer level ups, bow when they join you, wave goodbye, panic when "
+                                   "badly hurt, and trade emotes with each other in town."),
+                (37, "bot_memory", "Bots remember where they died: after dying twice in an area a bot hunts somewhere else for a "
+                                   "while, and it keeps away from the camp it died at."),
+                (38, "bot_story", "Bot life stories: each bot keeps its milestones between play sessions (!bots story Name), so "
+                                  "in a chat it still knows what it did yesterday."),
+                (39, "bot_gates", "Bots use the town gates: a bot going hunting runs to the gate first, and one coming home "
+                                  "arrives at the gate and walks in. Off = they leave from and return to their spot.")):
+            var = tk.BooleanVar(value=rates.get(key, True))
+            setattr(self, key, var)
+            tk.Checkbutton(inner, text=text, variable=var, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG,
+                           activeforeground=FG, wraplength=520, justify="left").grid(
+                           row=R[slot], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         self.squad_all_gear = tk.BooleanVar(value=rates.get("squad_all_gear", False))
         tk.Checkbutton(inner, text="Squad gets all gear: mates can wear anything their job and level allow without it being "
                        "given to them first. Off = gear has to be given once (trade it, or !squad give).",
@@ -1886,7 +1942,7 @@ class RatesTab(tk.Frame):
 
     BOOL_KEYS = ("all_crafts", "ah_sim", "era_exp", "conquest_sim", "crowds", "crowds_chat", "crowds_chat_ai", "crowds_field",
                  "bots", "squad_chat", "full_bags", "modern_stacks", "spell_scrolls", "squad_keep_gear", "training_dummies", "bots_pass_loot", "squad_all_gear", "short_quest_waits",
-                 "event_harvest", "event_starlight", "event_egg_hunt", "event_horro", "event_sunbreeze")
+                 "event_harvest", "event_starlight", "event_egg_hunt", "event_horro", "event_sunbreeze") + tuple(core.EXTRAS_KEYS)
     TEXT_KEYS = (("crowds_per_zone", "crowds_size"), ("crowds_chat_amount", "crowds_chat_amount"),
                  ("crowds_field_parties", "crowds_field_parties"), ("bots_roster", "bots_roster"), ("bots_online", "bots_online"),
                  ("bots_growth", "bots_growth"), ("squad_call_cooldown", "squad_call_cooldown"))
@@ -2000,6 +2056,8 @@ class RatesTab(tk.Frame):
         rates["squad_keep_gear"] = bool(self.squad_keep_gear.get())
         rates["training_dummies"] = bool(self.training_dummies.get())
         rates["bots_pass_loot"] = bool(self.bots_pass_loot.get())
+        for k in core.EXTRAS_KEYS:
+            rates[k] = bool(getattr(self, k).get())
         rates["squad_all_gear"] = bool(self.squad_all_gear.get())
         rates["short_quest_waits"] = bool(self.short_quest_waits.get())
         rates["events"] = self.events_value()
@@ -2009,6 +2067,136 @@ class RatesTab(tk.Frame):
         rates["bots_head_start_done"] = self.head_start_done
         rates["claim_shield"] = False
         return core.lock_player_rates(rates) if self.player else rates
+
+
+class ControllerTab(tk.Frame):
+    """(2026-11-22) Controller setup from the launcher, instead of FFXI's own FFXiPadConfig.exe (launcher_gamepad.py,
+    ported from LocalXI). Written into the Ashita boot file's [ffxi.registry] when PLAY is pressed."""
+
+    def __init__(self, parent, values):
+        super().__init__(parent, bg=BG)
+        values = gp.clean(values)
+        self.applied = values["applied"]
+        self.managed = tk.BooleanVar(value=values["managed"])
+        self.enabled = tk.BooleanVar(value=values["enabled"])
+        self.kind = tk.StringVar(value=gp.CONTROLLER_NAMES[values["type"]])
+        self.steam = tk.BooleanVar(value=values["steam_input"])
+        self.confirm_right = tk.BooleanVar(value=values["confirm_right"])
+        self.vibration = tk.BooleanVar(value=values["vibration"])
+        self.background = tk.BooleanVar(value=values["background"])
+        self.invert = tk.BooleanVar(value=values["invert_camera"])
+        self.chosen = dict(values["buttons"])          # slot -> button id the player changed
+        self.action_vars = {}
+
+        def check(parent, text, var, command=None):
+            b = tk.Checkbutton(parent, text=text, variable=var, command=command, bg=BG, fg=FG, selectcolor=PANEL,
+                               activebackground=BG, activeforeground=FG, anchor="w", justify="left")
+            b.pack(anchor="w", padx=10, pady=1)
+            return b
+
+        check(self, "Set up my controller here", self.managed, self.refresh)
+        tk.Label(self, text="Off = the game keeps what FFXI's own gamepad tool saved. Applied when you press PLAY "
+                            "(the main window; the dualbox window keeps its own).",
+                 bg=BG, fg=DIM, wraplength=760, justify="left", font=(UI_FONT, 9)).pack(anchor="w", padx=10, pady=(0, 6))
+
+        self.body = tk.Frame(self, bg=BG)
+        self.body.pack(fill="both", expand=True)
+        left = tk.Frame(self.body, bg=BG)
+        left.pack(side="left", fill="y", anchor="n")
+        row = tk.Frame(left, bg=BG)
+        row.pack(anchor="w", padx=10, pady=4)
+        tk.Label(row, text="Controller:", bg=BG, fg=FG).pack(side="left")
+        box = ttk.Combobox(row, values=[n for _, n in gp.CONTROLLERS], textvariable=self.kind, state="readonly", width=26)
+        box.pack(side="left", padx=6)
+        box.bind("<<ComboboxSelected>>", self.kind_changed)
+        check(left, "Use a controller (off: keyboard only, and no controller search, which can stutter)", self.enabled)
+        self.steam_box = check(left, "PlayStation pad through Steam Input or DS4Windows", self.steam, self.layout_changed)
+        check(left, "Confirm with the right face button (Nintendo's A, Japanese style)", self.confirm_right, self.layout_changed)
+        check(left, "Vibration", self.vibration)
+        check(left, "Controller works while the game is in the background", self.background)
+        check(left, "Invert camera up / down", self.invert)
+        self.hint = tk.Label(left, text="", bg=BG, fg=DIM, wraplength=330, justify="left", font=(UI_FONT, 9))
+        self.hint.pack(anchor="w", padx=10, pady=(8, 0))
+        bar = tk.Frame(left, bg=BG)
+        bar.pack(anchor="w", padx=10, pady=10)
+        tk.Button(bar, text="Reset buttons", command=self.reset_buttons, bg=PANEL, fg=FG, relief="flat", padx=10).pack(side="left")
+        tk.Button(bar, text="FFXI's own gamepad tool", command=lambda: GraphicsTab.open_pad_config(self),
+                  bg=PANEL, fg=FG, relief="flat", padx=10).pack(side="left", padx=6)
+
+        right = tk.Frame(self.body, bg=BG)
+        right.pack(side="left", fill="both", expand=True, anchor="n", padx=(20, 10))
+        tk.Label(right, text="Buttons", bg=BG, fg=FG, font=(UI_FONT, 10, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", pady=(4, 4))
+        self.boxes = {}
+        for i, (slot, name) in enumerate(gp.ACTIONS, start=1):
+            tk.Label(right, text=name, bg=BG, fg=FG, anchor="w").grid(row=i, column=0, sticky="w", pady=1)
+            var = tk.StringVar()
+            b = ttk.Combobox(right, textvariable=var, state="readonly", width=20)
+            b.grid(row=i, column=1, sticky="w", padx=6, pady=1)
+            b.bind("<<ComboboxSelected>>", lambda _e, s=slot: self.button_changed(s))
+            self.action_vars[slot], self.boxes[slot] = var, b
+        tk.Label(right, text="Sticks and D-pad: left stick moves, right stick turns the camera, D-pad moves in menus.",
+                 bg=BG, fg=DIM, wraplength=420, justify="left", font=(UI_FONT, 9)).grid(row=len(gp.ACTIONS) + 1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        self.layout_changed()
+
+    def _type(self):
+        return next((k for k, n in gp.CONTROLLERS if n == self.kind.get()), "xbox")
+
+    def collect(self):
+        values = {"managed": self.managed.get(), "enabled": self.enabled.get(), "type": self._type(),
+                  "steam_input": self.steam.get(), "confirm_right": self.confirm_right.get(),
+                  "vibration": self.vibration.get(), "background": self.background.get(),
+                  "invert_camera": self.invert.get(), "buttons": dict(self.chosen), "applied": self.applied}
+        return gp.clean(values)
+
+    def kind_changed(self, _event=None):
+        kind = self._type()
+        self.confirm_right.set(kind in ("switch", "switch2"))      # Nintendo's A is the right button
+        if kind not in ("ps4", "ps5"):
+            self.steam.set(False)
+        self.chosen = {}                                            # button numbers differ between pads
+        self.layout_changed()
+
+    def layout_changed(self):
+        values = self.collect()
+        self.chosen = dict(values["buttons"])
+        names = gp.buttons(values)
+        self.names = {b: n for b, n in names}
+        current = gp.default_buttons(values)
+        current.update(self.chosen)
+        for slot, var in self.action_vars.items():
+            self.boxes[slot].configure(values=[n for _, n in names])
+            var.set(self.names.get(current.get(slot, gp.NONE), "(nothing)"))
+        kind = values["type"]
+        self.steam_box.configure(state="normal" if kind in ("ps4", "ps5") else "disabled")
+        if kind in ("switch", "switch2"):
+            text = "Nintendo controllers need Steam Input (or BetterJoy for the Switch 1 Pro), which makes them act like an Xbox pad."
+        elif kind in ("ps4", "ps5") and not values["steam_input"]:
+            text = "Plugged in directly, on Sony's own driver. If it goes through Steam or DS4Windows, tick that box above."
+        else:
+            text = "On the Steam Deck, keep Xbox: Steam Input makes its controls act like an Xbox pad."
+        self.hint.configure(text=text)
+        self.refresh()
+
+    def button_changed(self, slot):
+        wanted = self.action_vars[slot].get()
+        button = next((b for b, n in self.names.items() if n == wanted), gp.NONE)
+        if button == gp.default_buttons(self.collect()).get(slot, gp.NONE):
+            self.chosen.pop(slot, None)
+        else:
+            self.chosen[slot] = button
+
+    def reset_buttons(self):
+        self.chosen = {}
+        self.layout_changed()
+
+    def refresh(self):
+        """The choices only show while the launcher sets the controller up (off: the game's own settings apply)."""
+        if self.managed.get():
+            if not self.body.winfo_ismapped():
+                self.body.pack(fill="both", expand=True)
+            self.steam_box.configure(state="normal" if self._type() in ("ps4", "ps5") else "disabled")
+        else:
+            self.body.pack_forget()
 
 
 class GraphicsTab(tk.Frame):
@@ -2072,10 +2260,31 @@ class GraphicsTab(tk.Frame):
         bar.pack(anchor="w", padx=10, pady=6)
         tk.Button(bar, text="Check", command=self.check, bg=PANEL, fg=FG, relief="flat", padx=10).pack(side="left", padx=(0, 6))
         tk.Button(bar, text="Restore original settings", command=self.restore, bg=PANEL, fg=FG, relief="flat", padx=10).pack(side="left")
+        # (2026-11-22, Sunie: handheld players) FFXI's own gamepad setup tool, without hunting for it in the game folder
+        tk.Button(bar, text="Gamepad setup", command=self.open_pad_config, bg=PANEL, fg=FG, relief="flat", padx=10).pack(side="left", padx=(6, 0))
         tk.Label(self, text="Not listed yet: Map Compression, Maintain Aspect Ratio, 3D LCD Mode and Environment. "
                             "I have not confirmed which values control those, so they are left alone.",
                  bg=BG, fg=DIM, wraplength=480, justify="left", font=(UI_FONT, 8)).pack(anchor="w", padx=10, pady=(4, 0))
         self.check()
+
+    def open_pad_config(self):
+        """Opens FFXiPadConfig.exe from the game folder the launcher plays (ToolsUS / ToolsEU / Tools)."""
+        cfg = core.load_config(os.path.join(HERE, "config.json"))
+        game = cfg.get("ffxi_client_dir", "")
+        first = {"US": "ToolsUS", "EU": "ToolsEU", "JP": "Tools"}.get(cfg.get("pol_lang", "US"), "ToolsUS")
+        for sub in (first, "ToolsUS", "Tools", "ToolsEU"):
+            exe = os.path.join(game, sub, "FFXiPadConfig.exe") if game else ""
+            if exe and os.path.isfile(exe):
+                try:
+                    if linux is not None:
+                        linux.run_windows(HERE, cfg, [exe], cwd=os.path.dirname(exe), wait=False)
+                    else:
+                        os.startfile(exe)          # (the tool can ask for Windows' permission; startfile shows that prompt)
+                except Exception as problem:
+                    messagebox.showerror("Gamepad setup", f"Could not open the gamepad setup tool:\n{problem}", parent=self)
+                return
+        messagebox.showinfo("Gamepad setup", "FFXI's gamepad setup tool (FFXiPadConfig.exe) was not found in the game "
+                            "folder's Tools folders" + (f":\n{game}" if game else ".") , parent=self)
 
     def _reverse(self, table, text):
         return next((k for k, v in table.items() if v == text), None)
@@ -2293,6 +2502,41 @@ class GfxModTab(tk.Frame):
 class UpdatesTab(tk.Frame):
     """The Settings page: a GM account for testing, and updates from Phoenix. setup_gm.py and server_update.py do the work; this page shows what they say."""
 
+    # (2026-11-22, K-Andy: moved FFXI from a hard disk to an SSD and the game closed right away) where the game is
+    def build_game_folder(self):
+        box = tk.Frame(self, bg=PANEL, highlightbackground=BORDER, highlightthickness=1)
+        box.pack(fill="x", padx=14, pady=(0, 6))
+        tk.Label(box, text="Game folder", bg=PANEL, fg=FG, font=(UI_FONT, 12, "bold")).pack(anchor="w", padx=12, pady=(10, 2))
+        self.game_folder_text = tk.StringVar(value=self.app.cfg.get("ffxi_client_dir", "") or "(not set)")
+        tk.Label(box, textvariable=self.game_folder_text, bg=PANEL, fg=DIM, font=(UI_FONT, 9)).pack(anchor="w", padx=12)
+        tk.Label(box, text="Moved FINAL FANTASY XI to another drive? Close the game, move the whole SquareEnix folder (FINAL FANTASY XI "
+                           "and PlayOnlineViewer together), then pick the new FINAL FANTASY XI folder here.",
+                 bg=PANEL, fg=DIM, wraplength=880, justify="left", font=(UI_FONT, 9)).pack(anchor="w", padx=12, pady=(2, 4))
+        tk.Button(box, text="Change game folder...", command=self.change_game_folder, bg=PANEL2, fg=FG, relief="flat", padx=12, pady=5,
+                  activebackground=BORDER, activeforeground=FG).pack(anchor="w", padx=12, pady=(0, 12))
+
+    def change_game_folder(self):
+        chosen = filedialog.askdirectory(parent=self, title="Pick the FINAL FANTASY XI folder",
+                                         initialdir=self.app.cfg.get("ffxi_client_dir") or None)
+        if not chosen:
+            return
+        import launcher_game as lg
+        try:
+            ffxi, viewer = lg.pick_game_folder(chosen, self.app.cfg.get("pol_lang", "US"))
+        except ValueError as problem:
+            messagebox.showerror("Game folder", str(problem), parent=self)
+            return
+        if not messagebox.askyesno("Game folder", f"Play FINAL FANTASY XI from here from now on?\n\n{ffxi}\n{viewer}", parent=self):
+            return
+        # game_copy: at PLAY the launcher points PlayOnline at these folders until the game closes (Windows asks once),
+        # so the registry's old location no longer matters
+        for key, value in (("ffxi_client_dir", ffxi), ("pol_dir", viewer), ("game_copy", True)):
+            save_config_value(key, value)
+            self.app.cfg[key] = value
+        self.game_folder_text.set(ffxi)
+        messagebox.showinfo("Game folder", "Saved. Press PLAY: Windows asks for permission once, so the launcher can point "
+                            "PlayOnline at this folder while you play.", parent=self)
+
     def __init__(self, master, app):
         super().__init__(master, bg=BG)
         self.app = app
@@ -2314,6 +2558,8 @@ class UpdatesTab(tk.Frame):
             button = tk.Button(gm_bar, text=text, command=command, bg=PANEL2, fg=FG, relief="flat", padx=12, pady=5, activebackground=BORDER, activeforeground=FG)
             button.pack(side="left", padx=(0, 8))
             self.gm_buttons.append(button)
+        if IS_WINDOWS:
+            self.build_game_folder()
         self.player = bool(app.cfg.get("mariadb_dir"))      # a player install (first-run setup); else this is the dev PC
         self.buttons = []
         if linux is not None:
@@ -3092,6 +3338,7 @@ class App(tk.Tk):
         self.boot_ini = os.path.join(self.ashita, "config", "boot", self.cfg.get("ashita_boot", core.DEFAULT_BOOT)) if self.ashita else None
         has_ini = bool(self.boot_ini) and os.path.exists(self.boot_ini)
         self.graphics = core.load_graphics(HERE, self.boot_ini if has_ini else None)
+        self.gamepad = gp.load(HERE)
         self.new_ui = newui is not None and not self.cfg.get("classic_ui")
         if self.new_ui:
             newui.prepare(self, globals())
@@ -3184,6 +3431,16 @@ class App(tk.Tk):
             self.banner_label.configure(image=banner)
         else:
             self.banner_label.configure(text="XI: FOREVER OFFLINE", fg=FG, font=("Georgia", 30, "bold"))
+        # a one-time banner (assets\\press\\name__once.png): up for this start of the launcher only, until it is clicked; the next start is
+        # back to the usual banners. It counts as shown once it has been on screen for a few seconds (or was clicked away).
+        self.once_banner, self.once_name = load_once(self.cfg)
+        if self.once_banner is not None:
+            self._images.append(self.once_banner)
+            self.banner_label.configure(image=self.once_banner, text="")
+            if self.heroes:
+                self.banner_label.configure(cursor="hand2")
+                self.banner_label.bind("<Button-1>", lambda e: self.next_hero())
+            self.after(4000, self.once_shown)
         self.pictures = load_gallery() + self.heroes
         self._images.extend(g for g in self.pictures if g not in self._images)
         self.picture_index = 0
@@ -3268,6 +3525,12 @@ class App(tk.Tk):
             tabs.add(self.graphics_tab, text="  Graphics  ")
         else:
             self.add_note(tabs, "Graphics", "The Graphics tab needs ashita_dir and ashita_boot in config.json to point at your Ashita boot file.")
+
+        # Controller tab (2026-11-22): controller setup in the boot file, instead of FFXI's own gamepad tool
+        self.pad_tab = None
+        if self.boot_ini and os.path.exists(self.boot_ini):
+            self.pad_tab = ControllerTab(tabs, self.gamepad)
+            tabs.add(self.pad_tab, text="  Controller  ")
 
         # Shaders tab: dgVoodoo + ReShade (Windows; on Linux Proton's own DXVK draws the game)
         self.gfx_tab = None
@@ -3492,6 +3755,15 @@ class App(tk.Tk):
         if linux is not None:     # the Steam Deck's screen is 1280 x 800: never taller (or wider) than the screen
             width = min(width, self.winfo_screenwidth())
             height = min(height, self.winfo_screenheight() - (0 if linux.in_game_mode() else 40))
+        # (2026-11-22, Starfret: a window made bigger by hand snapped back on every page) after the first fit only grow it
+        if getattr(self, "_fitted", False):
+            try:
+                if self.state() == "zoomed" or (self.winfo_width() >= width and self.winfo_height() >= height):
+                    return
+                width, height = max(width, self.winfo_width()), max(height, self.winfo_height())
+            except tk.TclError:
+                pass
+        self._fitted = True
         self.geometry(f"{width}x{height}")
 
     def show_subnav(self, group, index):
@@ -3692,7 +3964,25 @@ class App(tk.Tk):
             self.banner_label.pack(fill="both", expand=True)
         self.fit_window()
 
+    def once_shown(self):
+        """The one-time banner has been seen: its name goes into config.json ("banners_seen"), so the next start has the usual banners."""
+        name, self.once_name = getattr(self, "once_name", None), None
+        if not name:
+            return
+        try:
+            shown = [s for s in (self.cfg.get("banners_seen") or []) if isinstance(s, str)] + [name]
+            save_config_value("banners_seen", shown)
+            self.cfg["banners_seen"] = shown
+        except Exception:
+            pass                                    # config.json could not be written: it shows once more, nothing worse
+
     def next_hero(self):
+        if getattr(self, "once_banner", None) is not None:      # the one-time banner makes way for the usual ones
+            self.once_banner = None
+            self.once_shown()
+            if self.heroes:
+                self.banner_label.configure(image=self.heroes[self.hero_index])
+            return
         if len(self.heroes) > 1:
             self.hero_index = (self.hero_index + 1) % len(self.heroes)
             self.banner_label.configure(image=self.heroes[self.hero_index])
@@ -3701,7 +3991,8 @@ class App(tk.Tk):
         if len(self.pictures) > 1 and self.running and not self.showing_details:
             self.picture_index = (self.picture_index + 1) % len(self.pictures)
             self.picture_label.configure(image=self.pictures[self.picture_index])
-        elif not manual and not self.running and not self.showing_details and len(self.heroes) > 1:
+        elif (not manual and not self.running and not self.showing_details and len(self.heroes) > 1
+              and getattr(self, "once_banner", None) is None):
             self.hero_ticks += 1
             if self.hero_ticks % 2 == 0:                  # while nothing is running, the banner changes about every twelve seconds
                 self.next_hero()
@@ -3791,6 +4082,12 @@ class App(tk.Tk):
             self.graphics = self.graphics_tab.collect()
             try:
                 core.save_graphics(HERE, self.graphics)
+            except OSError:
+                pass
+        if self.pad_tab is not None:
+            self.gamepad = self.pad_tab.collect()
+            try:
+                gp.save(HERE, self.gamepad)
             except OSError:
                 pass
         self.running, self.stop_requested = True, False
@@ -3898,7 +4195,11 @@ class App(tk.Tk):
             pass
         self.stop_requested = True
         self.cleanup()
-        if getattr(self, "db_proc", None) is not None:      # the kit's MariaDB, if this launcher started it
+        # the kit's own MariaDB (player installs) is stopped whoever started it. (2026-11-21, Meli) It used to be left
+        # running when an earlier launcher had started it and was then closed from Task Manager: every launcher after
+        # that found it running, so none of them stopped it. Only one launcher runs at a time (one_launcher_only) and
+        # the servers are stopped by now, so nothing else is using it.
+        if self.cfg.get("mariadb_dir"):
             try:
                 import launcher_setup
                 launcher_setup.stop_portable(self.cfg)
@@ -4109,6 +4410,7 @@ class App(tk.Tk):
                 core.apply_graphics(self.boot_ini, self.graphics, self.cfg.get("ffxi_client_dir"))
             except Exception:
                 pass
+        self.apply_gamepad()                   # the visit's boot file is a copy of yours too
         self.launch_boot = co.write_visit_boot(self.ashita, self.cfg.get("ashita_boot", core.DEFAULT_BOOT), host)
         self.visit_mode = True
         try:
@@ -4162,6 +4464,7 @@ class App(tk.Tk):
                 self.say("Applied your graphics settings.")
             except Exception as e:
                 self.say(f"Could not apply the graphics settings ({e}) - starting with the boot file as it is.")
+        self.apply_gamepad()
         self.say("Starting the game through Ashita...")
         alog = open(os.path.join(LOGS, "ashita.log"), "wb")
         self.logfiles.append(alog)
@@ -4197,6 +4500,7 @@ class App(tk.Tk):
                 self.say("Applied your graphics settings.")
             except Exception as e:
                 self.say(f"Could not apply the graphics settings ({e}) - starting with the boot file as it is.")
+        self.apply_gamepad()
         self.say("Starting the game through Ashita and Proton...")
         alog = open(os.path.join(LOGS, "ashita.log"), "wb")
         self.logfiles.append(alog)
@@ -4270,6 +4574,19 @@ class App(tk.Tk):
             linux.start_game(HERE, self.cfg, self.ashita, boot, log)
             return
         subprocess.Popen([cli, boot], cwd=self.ashita, stdout=log, stderr=subprocess.STDOUT, creationflags=core.NO_WINDOW)
+
+    def apply_gamepad(self):
+        """The Controller tab's setup into the main boot file (launcher_gamepad.py). Nothing changes while it is off."""
+        if getattr(self, "pad_tab", None) is None or not self.boot_ini:
+            return
+        try:
+            changed, self.gamepad = gp.apply(self.boot_ini, self.gamepad)
+            gp.save(HERE, self.gamepad)
+            if changed:
+                self.say("Applied your controller settings." if self.gamepad["managed"] else
+                         "Gave the controller back to the game's own gamepad settings.")
+        except Exception as e:
+            self.say(f"Could not apply the controller settings ({e}) - starting with the boot file as it is.")
 
     def fix_shot_dir(self, boot):
         """Points a boot file's screenshot folder (registry 0042) at the real game folder. The main boot file gets this

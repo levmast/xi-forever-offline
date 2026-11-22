@@ -362,6 +362,22 @@ def find_viewer(ffxi_dir, lang="US", reg=None):
     return sibling if os.path.isdir(sibling) else None
 
 
+def pick_game_folder(path, lang="US", reg=None):
+    """(2026-11-22, K-Andy: moved FFXI to another drive) (ffxi, viewer) for a folder the player picked: the FINAL FANTASY XI
+    folder itself, its SquareEnix folder or the PlayOnline folder above it. Raises ValueError when there is no game there."""
+    path = os.path.normpath(path or "")
+    ffxi = next((c for c in (path, os.path.join(path, "FINAL FANTASY XI"), os.path.join(path, "SquareEnix", "FINAL FANTASY XI"))
+                 if os.path.isfile(os.path.join(c, "FFXiMain.dll"))), None)
+    if ffxi is None:
+        raise ValueError("No FINAL FANTASY XI there (FFXiMain.dll not found). Pick the FINAL FANTASY XI folder.")
+    sibling = os.path.join(os.path.dirname(ffxi), "PlayOnlineViewer")
+    viewer = sibling if os.path.isdir(sibling) else find_viewer(ffxi, lang, reg)
+    if not viewer:
+        raise ValueError("PlayOnlineViewer was not found next to that FINAL FANTASY XI folder. Move both folders together "
+                         "(they sit side by side in SquareEnix).")
+    return ffxi, viewer
+
+
 def folder_size(path):
     total = 0
     for root, _dirs, files in os.walk(path):

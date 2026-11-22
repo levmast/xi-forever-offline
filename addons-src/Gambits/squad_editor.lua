@@ -54,6 +54,20 @@ function M.init(a)
         M.TRUSTS = okT and type(mod) == 'table' and mod or {}
     end
 
+    -- (0.3.1) spell families, status effects and what gives them (gambits_data.lua, generated from the server's data):
+    -- only for what the pickers show; without it nothing is filtered
+    local data = api.addon_data
+    if type(data) ~= 'table' then
+        local okD, mod = pcall(require, 'gambits_data')
+        data = okD and type(mod) == 'table' and mod or nil
+    end
+
+    M.set_data(data)
+    -- (0.3.1) remembered view choices (the addon's settings): Show all spells/families, the Weapon Skills section open
+    S.showAll = api.get_pref ~= nil and api.get_pref('show_all') == true
+    S.wsOpen = api.get_pref ~= nil and api.get_pref('ws_open') == true
+    S.rolesOpen = api.get_pref ~= nil and api.get_pref('roles_open') == true -- (0.3.2) the Party roles section open
+
     T.init({ now = api.now, queue_command = api.queue_command, input_open = api.input_open, log = api.log,
              config = api.transport_config })
     M.T = T
@@ -587,6 +601,10 @@ end
 function M.read_mates(on_mates, on_fail)
     return read_request({ 'mates' }, function(items)
         S.mates = parse_mates(items)
+        if S.roles and S.roles.rows then
+            S.roles.stale = true -- (0.3.2: who is out may have changed: the party roles are loaded again when shown)
+        end
+
         on_mates(S.mates)
     end, on_fail)
 end
@@ -1842,6 +1860,19 @@ function M.ws_dirty()
         or saved.ws ~= w.edit.ws
 end
 
+-- (0.3.1 polish) whether the player has really changed the weapon skill settings in the editor: the edit differs from
+-- what the server has stored. Unlike ws_dirty (the panel's "Save *"), a mate with no Gambits setting yet (source 'l')
+-- is NOT edited; a change put back to the stored values is not edited either.
+function M.ws_edited()
+    local w = S.ws
+    if not (w and w.data and w.edit) then
+        return false
+    end
+
+    local saved = ws_edit_from(w.data)
+    return saved.control ~= w.edit.control or saved.mode ~= w.edit.mode or saved.tp ~= w.edit.tp or saved.ws ~= w.edit.ws
+end
+
 function M.ws_name(id)
     if id == nil or id == 0 then
         return 'Best available'
@@ -2116,6 +2147,29 @@ for _, subj in ipairs(M.SUBJECTS) do
         M.SUBJECT_OF[op[2]] = { subj = subj, op = i }
     end
 end
+
+-- (0.3.1) what each subject checks (the engine's conditions in gambits_container.cpp), as a tooltip per dropdown entry
+M.SUBJECT_HELP = {
+    ALWAYS     = 'No condition: the rule is used whenever it is reached and its action is possible.',
+    HP         = 'The target\'s HP in percent of its maximum HP.',
+    MP         = 'The target\'s MP in percent. A target without MP (a Warrior) counts as 0 %, so "MP below" matches it; '
+        .. 'MP (mages) does not.',
+    MPUSER     = 'MP in percent, only for targets that have MP: a target without MP (a Warrior) never matches.',
+    HASMP      = 'True when the target has MP at all (maximum MP above 0).',
+    TP         = 'The target\'s TP (0-3000).',
+    MISSING    = 'How many HP the target is missing: maximum HP minus current HP.',
+    AGGRO      = 'Whether the target is the one the enemy is attacking (it has the enemy\'s top enmity).',
+    PTTANK     = 'Whether the party has a tank (a member whose main job is NIN, PLD or RUN). The rule\'s target does not matter.',
+    STATUS     = 'Whether the target has a status effect (a buff or a debuff), e.g. Protect missing -> Protect.',
+    ENEMY      = 'What the enemy is doing now (target Enemy only): casting a spell, or readying a weapon skill, special move '
+        .. 'or job ability.',
+    COOLDOWN   = 'True while the squad mate\'s own recast of a job ability is running, whatever the rule\'s target is.',
+    SHADOWS    = 'How many Utsusemi shadows or Blink images the target has left.',
+    SKILLCHAIN = 'The enemy\'s skillchain state (target Enemy only): an open skillchain, or a magic burst window now.',
+    LEVEL      = 'The target\'s level.',
+    TIMER      = 'True the first time, then once every so many seconds.',
+    RANDOM     = 'True with this chance (in percent) each time the rule is checked.',
+}
 
 -- Status effects offered first in the picker (any other effect can be typed; the server checks the name)
 M.COMMON_EFFECTS = { 'PROTECT', 'SHELL', 'REGEN', 'HASTE', 'STONESKIN', 'BLINK', 'AQUAVEIL', 'REFRESH', 'RERAISE',
@@ -2579,6 +2633,21 @@ local function format_safe(text)
     return (tostring(text or ''):gsub('%%', '%%%%')) -- (only for a binding without TextUnformatted: '%%' shows one '%')
 end
 
+-- (0.3.1 polish) the wrap width of tooltips: 27 times the current font size (the font Gambits pushes for its Size
+-- setting), or 380 px (scaled) where the binding cannot tell the font size
+M.TOOLTIP_WRAP_EM = 27
+function M.tooltip_wrap_width()
+    local g = imgui()
+    if g.GetFontSize then
+        local ok, size = pcall(g.GetFontSize)
+        if ok and type(size) == 'number' and size > 0 then
+            return size * M.TOOLTIP_WRAP_EM
+        end
+    end
+
+    return s(380)
+end
+
 local function tooltip(text)
     local g = imgui()
     if not (g.IsItemHovered and g.IsItemHovered()) then
@@ -2587,8 +2656,20 @@ local function tooltip(text)
 
     if g.BeginTooltip and g.EndTooltip and g.TextUnformatted then
         if g.BeginTooltip() ~= false then -- (true when shown; nil from a binding that returns nothing)
-            g.TextUnformatted(tostring(text or ''))
-            g.EndTooltip()
+            -- (0.3.1 polish) long texts wrap at about 27 characters' width of the tooltip's own font (~380 px at 100 %;
+            -- it follows the window's Size setting), as Ashita's own imgui.ShowHelp does. Still TextUnformatted only.
+            local wrap = g.PushTextWrapPos and g.PopTextWrapPos and M.tooltip_wrap_width() or nil
+            if wrap then
+                g.PushTextWrapPos(wrap)
+            end
+
+            scoped(nil, function()
+                if wrap then
+                    g.PopTextWrapPos()
+                end
+
+                g.EndTooltip()
+            end, function() g.TextUnformatted(tostring(text or '')) end)
         end
     elseif g.SetTooltip then
         g.SetTooltip(format_safe(text))
@@ -2651,8 +2732,9 @@ local function label_text(text)
     g.Text(text)
 end
 
--- a drop-down of ids shown by their readable names: returns the chosen id (tipOf: an optional tooltip per entry)
-local function combo(id, current, values, labelOf, tipOf)
+-- a drop-down of ids shown by their readable names: returns the chosen id (tipOf: an optional tooltip per entry;
+-- (0.3.1) colorOf: an optional text colour per entry, e.g. dimmed for a spell learned later)
+local function combo(id, current, values, labelOf, tipOf, colorOf)
     local g = imgui()
     local function label(v)
         if v == nil then
@@ -2680,7 +2762,12 @@ local function combo(id, current, values, labelOf, tipOf)
 
     if g.BeginCombo(id, label(current)) then
         for i, v in ipairs(values) do
-            if g.Selectable(label(v) .. '##' .. tostring(i), v == current) then
+            local color = colorOf and colorOf(v)
+            local picked = false
+            with_colors(color and { { 'ImGuiCol_Text', color } } or {}, function()
+                picked = g.Selectable(label(v) .. '##' .. tostring(i), v == current)
+            end)
+            if picked then
                 current = v
             end
 
@@ -2801,6 +2888,118 @@ function M.subjects_for(slot, target, cat, advanced)
     return out
 end
 
+-- (0.3.1) the value of Has effect / Missing effect: ONE dropdown - the effects the mate's jobs give, the common ones,
+-- and "Custom..." last. Only Custom shows a text field. The rule keeps exactly the effect id it had (r.arg / r.arg2);
+-- the field has its own text (spaces and half-typed names stay as typed) and writes the id only when it is a name the
+-- server knows, or - for any other name - when the player presses Enter or leaves the field. An empty or unreadable
+-- text never changes the saved value. A saved name outside the lists opens in Custom, unchanged.
+function M.effect_selector(r, slot, cat, labelW)
+    local g = imgui()
+    local _, ak = cond_keys(slot)
+    local mate = M.mate()
+    M.ensure_plan(mate)
+    local jobList, common = M.effect_choices(cat, mate)
+    local values, jobOf, commonSet = {}, {}, {}
+    for _, e in ipairs(jobList) do
+        values[#values + 1] = e.name
+        jobOf[e.name] = e
+    end
+
+    for _, n in ipairs(common) do
+        values[#values + 1] = n
+        commonSet[n] = true
+    end
+
+    values[#values + 1] = M.CUSTOM_EFFECT
+    S.effCustom = S.effCustom or {}
+    local st = S.effCustom[slot]
+    local cur = r[ak]
+    if st == nil or st.rule ~= r then
+        st = { rule = r, custom = false, value = cur }
+        S.effCustom[slot] = st
+    end
+
+    if st.value ~= cur then
+        st.value, st.text, st.pending, st.custom = cur, nil, nil, false -- (changed elsewhere: another subject, a reload)
+    end
+
+    if cur ~= nil and jobOf[cur] == nil and not commonSet[cur] then
+        st.custom = true -- (a saved name outside the lists: shown in Custom, kept exactly)
+    end
+
+    local jobName = mate and mate.job or 'job'
+    same_if_fits(s(200), labelW)
+    width(s(200))
+    local shown = st.custom and M.CUSTOM_EFFECT or cur
+    local picked = combo('##gsq-eff' .. slot, shown, values, function(v)
+        if v == M.CUSTOM_EFFECT then
+            return (st.custom and cur) and ('Custom: ' .. M.pretty(cur)) or 'Custom...'
+        elseif jobOf[v] then
+            return M.pretty(v) .. '  (' .. jobName .. ')'
+        end
+
+        return M.pretty(v)
+    end, function(v) return M.effect_tip(v, jobOf[v], mate) end)
+    tooltip(st.custom and M.effect_tip(M.CUSTOM_EFFECT) or M.effect_tip(cur, jobOf[cur or ''], mate) or 'Choose a status effect.')
+    if picked ~= shown then
+        if picked == M.CUSTOM_EFFECT then
+            st.custom, st.text, st.pending = true, cur and M.pretty(cur) or '', nil
+        else
+            r[ak], st.custom, st.text, st.pending, st.value = picked, false, nil, nil, picked
+            cur = picked
+        end
+    end
+
+    if not st.custom then
+        return
+    end
+
+    same_if_fits(s(170), labelW)
+    width(s(170))
+    if st.text == nil then
+        st.text = cur and M.pretty(cur) or ''
+    end
+
+    local typed = text_field('##gsq-efftype' .. slot, st.text, 40)
+    local committed = false
+    if typed ~= st.text then
+        st.text = typed
+        local id = M.effect_id(typed)
+        st.pending = nil
+        if string.match(id, '^[A-Z][A-Z0-9_]*$') then
+            if M.effect_known(id) == true or not g.IsItemDeactivatedAfterEdit then
+                -- (a known name at once; a binding that cannot tell when editing ends: at once too, as before)
+                r[ak], st.value, committed = id, id, true
+                cur = id
+            elseif id ~= cur then
+                st.pending = id
+            end
+        end
+    end
+
+    if not committed and st.pending and g.IsItemDeactivatedAfterEdit and g.IsItemDeactivatedAfterEdit() then
+        r[ak], st.value, cur, st.pending = st.pending, st.pending, st.pending, nil
+    end
+
+    tooltip(M.effect_tip(M.CUSTOM_EFFECT))
+    local id = M.effect_id(st.text)
+    if st.pending then
+        same()
+        colored(M.theme.gold, '(Enter to use)')
+        tooltip(string.format('%s is not a status effect name the editor knows. Press Enter (or leave the field) to use it anyway; '
+            .. 'the rule keeps %s until then.', M.pretty(st.pending), cur and M.pretty(cur) or 'no effect'))
+    elseif cur and M.effect_known(cur) == false then
+        same()
+        colored(M.theme.bad, '(unknown effect)')
+        tooltip(string.format('The server has no status effect called %s. The rule keeps it exactly as saved, but the server '
+            .. 'refuses to save a Rule Set with it: choose or type another one.', cur))
+    elseif cur and (id == '' or not string.match(id, '^[A-Z][A-Z0-9_]*$')) then
+        same()
+        note('(keeps ' .. M.pretty(cur) .. ')')
+        tooltip('The field is empty or not a name: the rule keeps ' .. M.pretty(cur) .. '.')
+    end
+end
+
 -- one condition slot: subject, comparison, value
 local function condition_editor(r, slot, cat, labelW)
     local g = imgui()
@@ -2832,7 +3031,14 @@ local function condition_editor(r, slot, cat, labelW)
         end
 
         return byKey[v] and byKey[v].label or v
+    end, function(v)
+        if v == 'NONE' then
+            return 'No second condition: the first one alone decides.'
+        end
+
+        return M.SUBJECT_HELP[v or '']
     end)
+    tooltip(M.SUBJECT_HELP[current or ''] or 'What the rule checks.')
     if picked ~= current then
         if picked == 'NONE' then
             M.set_condition(r, 2, nil, cat)
@@ -2881,40 +3087,31 @@ local function condition_editor(r, slot, cat, labelW)
             colored(M.theme.bad, string.format('(%d-%d)', spec.lo, spec.hi))
         end
     elseif spec and spec.kind == 'e' then
-        same_if_fits(s(170), labelW)
-        width(s(170))
-        local list = {}
-        for _, e in ipairs(M.COMMON_EFFECTS) do
-            list[#list + 1] = e
-        end
-
-        local chosen = combo('##gsq-eff' .. slot, r[ak], list, function(v) return v and M.pretty(v) or '(choose)' end)
-        if chosen ~= r[ak] then
-            r[ak] = chosen
-        end
-
-        same_if_fits(s(130), labelW)
-        width(s(130))
-        local shown = r[ak] and M.pretty(r[ak]) or ''
-        local typed = text_field('##gsq-efftype' .. slot, shown, 32)
-        if typed ~= shown then
-            r[ak] = typed ~= '' and M.effect_id(typed) or nil
-        end
-
-        tooltip('Pick a common effect, or type any status effect (the server checks the name).')
+        M.effect_selector(r, slot, cat, labelW)
     elseif spec and spec.kind == 'j' then
         -- (server version 5) JA_ON_COOLDOWN: one of the mate's own job abilities
         same_if_fits(s(220), labelW)
         width(s(220))
+        -- (0.3.1) the same job-aware list as the Job Ability action (and its Show all); a saved name stays, marked
+        local mate = M.mate()
+        M.ensure_plan(mate)
         local names, info = {}, {}
-        for _, e in ipairs(M.ja_choices(cat, M.mate())) do
+        for _, e in ipairs(M.ja_view(cat, mate, S.showAll == true)) do
             names[#names + 1] = e.name
             info[e.name] = e
         end
 
+        if r[ak] and info[r[ak]] == nil then
+            local e = M.ja_saved_entry(r[ak], cat, mate)
+            names[#names + 1] = e.name
+            info[e.name] = e
+        end
+
+        local dim = M.state_colors()
         local chosen = combo('##gsq-ja' .. slot, r[ak], names, function(v)
             return v and (info[v] and info[v].label or M.pretty(v)) or '(choose)'
-        end)
+        end, function(v) return M.entry_tip('ja', info[v or ''], mate) end,
+        function(v) local it = info[v or '']; return it and dim[it.state] or nil end)
         if chosen ~= r[ak] then
             r[ak] = chosen
         end
@@ -2925,7 +3122,8 @@ local function condition_editor(r, slot, cat, labelW)
         local name, n = M.mod_parse(r[ak])
         same_if_fits(s(170), labelW)
         width(s(170))
-        local chosen = combo('##gsq-mod' .. slot, name, M.MOD_ORDER, function(v) return v and M.MODS[v][3] or '(choose)' end)
+        local chosen = combo('##gsq-mod' .. slot, name, M.MOD_ORDER, function(v) return v and M.MODS[v][3] or '(choose)' end,
+            function(v) return M.MODS[v or ''] and string.format('%s left on the target (%d-%d).', M.MODS[v][3], M.MODS[v][1], M.MODS[v][2]) end)
         same_if_fits(s(110), labelW)
         width(s(110))
         local typed = int_input('##gsq-modn' .. slot, tostring(n or 2))
@@ -3027,14 +3225,597 @@ local function in_list(list, name)
     return nil
 end
 
+-- ---------------------------------------------------------------- (0.3.1) job-aware choices: presentation only
+-- What the Action and Status pickers offer. Nothing here changes a rule, what is sent, or what the server accepts: the
+-- server checks every name on Save and the game decides what a mate casts. A saved name a list leaves out stays
+-- selected and unchanged, with a note. Each entry has a state:
+--   now          the mate has it now (the server's per-mate catalog, catm)
+--   unconfirmed  its jobs and levels allow it, the server cannot confirm it (a scroll not learned, blue magic)
+--   later        its main job learns it by level 75, or its sub job by the sub job's cap: prepared now, works then
+--   beyond       only its sub job learns it, above what the sub job reaches (shown with Show all)
+--   other        no spell of the mate's jobs (families; shown with Show all, marked "(not RDM)")
+--   unknown      the job data is not here (an old server, or the list is loading or failed): shown as before
+M.PLAN_LEVEL = 75
+M.CUSTOM_EFFECT = '__custom__'
+
+-- gambits_data.lua: spells[NAME] = { FAMILY or false, e = effect, q = 'x'/'b' }, effects[NAME] = id, jaEffects[NAME]
+function M.set_data(d)
+    M.DATA = type(d) == 'table' and type(d.spells) == 'table' and type(d.effects) == 'table' and d or nil
+    M.FAMILY_SPELLS = {}
+    for name, row in pairs(M.DATA and M.DATA.spells or {}) do
+        local fam = type(row) == 'table' and row[1] or nil
+        if fam then
+            M.FAMILY_SPELLS[fam] = M.FAMILY_SPELLS[fam] or {}
+            table.insert(M.FAMILY_SPELLS[fam], name)
+        end
+    end
+
+    for _, list in pairs(M.FAMILY_SPELLS) do
+        table.sort(list)
+    end
+end
+
+-- The sub job level a mate's sub job reaches at main level 75: half (37), unless the mate's current levels show this
+-- server gives more (map.SUBJOB_RATIO: two thirds = 50, the main level = 75). No sub job: 0.
+function M.sub_cap(m)
+    if m == nil or m.sub == nil then
+        return 0
+    end
+
+    local main, sl = tonumber(m.level) or 0, tonumber(m.subLevel)
+    if sl and main > 1 then
+        if sl >= main then
+            return M.PLAN_LEVEL
+        elseif sl > math.floor(main / 2) then
+            return math.floor(M.PLAN_LEVEL * 2 / 3)
+        end
+    end
+
+    return math.floor(M.PLAN_LEVEL / 2)
+end
+
+function M.plan_key(m)
+    return m and ((m.job or '?') .. '/' .. (m.sub or '-')) or nil
+end
+
+-- The planning list for a mate's jobs: the server's own job catalog (cat <job> <sub>: that job's spells and abilities
+-- up to level 75, by the server's content settings). With an older server the editor's catalog already is that list.
+function M.plan_for(cat, m)
+    if cat and cat.perMate == false then
+        return cat
+    end
+
+    local p = S.plan
+    if m and p and p.key == M.plan_key(m) then
+        return p.cat
+    end
+
+    return nil
+end
+
+-- 'ready', 'loading', 'failed' or nil (not asked yet / not possible)
+function M.plan_state(cat, m)
+    if M.plan_for(cat, m) then
+        return 'ready'
+    end
+
+    local p = S.plan
+    if m and p and p.key == M.plan_key(m) then
+        return p.loading and 'loading' or (p.error and 'failed') or nil
+    end
+
+    return nil
+end
+
+-- asks the server for the planning list once per job / sub job (only when nothing else is waiting)
+function M.ensure_plan(m)
+    if m == nil or not (S.server and (S.server.version or 0) >= 4) or M.busy() then
+        return
+    end
+
+    local key = M.plan_key(m)
+    if S.plan and S.plan.key == key then
+        return
+    end
+
+    S.plan = { key = key, loading = true }
+    read_request({ 'cat', m.job, m.sub }, function(items, endFields)
+        local cat, why = M.parse_catalog(items, endFields)
+        if S.plan and S.plan.key == key then
+            S.plan = cat and { key = key, cat = cat } or { key = key, error = why }
+        end
+
+        return true -- (a planning list that cannot be read only means: nothing is filtered)
+    end, function(why)
+        if S.plan and S.plan.key == key then
+            S.plan = { key = key, error = why }
+        end
+    end, 'cat')
+end
+
+-- false for a spell never in a squad mate's spell list (gambits_data q = 'x': Trust, Summoning, Geomancy, a monster's
+-- version), and for blue magic unless the mate is a Blue Mage (the same rules as gambits_squad.lua G.mateSpells)
+local function squad_spell(name, mate)
+    local row = M.DATA and M.DATA.spells[name]
+    if row == nil then
+        return true
+    elseif row.q == 'x' then
+        return false
+    elseif row.q == 'b' then
+        return mate ~= nil and (mate.job == 'BLU' or mate.sub == 'BLU')
+    end
+
+    return true
+end
+
+-- (job abilities also: merit = its job and level allow it, the owner's merit is needed; mainonly = from the sub job, a
+-- two-hour or main-job-only ability, never usable there)
+local STATE_RANK = { now = 1, unconfirmed = 2, unknown = 2, later = 3, merit = 3, beyond = 4, mainonly = 4, other = 5, missing = 5 }
+
+function M.view_label(e, mate)
+    local name = M.pretty(e.name)
+    if e.state == 'unconfirmed' then
+        return name .. '  (not confirmed)'
+    elseif e.state == 'later' then
+        return string.format('%s  (%sLv %d)', name, e.sub and 'sub ' or '', e.level or 0)
+    elseif e.state == 'merit' then
+        return string.format('%s  (%sLv %d, merit)', name, e.sub and 'sub ' or '', e.level or 0)
+    elseif e.state == 'mainonly' then
+        return string.format('%s  (sub, %s)', name, e.twoHour and 'two-hour: main job only' or 'main job only')
+    elseif e.state == 'beyond' and not e.sub then
+        return string.format('%s  (Lv %d, above %d)', name, e.level or 0, M.PLAN_LEVEL)
+    elseif e.state == 'beyond' then
+        return string.format('%s  (sub Lv %d, above the sub job cap)', name, e.level or 0)
+    elseif e.state == 'other' then
+        return string.format('%s  (%snot %s)', name, e.job and (e.job .. ', ') or '', mate and mate.job or 'this job')
+    elseif e.state == 'missing' then
+        return name .. '  (not on this server)'
+    end
+
+    return name
+end
+
+local function view_sort(list)
+    table.sort(list, function(a, b)
+        local ra, rb = STATE_RANK[a.state] or 9, STATE_RANK[b.state] or 9
+        if ra ~= rb then
+            return ra < rb
+        end
+
+        if ra >= 3 and (a.level or 0) ~= (b.level or 0) then
+            return (a.level or 0) < (b.level or 0)
+        end
+
+        if a.order and b.order then
+            return a.order < b.order
+        end
+
+        return a.label < b.label
+    end)
+    return list
+end
+
+-- The Specific Spell choices with planning: what the mate has now, then what its jobs learn later (to level 75; the
+-- sub job to its cap), marked by level. showAll adds the sub job's spells above its cap. Returns entries
+-- { name, label, level, sub, state }.
+function M.spell_view(cat, mate, showAll, plan)
+    plan = plan or M.plan_for(cat, mate)
+    local out, seen = {}, {}
+    local exact = cat and cat.perMate == true
+    for _, e in ipairs(M.spell_choices(cat, mate)) do
+        seen[e.name] = true
+        out[#out + 1] = { name = e.name, level = e.level, sub = e.sub, state = 'now' }
+    end
+
+    for _, u in ipairs(exact and cat.unconfirmed or {}) do
+        if u.name and not seen[u.name] and not (M.TRUSTS and M.TRUSTS[u.name]) then
+            seen[u.name] = true
+            out[#out + 1] = { name = u.name, level = u.level, sub = u.sub, state = 'unconfirmed' }
+        end
+    end
+
+    local cap = M.sub_cap(mate)
+    for _, sp in ipairs(plan and plan.spells or {}) do
+        local n = sp.name
+        if n and not seen[n] and not (M.TRUSTS and M.TRUSTS[n]) and squad_spell(n, mate) and not (sp.sub and mate and mate.sub == nil) then
+            seen[n] = true
+            out[#out + 1] = { name = n, level = sp.level or 0, sub = sp.sub == true,
+                              state = (sp.sub and (sp.level or 0) > cap) and 'beyond' or 'later' }
+        end
+    end
+
+    local shown = {}
+    for _, e in ipairs(out) do
+        if showAll or e.state ~= 'beyond' then
+            e.label = M.view_label(e, mate)
+            shown[#shown + 1] = e
+        end
+    end
+
+    return view_sort(shown)
+end
+
+-- The Best of Family choices: the server's family list (complete with showAll), each with the state of its best spell
+-- for this mate. Without the job data (or while it loads) the list is the server's, unmarked (state 'unknown').
+-- Entries { name, label, state, level, sub, members = { spell entries }, order }.
+function M.family_view(cat, mate, showAll, plan)
+    plan = plan or M.plan_for(cat, mate)
+    local filter = M.DATA ~= nil and plan ~= nil
+    local byName = {}
+    if filter then
+        for _, e in ipairs(M.spell_view(cat, mate, true, plan)) do
+            byName[e.name] = e
+        end
+    end
+
+    local out = {}
+    for i, fam in ipairs(cat and cat.families or {}) do
+        local e = { name = fam, order = i, members = {}, state = 'unknown' }
+        if filter then
+            local best
+            for _, sp in ipairs(M.FAMILY_SPELLS[fam] or {}) do
+                local s = byName[sp]
+                if s then
+                    e.members[#e.members + 1] = s
+                    if best == nil or STATE_RANK[s.state] < STATE_RANK[best.state]
+                        or (STATE_RANK[s.state] == STATE_RANK[best.state] and (s.level or 0) < (best.level or 0)) then
+                        best = s
+                    end
+                end
+            end
+
+            table.sort(e.members, function(a, b)
+                if (a.level or 0) ~= (b.level or 0) then
+                    return (a.level or 0) < (b.level or 0)
+                end
+
+                return a.name < b.name
+            end)
+            e.state = best and best.state or 'other'
+            e.level, e.sub = best and best.level, best and best.sub
+        end
+
+        if showAll or (e.state ~= 'beyond' and e.state ~= 'other') then
+            e.label = M.view_label(e, mate)
+            out[#out + 1] = e
+        end
+    end
+
+    return view_sort(out)
+end
+
+-- (0.3.1) one job ability's job, level and sub job / merit restrictions: gambits_data jas (made from the server's
+-- squad_ja_jobs_data.lua, the table the U13 rules use). {} when the data is not here (then only level 0 = two-hour is
+-- known, as the server's own rule says).
+function M.ja_info(name)
+    local row = M.DATA and type(M.DATA.jas) == 'table' and M.DATA.jas[name or ''] or nil
+    if type(row) ~= 'table' then
+        return {}
+    end
+
+    return { job = row[1], level = row[2], twoHour = row.sp == true or row[2] == 0, mainOnly = row.main == true,
+             merit = row.merit == true }
+end
+
+-- The Job Ability choices with planning, by the same rules as the spells: what the mate may use now (the server's
+-- per-mate catalog, catm: the U13 rules), then what its jobs learn later (the server's job catalog, cat <job> <sub>), the
+-- sub job to its cap. Merit abilities the owner has not unlocked are marked "merit". showAll adds the sub job's two-hour
+-- and main-job-only abilities, the sub job's abilities above its cap and abilities above level 75. Runtime limits
+-- (recast, status, pets, ...) are never part of this list: the server checks them in combat.
+-- Older servers (no per-mate catalog): the job catalog with the mate's main level, the sub job up to the main level (its
+-- own level is not known then; the server decides). No mate, or no catalog: the server's list as it is (state 'now').
+-- Returns entries { name, label, level, sub, state, twoHour, merit, job }.
+function M.ja_view(cat, mate, showAll, plan)
+    plan = plan or M.plan_for(cat, mate)
+    local out, seen = {}, {}
+    local exact = cat and cat.perMate == true
+    if exact or mate == nil or plan == nil then
+        for _, e in ipairs(M.ja_choices(cat, mate)) do
+            seen[e.name] = true
+            local info = M.ja_info(e.name)
+            out[#out + 1] = { name = e.name, level = e.level, sub = e.sub, state = 'now', merit = info.merit, job = info.job }
+        end
+    end
+
+    local cap, level = M.sub_cap(mate), mate and tonumber(mate.level) or 0
+    for _, ja in ipairs((mate and plan and plan.jas) or {}) do
+        local n = ja.name
+        if n and not seen[n] and not (ja.sub and mate.sub == nil) then
+            seen[n] = true
+            local info = M.ja_info(n)
+            local lv = ja.level or 0
+            local twoHour = info.twoHour == true or lv == 0
+            local state
+            if ja.sub then
+                if twoHour or info.mainOnly then
+                    state = 'mainonly'
+                elseif lv > cap then
+                    state = 'beyond'
+                elseif info.merit then
+                    state = 'merit'
+                elseif lv <= (exact and (tonumber(mate.subLevel) or 0) or level) then
+                    state = exact and 'unconfirmed' or 'now'
+                else
+                    state = 'later'
+                end
+            elseif lv > M.PLAN_LEVEL then
+                state = 'beyond'
+            elseif info.merit then
+                state = 'merit'
+            elseif lv <= level then
+                state = exact and 'unconfirmed' or 'now'
+            else
+                state = 'later'
+            end
+
+            out[#out + 1] = { name = n, level = lv, sub = ja.sub == true, state = state, twoHour = twoHour, merit = info.merit,
+                              job = info.job }
+        end
+    end
+
+    local shown = {}
+    for _, e in ipairs(out) do
+        if showAll or (e.state ~= 'beyond' and e.state ~= 'mainonly') then
+            e.label = M.view_label(e, mate)
+            shown[#shown + 1] = e
+        end
+    end
+
+    return view_sort(shown)
+end
+
+-- A saved job ability the view leaves out, so it stays selected and marked: its own entry from the complete view (a
+-- hidden sub job / above-cap one), else "other" (not an ability of the mate's jobs, with its job when the data has it).
+function M.ja_saved_entry(name, cat, mate, plan)
+    if name == nil then
+        return nil
+    end
+
+    plan = plan or M.plan_for(cat, mate)
+    for _, e in ipairs(M.ja_view(cat, mate, true, plan)) do
+        if e.name == name then
+            return e
+        end
+    end
+
+    local info = M.ja_info(name)
+    local e = { name = name, level = info.level, state = 'other', job = info.job, merit = info.merit }
+    if mate == nil or plan == nil then
+        e.state = 'unknown' -- (nothing can be said without the job list)
+    elseif info.job and (info.job == mate.job or info.job == mate.sub) then
+        e.state = 'missing' -- (one of its jobs, but not in the server's list: its expansion switched off, or not loaded)
+    end
+
+    e.label = (e.state == 'other' or e.state == 'missing') and M.view_label(e, mate) or M.pretty(name)
+    return e
+end
+
+-- the tooltip of a job ability entry: its job and level, and why it is (not yet) usable - job, level and merit only;
+-- recast and status are decided in combat (plain text: drawn with tooltip(), never as a format)
+function M.ja_tip(e, mate)
+    if e == nil then
+        return nil
+    end
+
+    local who = mate and mate.name or 'The mate'
+    local job = mate and mate.job or 'its job'
+    local sub = mate and mate.sub or 'sub job'
+    local name = M.pretty(e.name)
+    local lines = {}
+    if e.state == 'other' then
+        lines[1] = e.job and string.format('%s: a %s job ability (level %d), not one of %s\'s jobs (%s%s).', name, e.job,
+            e.level or 0, who, job, mate and mate.sub and ('/' .. sub) or '')
+            or string.format('%s: not a job ability of %s\'s jobs on this server.', name, who)
+        lines[2] = 'A rule with it never fires for ' .. who .. '. It is kept as saved.'
+        return table.concat(lines, '\n')
+    elseif e.state == 'missing' then
+        return string.format('%s: a %s job ability, but not in this server\'s ability list (its expansion switched off?). A '
+            .. 'rule with it does not fire now. It is kept as saved.', name, e.job or job)
+    elseif e.state == 'unknown' then
+        return M.choice_tip(e, mate)
+    end
+
+    lines[1] = name .. (e.sub and string.format(': from the sub job (%s), level %d.', sub, e.level or 0)
+        or string.format(': %s level %d.', job, e.level or 0))
+    if e.state == 'now' then
+        lines[2] = string.format('%s can use it by job and level now.', who)
+    elseif e.state == 'unconfirmed' then
+        lines[2] = string.format('%s\'s job and level allow it, but the server does not offer it now (its ability rules). The '
+            .. 'server decides when %s is called.', who, who)
+    elseif e.state == 'later' then
+        lines[2] = string.format('Learned later (%s level %d). You can prepare it now: the rule starts working then.',
+            e.sub and ('sub job ' .. sub) or job, e.level or 0)
+    elseif e.state == 'merit' then
+        lines[2] = 'A merit ability: it works only once the squad\'s owner (you) has unlocked its merit'
+            .. ((e.level or 0) > (mate and tonumber(e.sub and mate.subLevel or mate.level) or 0)
+                and string.format(', and from %slevel %d.', e.sub and 'sub job ' or '', e.level or 0) or '.')
+    elseif e.state == 'mainonly' then
+        lines[2] = string.format('%s only works as the main job, never from the sub job (%s): a rule with it never fires for %s.',
+            e.twoHour and 'A two-hour ability' or 'It', sub, who)
+    elseif e.state == 'beyond' and e.sub then
+        lines[2] = string.format('Above what a sub job reaches (%s up to level %d), so it may never be usable.', sub, M.sub_cap(mate))
+    elseif e.state == 'beyond' then
+        lines[2] = string.format('Learned above level %d, so it may never be usable.', M.PLAN_LEVEL)
+    end
+
+    if e.merit and e.state == 'now' then
+        lines[#lines + 1] = 'A merit ability (its merit is unlocked).'
+    end
+
+    lines[#lines + 1] = 'Recast, status and other conditions are checked in combat, not in this list.'
+    return table.concat(lines, '\n')
+end
+
+-- the state of one saved name in the views (nil: not in the server's list at all)
+local function view_entry(list, name)
+    for _, e in ipairs(list) do
+        if e.name == name then
+            return e
+        end
+    end
+
+    return nil
+end
+
+-- true / false: whether the server's status effect table has this name; nil: the data is not here (nothing is checked)
+function M.effect_known(name)
+    if not (M.DATA and M.DATA.effects) or name == nil then
+        return nil
+    end
+
+    return M.DATA.effects[name] ~= nil
+end
+
+-- The status effects for "Has effect / Missing effect": the effects the mate's jobs give (the server's ability
+-- scripts and spell data: gambits_data jaEffects / spells.e) for its abilities and spells now and later, then the
+-- common ones. Returns job entries { name, sources = { { from, kind, level, sub, state } } } and common names.
+function M.effect_choices(cat, mate, plan)
+    plan = plan or M.plan_for(cat, mate)
+    local job, byName = {}, {}
+    local function add(effect, from, kind, level, sub, state)
+        if effect == nil or M.effect_known(effect) ~= true then
+            return
+        end
+
+        local e = byName[effect]
+        if e == nil then
+            e = { name = effect, sources = {} }
+            byName[effect] = e
+            job[#job + 1] = e
+        end
+
+        e.sources[#e.sources + 1] = { from = from, kind = kind, level = level or 0, sub = sub == true, state = state }
+    end
+
+    if M.DATA then
+        local cap, seenJa = M.sub_cap(mate), {}
+        for _, pass in ipairs({ { cat and cat.jas or {}, 'now' }, { plan and plan.jas or {}, 'later' } }) do
+            for _, ja in ipairs(pass[1]) do
+                if ja.name and not seenJa[ja.name] and not (ja.sub and (mate == nil or mate.sub == nil or (ja.level or 0) > cap)) then
+                    seenJa[ja.name] = true
+                    for _, eff in ipairs(M.DATA.jaEffects and M.DATA.jaEffects[ja.name] or {}) do
+                        add(eff, ja.name, 'ja', ja.level, ja.sub, pass[2])
+                    end
+                end
+            end
+        end
+
+        for _, sp in ipairs(M.spell_view(cat, mate, false, plan)) do
+            local row = M.DATA.spells[sp.name]
+            if row and row.e then
+                add(row.e, sp.name, 'spell', sp.level, sp.sub, sp.state)
+            end
+        end
+    end
+
+    table.sort(job, function(a, b) return M.pretty(a.name) < M.pretty(b.name) end)
+    local common = {}
+    for _, name in ipairs(M.COMMON_EFFECTS) do
+        if byName[name] == nil then
+            common[#common + 1] = name
+        end
+    end
+
+    return job, common
+end
+
+-- tooltips for the entries above (plain text: drawn with tooltip(), never as a format)
+function M.entry_tip(kind, e, mate)
+    if e == nil then
+        return nil
+    end
+
+    local who = mate and mate.name or 'The mate'
+    local job = mate and mate.job or 'its job'
+    local sub = mate and mate.sub or 'sub job'
+    if kind == 'ja' then
+        return e.state and M.ja_tip(e, mate) or M.choice_tip(e, mate)
+    end
+
+    local lines = {}
+    if kind == 'family' then
+        lines[1] = string.format('Best of %s: the strongest spell of this family %s knows, with enough MP and not on recast.',
+            M.pretty(e.name), who)
+        if #(e.members or {}) > 0 then
+            local parts = {}
+            for i, m in ipairs(e.members) do
+                if i > 10 then
+                    parts[#parts + 1] = '...'
+                    break
+                end
+
+                parts[#parts + 1] = string.format('%s %s%d', M.pretty(m.name), m.sub and ('(' .. sub .. ') ') or '', m.level or 0)
+            end
+
+            lines[#lines + 1] = job .. (mate and mate.sub and ('/' .. sub) or '') .. ': ' .. table.concat(parts, ', ')
+        end
+    else
+        lines[1] = M.pretty(e.name) .. (e.sub and string.format(': from the sub job (%s), level %d.', sub, e.level or 0)
+            or string.format(': %s level %d.', job, e.level or 0))
+    end
+
+    if e.state == 'now' then
+        lines[#lines + 1] = kind == 'family' and ('Usable now.') or nil
+    elseif e.state == 'unconfirmed' then
+        lines[#lines + 1] = string.format('%s\'s jobs and levels allow it, but it is not confirmed (not learned yet, or blue magic set when called).', who)
+    elseif e.state == 'later' then
+        lines[#lines + 1] = string.format('Learned later (%s level %d). You can prepare it now: the rule starts working then.',
+            e.sub and ('sub job ' .. sub) or job, e.level or 0)
+    elseif e.state == 'beyond' then
+        lines[#lines + 1] = string.format('Only the sub job (%s) learns it, at sub level %d: above what a sub job reaches, so it may never be usable.',
+            sub, e.level or 0)
+    elseif e.state == 'other' then
+        lines[#lines + 1] = string.format('No %s spell in this family (main or sub job): this rule would never fire for %s.', job, who)
+    end
+
+    return table.concat(lines, '\n')
+end
+
+function M.effect_tip(name, jobEntry, mate)
+    if name == M.CUSTOM_EFFECT then
+        return 'Type any status effect name (spaces are fine). A name the server knows is used at once; another one when you '
+            .. 'press Enter or leave the field, and it is marked if the server has no such effect.'
+    elseif name == nil then
+        return nil
+    end
+
+    if jobEntry then
+        local parts = {}
+        for i, src in ipairs(jobEntry.sources) do
+            if i > 3 then
+                break
+            end
+
+            parts[#parts + 1] = string.format('%s %s (%s%s%d)', src.kind == 'ja' and 'ability' or 'spell', M.pretty(src.from),
+                src.sub and ((mate and mate.sub or 'sub') .. ' ') or ((mate and mate.job or '') .. ' '), src.state == 'later' and 'from level ' or 'level ', src.level or 0)
+        end
+
+        return M.pretty(name) .. ': given by ' .. table.concat(parts, ', ') .. '.'
+    end
+
+    return M.pretty(name) .. ': a common status effect.'
+end
+
 -- Why a saved spell or job ability is not among the mate's choices now (nil when it is): it is kept as it is, never
--- changed; the server decides when the mate is called
-function M.action_note(r, cat, mate)
+-- changed; the server decides when the mate is called. (0.3.1) Also for spell families, and with the planning list a
+-- spell or family learned later says when it starts working.
+function M.action_note(r, cat, mate, plan)
+    if r.kind == 'family' and r.name then
+        return M.family_note(r, cat, mate, plan)
+    end
+
     if r.name == nil or (r.kind ~= 'spell' and r.kind ~= 'ja') then
         return nil
     end
 
     local who = mate and mate.name or 'the mate'
+    if r.kind == 'ja' then
+        local note = M.ja_note(r, cat, mate, plan)
+        if note ~= false then
+            return note
+        end
+    end
+
     local list = r.kind == 'spell' and M.spell_choices(cat, mate) or M.ja_choices(cat, mate)
     local e = in_list(list, r.name)
     if e then
@@ -3049,6 +3830,16 @@ function M.action_note(r, cat, mate)
         return M.pretty(r.name) .. ' is a Trust spell, not a squad action. It is kept as saved; the server decides.'
     end
 
+    plan = plan or M.plan_for(cat, mate)
+    local planned = r.kind == 'spell' and plan and view_entry(M.spell_view(cat, mate, true, plan), r.name)
+    if planned and planned.state == 'later' then
+        return string.format('%s learns %s at %slevel %d: this rule starts working then. It is kept as saved.', who,
+            M.pretty(r.name), planned.sub and 'sub job ' or '', planned.level or 0)
+    elseif planned and planned.state == 'beyond' then
+        return string.format('Only %s\'s sub job learns %s, at sub level %d, above what a sub job reaches: this rule may never '
+            .. 'fire. It is kept as saved.', who, M.pretty(r.name), planned.level or 0)
+    end
+
     for _, u in ipairs(cat and cat.unconfirmed or {}) do
         if r.kind == 'spell' and u.name == r.name then
             return string.format('%s\'s jobs and levels allow %s, but it is not confirmed (not learned yet, or blue magic). '
@@ -3059,6 +3850,96 @@ function M.action_note(r, cat, mate)
     return string.format('%s is not in %s\'s %s now (job, level%s). It is kept as saved; the server decides when %s is called.',
         M.pretty(r.name), who, r.kind == 'spell' and 'spell list' or 'job abilities',
         r.kind == 'ja' and ', main job only or merit' or '', who)
+end
+
+-- (0.3.1) a saved job ability this mate cannot use (yet), by the job-aware view: when it starts working, or why it never
+-- does. nil when it is usable now; false when the view knows nothing about it (no mate or job list: the note of before).
+function M.ja_note(r, cat, mate, plan)
+    plan = plan or M.plan_for(cat, mate)
+    if mate == nil or plan == nil then
+        return false
+    end
+
+    local e = M.ja_saved_entry(r.name, cat, mate, plan)
+    local who, name = mate.name or 'the mate', M.pretty(r.name)
+    if e == nil or e.state == 'unknown' then
+        return false
+    elseif e.state == 'now' then
+        if e.sub and not (cat and cat.perMate) then
+            return string.format('%s uses this with its sub job: the server checks the sub job\'s level.', (who:gsub('^%l', string.upper)))
+        end
+
+        return nil
+    elseif e.state == 'later' then
+        return string.format('%s learns %s at %slevel %d: this rule starts working then. It is kept as saved.', who, name,
+            e.sub and 'sub job ' or '', e.level or 0)
+    elseif e.state == 'merit' then
+        return string.format('%s is a merit ability: it works once the squad\'s owner has unlocked its merit%s. It is kept as saved.',
+            name, (e.level or 0) > (tonumber(e.sub and mate.subLevel or mate.level) or 0)
+                and string.format(' and %s reaches %slevel %d', who, e.sub and 'sub job ' or '', e.level or 0) or '')
+    elseif e.state == 'mainonly' then
+        return string.format('%s %s only as the main job, never from %s\'s sub job: this rule never fires. It is kept as saved.',
+            name, e.twoHour and 'is a two-hour ability and works' or 'works', who)
+    elseif e.state == 'beyond' and e.sub then
+        return string.format('Only %s\'s sub job learns %s, at sub level %d, above what a sub job reaches: this rule may never '
+            .. 'fire. It is kept as saved.', who, name, e.level or 0)
+    elseif e.state == 'beyond' then
+        return string.format('%s learns %s at level %d, above level %d: this rule may never fire. It is kept as saved.', who,
+            name, e.level or 0, M.PLAN_LEVEL)
+    elseif e.state == 'unconfirmed' then
+        return string.format('%s\'s job and level allow %s, but the server does not offer it now. It is kept as saved; the '
+            .. 'server decides when %s is called.', who, name, who)
+    end
+
+    if e.state == 'missing' then
+        return string.format('%s is not in this server\'s ability list for %s now (its expansion switched off?). It is kept as '
+            .. 'saved; the server decides when %s is called.', name, e.job or mate.job or 'its job', who)
+    elseif e.job then
+        return string.format('%s is a %s job ability, not one of %s\'s jobs: this rule never fires for %s. It is kept as saved.',
+            name, e.job, who, who)
+    end
+
+    return string.format('%s is not a job ability of %s\'s jobs on this server: this rule never fires for %s. It is kept as '
+        .. 'saved; the server decides when %s is called.', name, who, who, who)
+end
+
+-- (0.3.1) a saved spell family this mate cannot use (yet): when it starts working, or that it never does. nil when it
+-- is usable now, or when the job data is not here (nothing is guessed then).
+function M.family_note(r, cat, mate, plan)
+    local who = mate and mate.name or 'the mate'
+    local listed = false
+    for _, f in ipairs(cat and cat.families or {}) do
+        listed = listed or f == r.name
+    end
+
+    if cat and cat.families and #cat.families > 0 and not listed then
+        return string.format('Best of %s is not in the server\'s family list now (content switched off?). It is kept as saved; '
+            .. 'the server decides when %s is called.', M.pretty(r.name), who)
+    end
+
+    plan = plan or M.plan_for(cat, mate)
+    if M.DATA == nil or plan == nil then
+        return nil
+    end
+
+    local e = view_entry(M.family_view(cat, mate, true, plan), r.name)
+    if e == nil or e.state == 'now' or e.state == 'unknown' then
+        return nil
+    elseif e.state == 'unconfirmed' then
+        return string.format('%s\'s jobs allow %s spells, but none is confirmed yet (not learned, or blue magic). It is kept as saved.',
+            who, M.pretty(r.name))
+    elseif e.state == 'later' then
+        return string.format('%s learns the first %s spell at %slevel %d: this rule starts working then. It is kept as saved.',
+            who, M.pretty(r.name), e.sub and 'sub job ' or '', e.level or 0)
+    elseif e.state == 'beyond' then
+        return string.format('Only %s\'s sub job has %s spells, from sub level %d, above what a sub job reaches: this rule may '
+            .. 'never fire. It is kept as saved.', who, M.pretty(r.name), e.level or 0)
+    end
+
+    return string.format('Not a%s %s family: no %s spell for %s or its sub job, so this rule never fires for %s. It is kept as saved.',
+        -- ("an RDM", "a WHM": job names are said as letters)
+        (mate and mate.job and mate.job:match('^[AEFHILMNORSX]')) and 'n' or '', mate and mate.job or 'job', M.pretty(r.name),
+        mate and mate.job or 'its job', who)
 end
 
 -- (kept for the earlier callers and tests)
@@ -3077,40 +3958,76 @@ local function name_picker(r, cat)
         return
     end
 
+    local g = imgui()
     local mate = M.mate()
     same_if_fits(s(260), s(100))
     width(s(260))
-    local names, info = {}, {}
-    if r.kind == 'family' then
-        for _, item in ipairs(cat.families or {}) do
-            names[#names + 1] = item
-        end
+    -- (0.3.1) families and spells by the mate's jobs: usable now first, then what it learns later (to level 75, marked
+    -- with its level); Show all adds the rest of the server's list. Presentation only: the server checks on Save.
+    -- (0.3.1) job abilities the same way: now, later (marked with the level), merit; Show all adds the sub job's two-hour /
+    -- main-job-only ones and those above the caps
+    M.ensure_plan(mate)
+    local entries
+    if r.kind == 'ja' then
+        entries = M.ja_view(cat, mate, S.showAll == true)
     else
-        for _, e in ipairs(r.kind == 'spell' and M.spell_choices(cat, mate) or M.ja_choices(cat, mate)) do
-            names[#names + 1] = e.name
-            info[e.name] = e
-        end
+        entries = r.kind == 'family' and M.family_view(cat, mate, S.showAll == true) or M.spell_view(cat, mate, S.showAll == true)
     end
 
+    local names, info = {}, {}
+    for _, e in ipairs(entries) do
+        names[#names + 1] = e.name
+        info[e.name] = e
+    end
+
+    local listed = #names
+    if r.kind == 'ja' and r.name and info[r.name] == nil then
+        -- (a saved ability the list leaves out: shown at the end, marked, still selected)
+        local e = M.ja_saved_entry(r.name, cat, mate)
+        names[#names + 1] = e.name
+        info[e.name] = e
+    end
+
+    local dim = M.state_colors()
     -- (a saved name that is not in the list stays selected and unchanged until the player picks another one)
     r.name = combo('##gsq-name', r.name, names, function(v)
         local it = info[v or '']
         return it and it.label or (v and M.pretty(v) or '(choose)')
-    end, function(v) return choice_tip(info[v or ''], mate) end)
-    tooltip(choice_tip(info[r.name or ''], mate) or (r.name and M.pretty(r.name)) or 'Choose one.')
-
-    -- spells the mate's jobs allow but the server cannot confirm: shown, not offered
-    if r.kind == 'spell' and cat.perMate and #(cat.unconfirmed or {}) > 0 then
-        local listed = {}
-        for _, u in ipairs(cat.unconfirmed) do
-            listed[#listed + 1] = M.pretty(u.name)
+    end, function(v) return M.entry_tip(r.kind, info[v or ''], mate) end,
+    function(v) local it = info[v or '']; return it and dim[it.state] or nil end)
+    tooltip(M.entry_tip(r.kind, info[r.name or ''], mate) or (r.name and M.pretty(r.name)) or 'Choose one.')
+    same_if_fits(s(100), s(100))
+    local all = { S.showAll == true }
+    if g.Checkbox('Show all##gsq-showall', all) then
+        S.showAll = all[1] == true
+        if api.set_pref then
+            api.set_pref('show_all', S.showAll)
         end
-
-        same_if_fits(s(160), s(100))
-        note(string.format('(%d more not confirmed)', #listed))
-        tooltip('Allowed by ' .. (mate and mate.name or 'the mate') .. '\'s jobs and levels, but not confirmed - not learned yet '
-            .. '(spells from scrolls), or blue magic set when called. Not offered:\n' .. table.concat(listed, ', '))
     end
+
+    local state = M.plan_state(cat, mate)
+    tooltip('Off: what ' .. (mate and mate.name or 'the mate') .. '\'s jobs can use, now or later (up to level 75; the sub job up to '
+        .. 'its level cap). On: the whole list the server offers, with what does not fit marked. Only the list changes: '
+        .. 'saved rules stay exactly as they are, and the server checks every rule when you save.'
+        .. (r.kind == 'ja' and ('\nJob abilities: On adds the sub job\'s two-hour and main-job-only abilities and those above '
+            .. 'the level caps, marked. Recast and status are checked in combat, not here.') or '')
+        .. (state == 'failed' and '\nThe job levels could not be loaded: the list is not filtered.' or ''))
+    if state == 'loading' or (state == nil and S.server and (S.server.version or 0) >= 4) then
+        same()
+        note('(loading job levels...)')
+    elseif listed == 0 and not S.showAll then
+        same()
+        note('(none for ' .. (mate and mate.job or 'this job') .. ')')
+        tooltip('No ' .. (r.kind == 'family' and 'spell family' or r.kind == 'ja' and 'job ability' or 'spell') .. ' of '
+            .. (mate and mate.job or 'this job') .. (mate and mate.sub and ('/' .. mate.sub) or '') .. ' up to level 75. Show all '
+            .. 'lists the rest.')
+    end
+end
+
+-- the list colours by state: dimmed for later / not confirmed / merit, muted for what may never work
+function M.state_colors()
+    return { later = M.theme.secondary, unconfirmed = M.theme.secondary, merit = M.theme.secondary, beyond = M.theme.muted,
+             mainonly = M.theme.muted, other = M.theme.muted, missing = M.theme.muted }
 end
 -- The selected rule: Target -> Conditions -> Action (edits go straight into the draft; nothing is sent)
 local function rule_editor(d, r, cat, readonly)
@@ -3124,8 +4041,8 @@ local function rule_editor(d, r, cat, readonly)
 
     local why = M.protected(r, cat)
     if why then
-        colored(M.theme.bad, 'This rule cannot be changed here: ' .. why .. '. It is kept exactly as it is.')
-        note('You can still switch it on or off and move it.')
+        wrapped(M.theme.bad, 'This rule cannot be changed here: ' .. why .. '. It is kept exactly as it is.')
+        wrapped(M.theme.secondary, 'You can still switch it on or off and move it.')
         return
     end
 
@@ -3144,7 +4061,7 @@ local function rule_editor(d, r, cat, readonly)
         targets[#targets + 1] = t
     end
 
-    r.target = combo('##gsq-target', r.target, targets, M.target_label)
+    r.target = combo('##gsq-target', r.target, targets, M.target_label, function(v) return M.TARGET_HELP[v or ''] end)
     tooltip(M.TARGET_HELP[r.target or ''] or 'Who the rule is about.')
 
     label('Condition')
@@ -3274,23 +4191,96 @@ local function rule_list(d, cat, readonly, height)
     end)
 end
 
-local function sets_panel(mate, listH)
+-- (0.3.1) layout helpers: one row's height, the cursor (to measure what a block took last frame), a child without border
+local function row_h()
+    local g = imgui()
+    if g.GetFrameHeightWithSpacing then
+        local h = g.GetFrameHeightWithSpacing()
+        if type(h) == 'number' and h > 0 then
+            return h
+        end
+    end
+
+    return s(24)
+end
+
+local function cursor_y()
+    local g = imgui()
+    if g.GetCursorPosY then
+        local y = g.GetCursorPosY()
+        if type(y) == 'number' then
+            return y
+        end
+    end
+
+    return nil
+end
+
+local function plain_child(id, size, fn)
+    local g = imgui()
+    local shown = g.BeginChild(id, size, rawget(_G, 'ImGuiChildFlags_None') or 0)
+    scoped(nil, function() g.EndChild() end, function()
+        if shown then
+            fn()
+        end
+    end)
+end
+
+S.layout = S.layout or {}
+
+-- a list's height from its rows: just its rows for a short list (at least minRows), at most `maxH` (then it scrolls
+-- in its own child)
+function M.list_height(rows, rowH, maxH, minRows)
+    local want = math.max(rows, minRows or 1, 1) * rowH + s(10)
+    return math.floor(math.min(want, maxH))
+end
+
+-- (0.3.1 polish) the rule list's height, in whole rows: its rules plus a little room to add more (2 rows, up to 8 in all;
+-- at least 4), so a short set gets a usable list without many empty rows and a longer one grows with its rules - as far
+-- as the free space goes (the right side minus what the editor below needs, `rest`). With more rules than that it
+-- scrolls in its own child (32 rules), never below 4 rows (or its rules, when fewer); the outer side scrolls then.
+function M.rule_list_height(nRules, rowH, bodyH, rest)
+    local pad = s(10)
+    local spareRows = math.floor((bodyH - rest - s(8) - pad) / rowH)
+    local rows = math.max(nRules, math.min(8, math.max(4, nRules + 2)))
+    rows = math.min(rows, math.max(spareRows, math.min(math.max(nRules, 1), 4)))
+    return math.floor(math.max(rows, 1) * rowH + pad), rows
+end
+
+local function sets_panel(mate, panelH)
     local g = imgui()
     heading(mate.job .. ' Rule Sets')
     wrapped(M.theme.secondary, string.format('%s uses: %s', mate.name, mate.chosen > 0 and M.set_label(mate.chosen) or 'default job rules'))
-    child('##gsq-sets', { 0, listH or s(150) }, function()
+    -- (0.3.1) as high as its rows (at least 3), at most half the panel; "in use" (green) and "editing" (highlight) differ
+    local listH = M.list_height(#S.sets, row_h(), math.max(s(80), (panelH or s(400)) * 0.5), 3)
+    child('##gsq-sets', { 0, listH }, function()
         if #S.sets == 0 then
-            note('No ' .. mate.job .. ' Rule Sets yet. Press New.')
+            wrapped(M.theme.secondary, 'No ' .. mate.job .. ' Rule Sets yet. Press New or choose a Starter.')
         end
 
         for _, set in ipairs(S.sets) do
             local mine = string.find(set.flags, 'o', 1, true) ~= nil
             local ro = string.find(set.flags, 'r', 1, true) ~= nil
-            local label = string.format('%d  %s%s', set.num, set.name, set.num == mate.chosen and '   (in use)' or '')
+            local inUse = set.num == mate.chosen
+            local editing = S.draft ~= nil and S.draft.num == set.num
+            local marks = {}
+            if inUse then
+                marks[#marks + 1] = 'in use'
+            end
+
+            if editing then
+                marks[#marks + 1] = 'editing' .. (S.draft.dirty and ', not saved' or '')
+            end
+
+            local label = string.format('%d  %s%s', set.num, set.name, #marks > 0 and ('   (' .. table.concat(marks, ', ') .. ')') or '')
             local selected = S.selectedSet == set.num
             local list = {}
             if selected then
                 list = { { 'ImGuiCol_Header', M.theme.rowSel }, { 'ImGuiCol_HeaderHovered', times(M.theme.rowSel, 1.25) } }
+            end
+
+            if inUse then
+                list[#list + 1] = { 'ImGuiCol_Text', M.theme.ok }
             end
 
             with_colors(list, function()
@@ -3299,8 +4289,9 @@ local function sets_panel(mate, listH)
                 end
             end)
 
-            tooltip(string.format('Rule Set %d: %s\n%d rules, %s%s', set.num, set.name, set.rules,
-                mine and 'yours' or 'written by hand (copy it to change it)', ro and ', read-only' or ''))
+            tooltip(string.format('Rule Set %d: %s\n%d rules, %s%s%s%s', set.num, set.name, set.rules,
+                mine and 'yours' or 'written by hand (copy it to change it)', ro and ', read-only' or '',
+                inUse and ('\nIn use: ' .. mate.name .. ' uses this set.') or '', editing and '\nOpen in the editor.' or ''))
         end
     end)
 
@@ -3317,20 +4308,42 @@ local function sets_panel(mate, listH)
     end
 
     tooltip('A new ' .. mate.job .. ' Rule Set (saved only when you press Save).')
-    for i, t in ipairs(M.templates_for(mate.job)) do
-        same_if_fits(s(150))
-        if button('Starter: ' .. t.name .. '##gsq-tpl' .. i) then
-            local made, why = M.new_from_template(mate.job, i, S.cat)
-            if made == nil then
-                say(why, false)
-            end
-
-            S.sel = 1
+    local starterNote = '\n\nOptional: it only fills a new, unsaved Rule Set to look at and change. Saving, assigning and '
+        .. 'applying stay your choice. Once assigned, a Rule Set replaces ' .. mate.name .. '\'s usual job rules; the built-in '
+        .. 'rules are never changed and "Restore default job rules" goes back to them.'
+    local function use_template(i)
+        local made, why = M.new_from_template(mate.job, i, S.cat)
+        if made == nil then
+            say(why, false)
         end
 
-        tooltip(t.about .. '\n\nOptional: it only fills a new, unsaved Rule Set to look at and change. Saving, assigning and '
-            .. 'applying stay your choice. Once assigned, a Rule Set replaces ' .. mate.name .. '\'s usual job rules; the built-in '
-            .. 'rules are never changed and "Restore default job rules" goes back to them.')
+        S.sel = 1
+    end
+
+    local tpls = M.templates_for(mate.job)
+    if #tpls == 1 then
+        same_if_fits(s(150))
+        if button('Starter: ' .. tpls[1].name .. '##gsq-tpl1') then
+            use_template(1)
+        end
+
+        tooltip(tpls[1].about .. starterNote)
+    elseif #tpls > 1 then
+        -- (0.3.1) several starters for a job (THF): one dropdown, each entry's description as its tooltip
+        same_if_fits(s(190))
+        width(s(190))
+        local idx = {}
+        for i = 1, #tpls do
+            idx[i] = i
+        end
+
+        local pick = combo('##gsq-tpl', 0, idx, function(i) return tpls[i] and ('Starter: ' .. tpls[i].name) or 'Starter...' end,
+            function(i) return tpls[i] and tpls[i].about end)
+        if pick ~= 0 and tpls[pick] then
+            use_template(pick)
+        end
+
+        tooltip('A starting point for a new ' .. mate.job .. ' Rule Set (' .. #tpls .. ' to choose from).' .. starterNote)
     end
 
     if S.confirmOpen then
@@ -3367,9 +4380,27 @@ local function sets_panel(mate, listH)
     g.Separator()
     heading('Use it')
     if sel then
-        if button('Assign & Apply##gsq-assign') then M.assign_apply(mate.slot, sel.num) end
+        -- (0.3.1) never ambiguous whether unsaved edits are applied: while this set has unsaved changes, Save first
+        local unsaved = S.draft ~= nil and S.draft.num == sel.num and S.draft.dirty == true
+        local disable = unsaved and g.BeginDisabled ~= nil
+        if disable then
+            g.BeginDisabled(true)
+        end
+
+        local clicked = false
+        scoped(nil, function() if disable then g.EndDisabled() end end, function()
+            with_colors({ { 'ImGuiCol_Button', M.theme.tabSel }, { 'ImGuiCol_ButtonHovered', times(M.theme.tabSel, 1.2) } }, function()
+                clicked = button('Assign & Apply##gsq-assign')
+            end)
+        end)
+        if clicked and not unsaved then M.assign_apply(mate.slot, sel.num) end
         tooltip(string.format('Use the saved "%s" for %s now: assigns it (!squad ruleset) and, when %s is summoned, calls '
             .. 'the squad again (!squad reapply). Unsaved changes are not included: Save first.', sel.name, mate.name, mate.name))
+        if unsaved then
+            same_if_fits(s(160))
+            colored(M.theme.gold, 'Save first')
+            tooltip('This Rule Set has unsaved changes. Press Save (below the rules), then Assign & Apply uses them.')
+        end
         local checkLabel = mate.out and 'Check' or ('Check (' .. mate.name .. ' not summoned)')
         same_if_fits(s(80))
         if button(checkLabel .. '##gsq-check') then M.check_set(mate.slot, sel.num) end
@@ -3393,12 +4424,12 @@ local function sets_panel(mate, listH)
     end
 end
 
-local function editor_panel(height)
+local function editor_panel()
     local g = imgui()
     local d = S.draft
     if d == nil then
         heading('Rules')
-        note('Click a Rule Set to open it, or press New or a Starter. Edits stay here until you press Save.')
+        wrapped(M.theme.secondary, 'Click a Rule Set to open it, or press New or a Starter. Edits stay here until you press Save.')
         return
     end
 
@@ -3422,6 +4453,17 @@ local function editor_panel(height)
     heading(readonly and ('Viewing ' .. title .. ' - read-only: Copy it to change it')
         or ('Editing ' .. title .. (d.dirty and '  - not saved' or '')))
     local m = M.mate()
+    -- (0.3.1) whether the set open here is the one the mate uses: a separate signal from "editing"
+    if m and d.num > 0 then
+        same_if_fits(s(160))
+        if m.chosen == d.num then
+            colored(M.theme.ok, 'in use by ' .. m.name)
+            tooltip(m.name .. ' uses this Rule Set' .. (d.dirty and ' as it was last saved: Save, then Assign & Apply to use your changes.' or '.'))
+        else
+            note('not in use')
+            tooltip(m.name .. ' does not use this Rule Set. Save it, then Assign & Apply (left) to use it.')
+        end
+    end
     if m and d.job ~= m.job then
         wrapped(M.theme.gold, string.format('This is a %s Rule Set; %s is %s now.', tostring(d.job), m.name, m.job))
     end
@@ -3443,7 +4485,14 @@ local function editor_panel(height)
             .. 'so this set is read-only here.')
     end
 
-    rule_list(d, S.cat, readonly, height)
+    -- (0.3.1) the list follows its rules and the free space (M.rule_list_height); the rest of the editor is the
+    -- largest height measured for this set, Weapon Skills state and panel size, so the list does not jump when another
+    -- rule is selected
+    local bodyH = S.layout.bodyH or s(420)
+    local rest = S.layout.restH or s(240)
+    local rulesH = M.rule_list_height(#d.rules, row_h(), bodyH, rest)
+    rule_list(d, S.cat, readonly, rulesH)
+    local afterList = cursor_y()
     if not readonly then
         if button('Add rule##gsq-add') then S.sel = M.add_rule(d, S.sel) end
         same_if_fits(s(40))
@@ -3466,25 +4515,93 @@ local function editor_panel(height)
         wrapped(M.theme.secondary, M.rule_summary(r, S.cat))
     end
 
-    if not readonly and not d.uneditable then
-        local busy = M.busy()
-        with_colors({ { 'ImGuiCol_Button', M.theme.goGold }, { 'ImGuiCol_ButtonHovered', times(M.theme.goGold, 1.15) },
-                      { 'ImGuiCol_Text', M.theme.goText } }, function()
-            if button((busy and 'Wait...' or (d.dirty and 'Save *' or 'Save')) .. '##gsq-save', s(110)) and not busy then
-                M.save()
-            end
-        end)
+    return afterList
+end
 
-        tooltip(busy and 'The editor is talking to the server; Save is possible again in a moment.'
-            or 'Send this Rule Set to the server, which checks and stores it.')
+-- (0.3.1) the Save bar: always visible below the right side's scrolling content (also with 32 rules or the Weapon
+-- Skills section open)
+local function save_bar(d)
+    local g = imgui()
+    g.Separator()
+    local busy = M.busy()
+    with_colors({ { 'ImGuiCol_Button', M.theme.goGold }, { 'ImGuiCol_ButtonHovered', times(M.theme.goGold, 1.15) },
+                  { 'ImGuiCol_Text', M.theme.goText } }, function()
+        if button((busy and 'Wait...' or (d.dirty and 'Save *' or 'Save')) .. '##gsq-save', s(110)) and not busy then
+            M.save()
+        end
+    end)
+
+    tooltip(busy and 'The editor is talking to the server; Save is possible again in a moment.'
+        or 'Send this Rule Set to the server, which checks and stores it.')
+    same_if_fits(s(160))
+    if d.dirty then
+        colored(M.theme.gold, d.num > 0 and 'Unsaved changes' or 'Not saved yet')
+    else
+        note('Saved')
+    end
+
+    local m = M.mate()
+    if d.dirty and m and d.num > 0 and m.chosen == d.num then
+        same_if_fits(s(260))
+        note('(then Assign & Apply to use them)')
     end
 end
 
--- The Weapon Skills section (server version 5): one squad mate, its current main job
-local function ws_panel(mate)
+local function editor_footer_shown(d)
+    return d ~= nil and S.cat ~= nil and not d.readonly and not d.uneditable
+end
+
+-- what is stored now, in one sentence (the Weapon Skills panel and, 0.3.1, its collapsed section's summary)
+function M.ws_stored_text(d)
+    if d.source == 'c' then
+        return string.format('Custom: %s%s, %s.', M.WS_MODES[d.mode] or '?', d.mode == 2 and '' or (' at ' .. d.tp .. ' TP'), M.ws_name(d.ws))
+    elseif d.source == 'd' then
+        return 'Squad default (automatic skillchains, every weapon skill).'
+    end
+
+    local stored = 'No Gambits setting yet: the squad\'s own behaviour'
+    if (d.legacyTp or 0) > 0 or (d.legacyWs or 0) > 0 then
+        return stored .. string.format(' with your !squad ws choice (%s, %s).', d.legacyTp > 0 and (d.legacyTp .. ' TP') or 'skillchains',
+            M.ws_name(d.legacyWs))
+    end
+
+    return stored .. ' (automatic skillchains).'
+end
+
+-- (0.3.1) the collapsed Weapon Skills section's one line. It asks the server for nothing: the settings are loaded when
+-- the section is opened (as the tab was), so the editor sends exactly what it sent before; once loaded for this mate
+-- the line says what is saved.
+function M.ws_summary(mate)
+    local w = S.ws
+    if w == nil or w.slot ~= mate.slot then
+        return 'Open to see and change ' .. mate.name .. '\'s weapon skill settings.'
+    elseif w.loading and w.data == nil then
+        return 'Loading...'
+    elseif w.error then
+        return 'Could not load them: open this section to try again.'
+    elseif w.data == nil then
+        return 'Loading...'
+    end
+
+    local text = M.ws_stored_text(w.data)
+    if M.ws_edited() then
+        text = text .. ' Unsaved weapon skill changes.'
+    elseif w.data.out and w.data.applied == false then
+        text = text .. ' Saved, not in use yet.'
+    end
+
+    return text
+end
+
+-- The Weapon Skills section (server version 5): one squad mate, its current main job. (0.3.1) inSection: drawn inside
+-- the main editor's collapsible section (its header names it)
+local function ws_panel(mate, inSection)
     local g = imgui()
-    heading('Weapon Skills: ' .. mate.name .. ' (' .. mate.job .. ')')
-    note('Separate from Rule Sets: a Rule Set never changes these, and these never change a Rule Set.')
+    if not inSection then
+        heading('Weapon Skills: ' .. mate.name .. ' (' .. mate.job .. ')')
+    end
+
+    wrapped(M.theme.secondary, 'Separate from Rule Sets: a Rule Set never changes these, and these never change a Rule Set.')
     if not M.ws_supported() then
         wrapped(M.theme.gold, 'This needs the server update (gambits_squad.lua version 5).')
         return
@@ -3513,22 +4630,7 @@ local function ws_panel(mate)
     end
 
     -- what is stored now
-    local stored
-    if d.source == 'c' then
-        stored = string.format('Custom: %s%s, %s.', M.WS_MODES[d.mode] or '?', d.mode == 2 and '' or (' at ' .. d.tp .. ' TP'), M.ws_name(d.ws))
-    elseif d.source == 'd' then
-        stored = 'Squad default (automatic skillchains, every weapon skill).'
-    else
-        stored = 'No Gambits setting yet: the squad\'s own behaviour'
-        if (d.legacyTp or 0) > 0 or (d.legacyWs or 0) > 0 then
-            stored = stored .. string.format(' with your !squad ws choice (%s, %s).', d.legacyTp > 0 and (d.legacyTp .. ' TP') or 'skillchains',
-                M.ws_name(d.legacyWs))
-        else
-            stored = stored .. ' (automatic skillchains).'
-        end
-    end
-
-    wrapped(M.theme.secondary, 'Saved: ' .. stored)
+    wrapped(M.theme.secondary, 'Saved: ' .. M.ws_stored_text(d))
     if not d.engine then
         wrapped(M.theme.gold, 'Custom needs the updated map server (xi_map); only Squad default can be used here.')
     end
@@ -3576,8 +4678,8 @@ local function ws_panel(mate)
             width(s(120))
             e.tp = combo('##gsq-ws-tp', e.tp, M.WS_TPS, function(v) return tostring(v) end)
             if e.mode == 3 then
-                same()
-                note('(opening only: closing is allowed from 1000 TP)')
+                same_if_fits(s(300), labelW)
+                wrapped(M.theme.secondary, '(opening only: closing is allowed from 1000 TP)')
             end
         end
 
@@ -3597,10 +4699,10 @@ local function ws_panel(mate)
         e.ws = combo('##gsq-ws-ws', e.ws, ids, M.ws_name, function(v) return v == 0 and M.WS_BEST_HELP or nil end)
         tooltip(e.ws == 0 and M.WS_BEST_HELP or ('Only ' .. M.ws_name(e.ws) .. ' (when the mate can use it; otherwise Best available).'))
         if w.list == nil then
-            same()
+            same_if_fits(s(170), labelW)
             note(d.out and '(loading the list...)' or '(summon to see the list)')
         elseif not inList then
-            same()
+            same_if_fits(s(120), labelW)
             colored(M.theme.bad, '(not usable now)')
         end
 
@@ -3608,7 +4710,7 @@ local function ws_panel(mate)
             g.SetCursorPosX(labelW)
         end
 
-        note(M.WS_3000_HELP)
+        wrapped(M.theme.secondary, M.WS_3000_HELP)
     end
 
     g.Separator()
@@ -3630,6 +4732,441 @@ local function ws_panel(mate)
     if button('Refresh##gsq-ws-refresh') then S.ws = nil end
 end
 M.ws_panel = ws_panel
+
+-- (0.3.1) Weapon Skills as a collapsible section below the rule editor (was a second tab): the same panel, settings,
+-- requests and buttons; collapsed it shows one summary line. Its open state is remembered (addon settings).
+local function ws_section(mate)
+    if not M.ws_supported() then
+        return
+    end
+
+    local g = imgui()
+    g.Separator()
+    local open = S.wsOpen == true
+    if g.CollapsingHeader then
+        if g.SetNextItemOpen then
+            g.SetNextItemOpen(open)
+        end
+
+        local shown = g.CollapsingHeader('Weapon Skills: ' .. mate.name .. ' (' .. mate.job .. ')##gsq-ws-section')
+        open = shown == true
+    elseif button((open and '[-] ' or '[+] ') .. 'Weapon Skills: ' .. mate.name .. '##gsq-ws-section') then
+        open = not open -- (a binding without CollapsingHeader)
+    end
+
+    tooltip('The weapon skill settings of ' .. mate.name .. ' as ' .. mate.job .. ': separate from Rule Sets, with their own '
+        .. 'Save. Click to ' .. (open and 'close' or 'open') .. ' this section.')
+    if open ~= (S.wsOpen == true) then
+        S.wsOpen = open
+        if api.set_pref then
+            api.set_pref('ws_open', open)
+        end
+    end
+
+    if open then
+        ws_panel(mate, true)
+    else
+        wrapped(M.theme.secondary, M.ws_summary(mate))
+    end
+end
+M.ws_section = ws_section
+
+-- ---------------------------------------------------------------- (0.3.2) party roles (!gsq version 7: prl, prs)
+-- Who the Rule Sets' Tank / Melee / Mage / Ranged targets (and a Bard's role songs) mean: the server's party roles
+-- (!squad partyrole), NOT the Squad menu's Role. The server is the authority: a row shows only what an answer said, a
+-- change is shown only once the server confirms it, and an older answer never overwrites a newer one (S.rolesGen).
+M.ROLES_SERVER = 7
+M.ROLE_NAMES   = { [0] = 'Auto', 'Tank', 'Melee', 'Mage', 'Ranged' }
+M.ROLE_LETTER  = { 'T', 'M', 'C', 'R' }
+M.LETTER_NAME  = { T = 'Tank', M = 'Melee', C = 'Mage', R = 'Ranged' }
+M.ROLE_VALUES  = { 0, 1, 2, 3, 4 }
+M.ROLES_HELP   = 'Who your squad\'s Rule Set targets Tank, Melee, Mage and Ranged mean, and who a Bard\'s songs for those '
+    .. 'roles reach. This is not the Squad menu\'s Role (tank / damage / healer / support): that one only changes how a '
+    .. 'mate acts itself and does not make it a Tank target.'
+M.ROLES_AUTO_HELP = 'Auto = by main job. Some jobs count for more than one target: a PLD is Tank and Melee, a RUN is Tank, '
+    .. 'Melee and Mage. Tank = PLD or RUN; Melee = WAR MNK THF PLD DRK BST SAM NIN DRG BLU PUP DNC RUN; Mage = WHM BLM RDM '
+    .. 'BRD SMN BLU SCH GEO RUN; Ranged = RNG or COR.'
+M.ROLES_UNSUPPORTED = 'Party roles need the server update (gambits_squad.lua version 7). Meanwhile: !squad partyrole '
+    .. '<slot> <tank|melee|mage|ranged|auto>, then call the mate again.'
+
+function M.roles_supported()
+    return S.server ~= nil and S.server ~= false and (S.server.version or 0) >= M.ROLES_SERVER
+end
+
+-- "Tank, Melee" from "TM" ("none" for no letter)
+function M.role_words(letters)
+    local words = {}
+    for c in string.gmatch(letters or '', '[TMCR]') do
+        words[#words + 1] = M.LETTER_NAME[c]
+    end
+
+    return #words > 0 and table.concat(words, ', ') or 'none'
+end
+
+-- what a row counts as: an explicit role is exactly that target, auto is what its job gives
+function M.role_effective(role, auto)
+    return M.ROLE_LETTER[tonumber(role) or 0] or (auto or '')
+end
+
+-- the answer lines of prl / prs, checked strictly: nil and why for anything malformed (nothing half shown)
+function M.parse_roles(items)
+    local rows, byWho, party = {}, {}, {}
+    for _, f in ipairs(items or {}) do
+        if f[3] == 'pr' then
+            local who, level, set = tonumber(f[4] or ''), tonumber(f[7] or ''), tonumber(f[8] or '')
+            local live = f[11] == '-' and nil or tonumber(f[11] or '')
+            if #f ~= 11 or who == nil or who < 0 or who ~= math.floor(who) or (f[5] or '') == '' or not string.match(f[6] or '', '^[%u%-]+$')
+                or level == nil or set == nil or M.ROLE_NAMES[set] == nil or not string.match(f[9] or '', '^[TMCR]*$')
+                or (f[10] ~= '0' and f[10] ~= '1') or (f[11] ~= '-' and (live == nil or M.ROLE_NAMES[live] == nil)) then
+                return nil, 'a party role line was not readable'
+            end
+
+            if byWho[who] then
+                return nil, 'a party role line came twice'
+            end
+
+            local row = { who = who, name = f[5], job = f[6], level = level, set = set, auto = f[9], out = f[10] == '1', live = live }
+            byWho[who] = row
+            rows[#rows + 1] = row
+        elseif f[3] == 'pm' then
+            if #f ~= 7 or (f[4] or '') == '' or not string.match(f[5] or '', '^[%u%-]+$') or (f[6] ~= 'p' and f[6] ~= 't')
+                or not string.match(f[7] or '', '^[TMCR]*$') then
+                return nil, 'a party member line was not readable'
+            end
+
+            party[#party + 1] = { name = f[4], job = f[5], kind = f[6], targets = f[7] }
+        else
+            return nil, 'the answer had an unexpected line'
+        end
+    end
+
+    table.sort(rows, function(a, b) return a.who < b.who end)
+    return { rows = rows, byWho = byWho, party = party }
+end
+
+-- loads the list (only when the section is open; one request at a time)
+function M.roles_load()
+    if not M.roles_supported() or M.busy() then
+        return false
+    end
+
+    S.rolesGen = (S.rolesGen or 0) + 1
+    local gen = S.rolesGen
+    S.roles = S.roles or {}
+    S.roles.loading, S.roles.error = gen, nil
+    read_request({ 'prl' }, function(items)
+        local data, why = M.parse_roles(items)
+        if data == nil or data.byWho[0] == nil then
+            return false, why or 'the answer had no line for you'
+        end
+
+        if gen ~= S.rolesGen then
+            -- an older answer: a newer list request or a confirmed change came since; it must not overwrite them
+            if S.roles and S.roles.loading == gen then
+                S.roles.loading = nil
+            end
+
+            return true
+        end
+
+        S.roles = data
+        return true
+    end, function(why)
+        if S.roles and S.roles.loading == gen then
+            -- (no automatic retry every frame: "Update" or Refresh asks again; the summary says the update failed)
+            S.roles.loading, S.roles.stale = nil, nil
+            S.roles.error = why
+        end
+    end)
+    return true
+end
+
+-- changes one role on the server: who 0 = you, else a squad slot. The row shows the change only when the server's answer
+-- (read back) says so; on any failure it keeps what the server had.
+function M.roles_set(who, role)
+    if not M.roles_supported() then
+        return false
+    end
+
+    if M.busy() then
+        return busy_say()
+    end
+
+    role = tonumber(role)
+    local r = S.roles
+    local row = r and r.byWho and r.byWho[who]
+    if row == nil or row.pending or role == nil or M.ROLE_NAMES[role] == nil or role ~= math.floor(role) then
+        return false
+    end
+
+    S.rolesGen = (S.rolesGen or 0) + 1 -- (a list answer asked for before this change is older: it is not used)
+    local token = {}
+    row.pending = { role = role, token = token }
+    local label = row.who == 0 and 'You' or row.name
+    read_request({ 'prs', tostring(who), tostring(role) }, function(items)
+        local data, why = M.parse_roles(items)
+        if data == nil or #data.rows ~= 1 or data.rows[1].who ~= who or #data.party ~= 0 then
+            return false, why or 'the answer was not for this change'
+        end
+
+        local cur = S.roles and S.roles.byWho and S.roles.byWho[who]
+        if cur == nil or cur.pending == nil or cur.pending.token ~= token then
+            return true -- (the list was loaded again meanwhile: that newer state stays)
+        end
+
+        local new = data.rows[1]
+        for i, it in ipairs(S.roles.rows) do
+            if it == cur then
+                S.roles.rows[i] = new
+            end
+        end
+
+        S.roles.byWho[who] = new
+        if new.set ~= role then
+            say(string.format('Party role NOT changed: the server still has %s as %s.', label, M.ROLE_NAMES[new.set]), false)
+        else
+            local what = role == 0 and ('Auto (' .. M.role_words(new.auto) .. ')') or M.ROLE_NAMES[role]
+            say(string.format('%s: %s (server confirmed)%s', label, what, (new.out and new.live == new.set) and ', in effect now.'
+                or ', from the next call.'))
+        end
+
+        return true
+    end, function(why)
+        local cur = S.roles and S.roles.byWho and S.roles.byWho[who]
+        if cur and cur.pending and cur.pending.token == token then
+            cur.pending = nil
+        end
+
+        say('Party role NOT changed: ' .. tostring(why) .. '. The list shows what the server has.', false)
+    end)
+    return true
+end
+
+-- the one-line summary: from EVERYONE the server reported in your party (your mates that are out, and the other members:
+-- dualbox characters, other players, their trusts), never from your own list alone
+function M.roles_summary(r)
+    if not M.roles_supported() then
+        return M.ROLES_UNSUPPORTED
+    elseif r and r.error then
+        -- (never counts from an older list once an update failed)
+        return 'Party roles could not be loaded (' .. r.error .. '). Open this section and press Update to try again.'
+    elseif r == nil or r.rows == nil then
+        return 'Open this section to see who counts as Tank, Melee, Mage and Ranged in your party.'
+    elseif r.stale then
+        return 'Party roles: your squad changed since the last update. Open this section to update the list.'
+    end
+
+    local names = { T = {}, M = {}, C = {}, R = {} }
+    local notOut = {}
+    for _, row in ipairs(r.rows) do
+        local label = row.who == 0 and 'You' or row.name
+        if row.out then
+            local letters = M.role_effective(row.live ~= nil and row.live or row.set, row.auto)
+            for c in string.gmatch(letters, '[TMCR]') do
+                table.insert(names[c], label .. ((row.live or row.set) ~= 0 and ' (set)' or ''))
+            end
+        else
+            notOut[#notOut + 1] = string.format('%s (%s)', label, M.role_words(M.role_effective(row.set, row.auto)))
+        end
+    end
+
+    for _, pm in ipairs(r.party or {}) do
+        for c in string.gmatch(pm.targets, '[TMCR]') do
+            table.insert(names[c], pm.name)
+        end
+    end
+
+    local parts = {}
+    for _, c in ipairs(M.ROLE_LETTER) do
+        parts[#parts + 1] = M.LETTER_NAME[c] .. ': ' .. (#names[c] > 0 and table.concat(names[c], ', ') or 'nobody')
+    end
+
+    local text = 'In your party at the last update - ' .. table.concat(parts, '; ') .. '.'
+    if #(r.party or {}) > 0 then
+        text = text .. string.format(' (Includes %d member%s of other characters, read-only.)', #r.party, #r.party == 1 and '' or 's')
+    end
+
+    if #notOut > 0 then
+        text = text .. ' Not summoned: ' .. table.concat(notOut, ', ') .. '.'
+    end
+
+    return text
+end
+
+local function role_status(row)
+    if row.pending then
+        note('saving...')
+        tooltip('Waiting for the server to confirm the change.')
+    elseif row.out and row.live == row.set then
+        colored(M.theme.ok, 'in effect')
+        tooltip('The server confirmed it; ' .. (row.who == 0 and 'your' or (row.name .. '\'s')) .. ' role is used from the next rule check.')
+    elseif not row.out then
+        note('applies when called')
+        tooltip('Saved on the server; ' .. row.name .. ' gets it when called.')
+    else
+        colored(M.theme.gold, 'applies when called again')
+        tooltip('Saved on the server, but ' .. row.name .. ' is out with another role: call it again (or use Assign & Apply).')
+    end
+end
+
+local function role_row(row)
+    local g = imgui()
+    local who = row.who == 0 and ('You (' .. row.name .. ')') or row.name
+    label_text(who)
+    if row.who == 0 then
+        tooltip('Your own role for your mates\' rules (e.g. Tank if you tank yourself).')
+    end
+
+    same_if_fits(s(120))
+    note(string.format('%s %d%s', row.job, row.level, row.out and '' or '  (not summoned)'))
+    same_if_fits(s(180))
+    width(s(170))
+    local disable = (row.pending ~= nil or M.busy()) and g.BeginDisabled ~= nil
+    if disable then
+        g.BeginDisabled(true)
+    end
+
+    local picked
+    scoped(nil, function() if disable then g.EndDisabled() end end, function()
+        picked = combo('##gsq-role-' .. row.who, row.set, M.ROLE_VALUES, function(v)
+            if v == 0 then
+                return 'Auto (' .. M.role_words(row.auto) .. ')'
+            end
+
+            return M.ROLE_NAMES[v] or '?'
+        end, function(v)
+            if v == 0 then
+                return M.ROLES_AUTO_HELP
+            end
+
+            local others = string.gsub(row.auto or '', M.ROLE_LETTER[v] or '', '')
+            return string.format('%s counts as %s only, whatever its job%s, for Rule Set targets and role songs. Kept until you '
+                .. 'choose Auto, also when its job changes.', row.who == 0 and 'You' or row.name, M.ROLE_NAMES[v],
+                others ~= '' and (': no longer ' .. M.role_words(others)) or '')
+        end, function(v) return v == 0 and M.theme.secondary or nil end)
+    end)
+    tooltip(row.set == 0 and M.ROLES_AUTO_HELP or (M.ROLE_NAMES[row.set] .. ' was chosen for ' .. (row.who == 0 and 'you' or row.name)
+        .. '. Choose Auto to follow the main job again.'))
+    if picked ~= nil and picked ~= row.set and not row.pending and not disable then
+        M.roles_set(row.who, picked)
+    end
+
+    same_if_fits(s(130))
+    role_status(row)
+    if row.set ~= 0 then
+        same_if_fits(s(140))
+        note('(by job: ' .. M.role_words(row.auto) .. ')')
+    end
+end
+
+local function roles_section()
+    local g = imgui()
+    g.Separator()
+    local open = S.rolesOpen == true
+    local label = 'Party roles (who Tank / Melee / Mage / Ranged mean)##gsq-roles-section'
+    if g.CollapsingHeader then
+        if g.SetNextItemOpen then
+            g.SetNextItemOpen(open)
+        end
+
+        open = g.CollapsingHeader(label) == true
+    elseif button((open and '[-] ' or '[+] ') .. label) then
+        open = not open
+    end
+
+    tooltip(M.ROLES_HELP .. ' Click to ' .. (open and 'close' or 'open') .. ' this section.')
+    if open ~= (S.rolesOpen == true) then
+        S.rolesOpen = open
+        if api.set_pref then
+            api.set_pref('roles_open', open)
+        end
+    end
+
+    if not open then
+        wrapped(M.theme.secondary, M.roles_summary(S.roles))
+        return
+    end
+
+    if not M.roles_supported() then
+        wrapped(M.theme.secondary, M.ROLES_UNSUPPORTED)
+        return
+    end
+
+    local r = S.roles
+    if r == nil or (r.stale and not r.loading) then
+        M.roles_load()
+        r = S.roles
+    end
+
+    if r == nil or r.rows == nil then
+        if r and r.error then
+            wrapped(M.theme.bad, 'Could not load the party roles: ' .. r.error)
+            if button('Try again##gsq-roles-retry') then
+                S.roles = nil
+            end
+        else
+            note('(loading party roles...)')
+        end
+
+        return
+    end
+
+    wrapped(M.theme.secondary, M.roles_summary(r))
+    tooltip('Counted as the engine sees it now: the role, else the main job. A Rule Set target also needs the member alive, '
+        .. 'in the zone and in range.')
+    for _, row in ipairs(r.rows) do
+        g.PushID('gsq-role-row-' .. row.who)
+        scoped(nil, function() g.PopID() end, function() role_row(row) end)
+    end
+
+    if #r.party > 0 then
+        heading('Other party members (set on their own character)')
+        tooltip('A dualbox character sets its own role with !squad partyrole me <role> on that character.')
+        for _, pm in ipairs(r.party) do
+            note(string.format('%s  %s  %s', pm.name, pm.job, M.role_words(pm.targets)))
+        end
+    end
+
+    if r.error then
+        wrapped(M.theme.bad, 'The last update failed: ' .. r.error)
+    end
+
+    if button('Update##gsq-roles-update') then
+        S.roles.stale, S.roles.error = true, nil
+    end
+
+    tooltip('Ask the server again who counts as what (after calling or dismissing mates, or a role set in chat).')
+end
+M.roles_section = roles_section
+
+-- (0.3.1) the right side: the editor and the Weapon Skills section scroll together; the Save bar stays below them
+local function right_panel(mate)
+    local d = S.draft
+    local footerH = editor_footer_shown(d) and (row_h() + s(14)) or 0
+    local bodyH = math.max(s(140), available_h() - footerH)
+    S.layout.bodyH = bodyH
+    plain_child('##gsq-right-body', { 0, bodyH }, function()
+        local afterList = editor_panel()
+        ws_section(mate)
+        roles_section() -- (0.3.2) the whole party, not only this mate
+        local bottom = cursor_y()
+        if afterList and bottom then
+            -- what the editor needs below its rule list (next frame's limit): the largest seen while the same set, the
+            -- same Weapon Skills state and the same panel height are shown; anything else starts measuring again
+            local key = tostring(d) .. '|' .. tostring(S.wsOpen == true) .. '|' .. tostring(S.rolesOpen == true) .. '|'
+                .. tostring(math.floor(bodyH / row_h()))
+            local measured = math.max(0, bottom - afterList)
+            if S.layout.restKey ~= key then
+                S.layout.restKey, S.layout.restH = key, measured
+            else
+                S.layout.restH = math.max(S.layout.restH or 0, measured)
+            end
+        end
+    end)
+    if footerH > 0 then
+        save_bar(d)
+    end
+end
 
 function M.draw()
     local g = imgui()
@@ -3673,6 +5210,7 @@ function M.draw()
     same_if_fits(s(70))
     if button('Refresh##gsq-refresh') then
         S.ws = nil -- (the Weapon Skills section loads again too)
+        S.roles = nil -- (0.3.2: and the party roles, when their section is open)
         M.load_mates()
     end
     tooltip('Ask the server again for your squad and its Rule Sets.')
@@ -3706,49 +5244,34 @@ function M.draw()
         tooltip('Larger text and controls (70-200 %).')
     end
 
-    -- the two panels take the room that is left, above a status area of about three lines (wrapped, never cut)
+    -- the two panels take the room that is left; (0.3.1) a status area (about three lines, wrapped, never cut) only while
+    -- there is something to say
     local mate = M.mate()
-    local statusH = s(58)
+    local statusH = (S.progress or S.message) and s(58) or s(6)
     if mate == nil then
         wrapped(M.theme.secondary, #S.mates == 0 and 'No squad mates yet. Make one with !squad new <name> <job>.' or 'Loading your squad...')
     else
         local total = available()
-        local panelH = math.max(s(260), available_h() - statusH)
+        local panelH = math.max(s(240), available_h() - statusH)
         local leftW = math.floor(math.max(s(240), math.min(total * 0.36, total - s(380))))
-        local setsH = math.max(s(80), panelH - s(250))
-        local rulesH = math.max(s(90), math.floor((panelH - s(120)) * 0.38))
         with_colors({ { 'ImGuiCol_Border', M.theme.border } }, function()
-            child('##gsq-left', { leftW, panelH }, function() sets_panel(mate, setsH) end)
+            child('##gsq-left', { leftW, panelH }, function() sets_panel(mate, panelH) end)
             same()
-            child('##gsq-right', { 0, panelH }, function()
-                -- (version 5) Rules or Weapon Skills on the right
-                if M.ws_supported() then
-                    for _, v in ipairs({ { 'rules', 'Rule Set editor' }, { 'ws', 'Weapon Skills' } }) do
-                        local on = (S.view or 'rules') == v[1]
-                        with_colors(on and { { 'ImGuiCol_Button', M.theme.tabSel } } or {}, function()
-                            if button(v[2] .. '##gsq-view-' .. v[1]) then
-                                S.view = v[1]
-                            end
-                        end)
-                        same()
-                    end
-
-                    g.NewLine()
-                end
-
-                if S.view == 'ws' and M.ws_supported() then
-                    ws_panel(mate)
-                else
-                    editor_panel(rulesH - (M.ws_supported() and s(28) or 0))
-                end
-            end)
+            -- (0.3.1) one editor: the Rule Set, then Weapon Skills as a collapsible section (no tabs), Save always visible
+            child('##gsq-right', { 0, panelH }, function() right_panel(mate) end)
         end)
     end
 
     if S.progress then
         wrapped(M.theme.secondary, S.progress)
     elseif S.message then
-        wrapped(S.messageWarn and M.theme.gold or (S.messageOk and M.theme.ok or M.theme.bad), M.readable(S.message))
+        if button('x##gsq-dismiss') then
+            S.message = nil
+        else
+            tooltip('Hide this message.')
+            same()
+            wrapped(S.messageWarn and M.theme.gold or (S.messageOk and M.theme.ok or M.theme.bad), M.readable(S.message))
+        end
     end
 end
 return M

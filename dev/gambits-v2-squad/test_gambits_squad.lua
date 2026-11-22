@@ -263,7 +263,7 @@ end
 local o = run('ping 5 77')
 check(#o == 1 and o[1]:match('^GSQ|5|pong|77|%d+$'), 'ping answers with its id and the client value: ' .. tostring(o[1]))
 o = run('hello 6')
-check(o[1] == 'GSQ|6|hello|6|32|120|64', 'hello: version 6 (job expansion), 32 rules, 120 bytes, 64 chunks: ' .. tostring(o[1]))
+check(o[1] == 'GSQ|6|hello|7|32|120|64', 'hello: version 7 (party roles), 32 rules, 120 bytes, 64 chunks: ' .. tostring(o[1]))
 o = run('nonsense 7')
 check(o[1]:match('^GSQ|7|err|badreq'), 'an unknown request is answered with an error')
 o = run(string.rep('x', 200))
@@ -730,6 +730,108 @@ for j = 1, 18 do
 end
 check(worst <= 140, 'every catm line of 18 jobs x 19 sub job choices at level 75 fits 140 bytes (longest ' .. worst .. ')')
 squad, playerLevel = {}, 30
+
+-- ---------------------------------------------------------------- (version 7) party roles: prl / prs
+section('!gsq v7: party roles - prl (you, your mates, the rest of the party read-only), prs (your own squad only, read back)')
+do
+    package.loaded['modules/custom/lua/squad_jobs'] = nil
+    check(run('prl 300')[1]:match('^GSQ|300|err|server'), 'prl on a server without squad_jobs.lua: refused (err server), nothing guessed')
+    check(run('prs 301 0 1')[1]:match('^GSQ|301|err|server'), 'prs on a server without squad_jobs.lua: refused, nothing written')
+    package.preload['modules/custom/lua/squad_jobs'] = function() return dofile(LUA_DIR .. '/squad_jobs.lua') end
+    local cv, lv = {}, {}
+    local saved = { player.getCharVar, player.setCharVar, player.getLocalVar, player.setLocalVar, player.getMainJob, player.getName,
+                    player.getObjType, player.getPartyWithTrusts }
+    player.getCharVar = function(_, k) return cv[k] or 0 end
+    player.setCharVar = function(_, k, v) cv[k] = (v ~= 0) and v or nil end
+    player.getLocalVar = function(_, k) return lv[k] or 0 end
+    player.setLocalVar = function(_, k, v) lv[k] = v end
+    player.getMainJob = function() return 3 end -- you: WHM 30
+    player.getName = function() return 'Testcharone' end
+    player.getObjType = function() return xi.objType.PC end
+    local function member(o)
+        local e = { vars = { SQUAD_ID = o.squadId or 0, SQUAD_ROLE = o.role or 0 } }
+        function e:getID() return o.id end
+        function e:getObjType() return o.pc and xi.objType.PC or xi.objType.TRUST end
+        function e:getMainJob() return o.job end
+        function e:getMaster() return o.master end
+        function e:getName() return o.name end
+        function e:getPacketName() return o.name end
+        function e:getLocalVar(k) return self.vars[k] or 0 end
+        function e:setLocalVar(k, v) self.vars[k] = v end
+        return e
+    end
+    -- your squad: Aldric WAR 20 (out), Lyra WHM 30 (out), Hild PLD 30 (not out)
+    squad = { { slot = 1, id = 101, name = 'Aldric', mjob = 1, sjob = 0, jobs = { [1] = { level = 20 } } },
+              { slot = 2, id = 102, name = 'Lyra', mjob = 3, sjob = 0, jobs = { [3] = { level = 30 } } },
+              { slot = 3, id = 103, name = 'Hild', mjob = 7, sjob = 0, jobs = { [7] = { level = 30 } } } }
+    local aldric = member({ id = 5001, squadId = 101, job = 1, master = player, name = 'Aldric' })
+    local lyra = member({ id = 5002, squadId = 102, job = 3, master = player, name = 'Lyra' })
+    -- a dualbox character (PLD) in the party, and ITS squad mate - with the same SQUAD_ID as Aldric (another master)
+    local dual = member({ id = 2, pc = true, job = 7, name = 'Dualpld' })
+    local dualMate = member({ id = 5003, squadId = 101, job = 1, master = dual, name = 'Dualwar' })
+    local partyNow = { player, aldric, lyra, dual, dualMate }
+    player.getPartyWithTrusts = function() return partyNow end
+
+    local function prLines(lines)
+        local pr, pm, endF = {}, {}, nil
+        for _, l in ipairs(lines) do
+            local f = fields(l)
+            if f[3] == 'pr' then pr[tonumber(f[4])] = f elseif f[3] == 'pm' then pm[f[4]] = f elseif f[3] == 'end' then endF = f end
+        end
+        return pr, pm, endF
+    end
+    local o7 = run('prl 302')
+    local pr, pm, endF = prLines(o7)
+    check(o7[1] == 'GSQ|302|pr|0|Testcharone|WHM|30|0|C|1|0', 'prl: you first (who 0), WHM 30, auto, by job Mage (C), live 0: ' .. tostring(o7[1]))
+    check(o7[2] == 'GSQ|302|pr|1|Aldric|WAR|20|0|M|1|0' and o7[3] == 'GSQ|302|pr|2|Lyra|WHM|30|0|C|1|0'
+          and o7[4] == 'GSQ|302|pr|3|Hild|PLD|30|0|TM|0|-', 'prl: your mates in slot order; WAR = M only (not a Tank), PLD = TM (Tank and Melee), not out = live -: '
+          .. tostring(o7[2]) .. ' / ' .. tostring(o7[4]))
+    check(pm.Dualpld and pm.Dualpld[5] == 'PLD' and pm.Dualpld[6] == 'p' and pm.Dualpld[7] == 'TM'
+          and pm.Dualwar and pm.Dualwar[6] == 't' and pm.Dualwar[7] == 'M', 'prl: the dualbox character (p, PLD = TM) and its mate (t) are listed read-only')
+    check(endF and tonumber(endF[4]) == 6 and #o7 == 7, 'prl: end counts the pr and pm lines (4 + 2)')
+    for _, l in ipairs(o7) do check(#l <= 140, 'prl line fits 140 bytes (' .. #l .. ')') end
+
+    -- prs: Aldric (out) -> tank, at once, read back; the dualbox mate with the same SQUAD_ID is NOT touched
+    local o8 = run('prs 303 1 1')
+    check(o8[1] == 'GSQ|303|pr|1|Aldric|WAR|20|1|M|1|1' and o8[2] == 'GSQ|303|end|1', 'prs 1 1: Aldric tank, stored and live at once (read back): ' .. tostring(o8[1]))
+    check(cv.SQUAD_PROLE_101 == 1 and aldric:getLocalVar('SQUAD_ROLE') == 1 and dualMate:getLocalVar('SQUAD_ROLE') == 0,
+          'only YOUR Aldric got the role live; the dualbox character\'s mate with the same SQUAD_ID did not')
+    check(table.concat(run('prs 304 1 1'), '|') == table.concat(o8, '|'):gsub('303', '304'), 'prs is idempotent: the same answer again')
+    -- not out: stored only
+    local o9 = run('prs 305 3 3')
+    check(o9[1] == 'GSQ|305|pr|3|Hild|PLD|30|3|TM|0|-' and cv.SQUAD_PROLE_103 == 3, 'prs 3 3: Hild (not out) mage, stored; live - (applies when called)')
+    -- you
+    local o10 = run('prs 306 0 4')
+    check(o10[1] == 'GSQ|306|pr|0|Testcharone|WHM|30|4|C|1|4' and cv.SQUAD_PROLE_ME == 4 and lv.SQUAD_ROLE == 4, 'prs 0 4: you ranged, stored and live')
+    -- back to auto, for a mate that is out
+    local o11 = run('prs 307 1 0')
+    check(o11[1] == 'GSQ|307|pr|1|Aldric|WAR|20|0|M|1|0' and cv.SQUAD_PROLE_101 == nil and aldric:getLocalVar('SQUAD_ROLE') == 0,
+          'prs 1 0: Aldric back to auto - the stored role cleared AND the live one 0 at once')
+    -- bad input: nothing written
+    local before = {}
+    for k, v in pairs(cv) do before[k] = v end
+    for i, req in ipairs({ 'prs 310 9 1', 'prs 311 1 5', 'prs 312 1 -1', 'prs 313 1 1.5', 'prs 314 1', 'prs 315 x 1', 'prs 316 1 1 extra',
+                           'prs 317 4 1' }) do
+        local ans = run(req)[1] or ''
+        local want = (req == 'prs 310 9 1' or req == 'prs 317 4 1') and 'missing' or 'badreq'
+        check(ans:match('^GSQ|31%d|err|' .. want), string.format('"%s": err %s - %s', req, want, ans))
+    end
+    check(deq(cv, before) and aldric:getLocalVar('SQUAD_ROLE') == 0, 'after every refused prs nothing was written')
+    -- a slot of the dualbox character's squad is not yours: "prs 4" (no slot 4 in YOUR squad) was refused above
+    -- the summary data: the dualbox mate's live role is reported as the engine sees it
+    dualMate:setLocalVar('SQUAD_ROLE', 1)
+    local _, pm2 = prLines(run('prl 318'))
+    check(pm2.Dualwar and pm2.Dualwar[7] == 'T', 'prl: a party member with a role set on its own character counts as that (T), as the engine sees it')
+    -- long names fit
+    squad[1].name = 'Abcdefghijklmno'
+    for _, l in ipairs(run('prl 319')) do check(#l <= 140, 'prl with a 15-character name fits 140 bytes (' .. #l .. ')') end
+    squad[1].name = 'Aldric'
+    -- the other requests do not know party roles: mates is unchanged
+    check(run('mates 320')[1] == 'GSQ|320|mate|1|101|Aldric|WAR|20|-|0|1|-', 'mates is unchanged by v7: ' .. tostring(run('mates 320')[1]))
+    player.getCharVar, player.setCharVar, player.getLocalVar, player.setLocalVar, player.getMainJob, player.getName, player.getObjType,
+        player.getPartyWithTrusts = (table.unpack or unpack)(saved, 1, 8)
+    squad = {}
+end
 -- ---------------------------------------------------------------- addon: packing, local checks, the send queue
 section('addon: packing sizes, local checks, acknowledged sending with a fake clock')
 local function rules(n) local t = {} for i = 1, n do t[i] = draft.rules[(i - 1) % #draft.rules + 1] end return t end

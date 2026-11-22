@@ -10,6 +10,10 @@ bottom, so by default the launcher keeps the part 38% of the way down. To choose
     harbour__bottom.png   keep the bottom   (people or ground at the bottom)
     plains__center.jpg    keep the middle
 
+A one-time banner: put __once in the file name (party__once.png, or party__top__once.png) and the launcher shows that picture on ONE start
+only: first thing on the Home page, until it is clicked or the launcher is closed. After that it is back to the usual pictures, and it never
+joins the rotation. config.json remembers which ones have been shown ("banners_seen"); take a name out of that list to see it once more.
+
 This needs Pillow. If the launcher's status line says so, run once in PowerShell:
     python -m pip install pillow
 

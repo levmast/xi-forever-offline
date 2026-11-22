@@ -514,16 +514,46 @@ def plain_ascii(text: str) -> str:
     return "".join(ch for ch in text if 32 <= ord(ch) < 127)
 
 
+# The game cuts a chat line at 150 characters (Altair, 2026-11-21: a mate's line ended in the middle of a word).
+# A longer line is sent as two or three lines instead, broken at the end of a sentence when there is one.
+CHAT_LINE_MAX = {"SAY": 145, "NOTE": 138}      # NOTE is shown with "[Squad] " in front
+CHAT_LINE_PARTS = 3
+
+
+def split_for_chat(text: str, limit: int, parts: int = CHAT_LINE_PARTS) -> list[str]:
+    """text in pieces of at most limit characters: at a sentence end if one falls in the second half of the piece,
+    else at a space. What does not fit in the last piece is dropped at a word, with "..." to show it."""
+    out, rest = [], text.strip()
+    while rest and len(out) < parts:
+        if len(rest) <= limit:
+            out.append(rest)
+            rest = ""
+            break
+        last = len(out) == parts - 1
+        room = limit - 3 if last else limit
+        window = rest[:room + 1]
+        cut = max(window.rfind(". "), window.rfind("! "), window.rfind("? ")) + 1
+        if last or cut < room // 2:
+            cut = window.rfind(" ")
+        if cut <= 0:
+            cut = room
+        piece = rest[:cut].rstrip()
+        rest = rest[cut:].lstrip()
+        out.append(piece + "..." if last and rest else piece)
+    return [piece for piece in out if piece]
+
+
 def write_out(kind: str, mate: str, text: str) -> None:
     text = clean_line(plain_ascii(str(text)))
     if not text:
         return
-    line = f"{kind}\t{clean_line(mate)}\t{text}\n"
+    pieces = split_for_chat(text, CHAT_LINE_MAX.get(kind, 145))
     OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
     # The server reads this file line by line. Keep the line endings Unix-style so the carriage return
     # cannot become part of the mate's chat text on Windows.
     with OUT_FILE.open("a", encoding="utf-8", newline="\n") as fh:
-        fh.write(line)
+        for piece in pieces:
+            fh.write(f"{kind}\t{clean_line(mate)}\t{piece}\n")
     log(f"OUT {kind} {mate}: {text}")
 
 

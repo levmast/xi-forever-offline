@@ -216,7 +216,7 @@ GetSquad = function() return squad end
 local function run(line) srv.printed = {}; G.handle(srv, line); return srv.printed end
 local function F(line) return G.splitPlain(line, '|') end
 local o = run('hello 1')
-check(o[1] == 'GSQ|1|hello|6|32|120|64', 'hello: version 6 (job expansion) - ' .. tostring(o[1]))
+check(o[1] == 'GSQ|1|hello|7|32|120|64', 'hello: version 7 (party roles) - ' .. tostring(o[1]))
 o = run('wsg 2 1')
 local f = F(o[1])
 check(#o == 2 and f[3] == 'ws' and f[4] == '1' and f[5] == 'WAR' and f[6] == 'l' and f[13] == '0' and f[14] == '-' and f[15] == '-' and f[16] == '1'
@@ -580,16 +580,16 @@ g.BeginChild = function() return true end; g.EndChild = function() end; g.PushID
 g.Checkbox = function() return false end; g.InputText = function() return false end; g.InputInt = function() return false end
 S.mates, S.mateSlot = { { slot = 1, name = 'Rook', job = 'WAR', level = 75, out = true, chosen = 3 } }, 1
 S.sets, S.selectedSet, S.draft, S.cat = { { num = 3, job = 'WAR', name = 'Basic Warrior', flags = 'o', rules = 3, rev = '1' } }, 3, nil, { targets = {}, conds = {} }
-S.view = 'rules'
+S.wsOpen = false -- (0.3.1: Weapon Skills is a collapsible section of the same editor, not a second tab)
 local okWin, errWin = pcall(M.draw)
 local seen = table.concat(buttons, '|')
 check(okWin and seen:find('Assign & Apply##gsq-assign', 1, true) and seen:find('Restore default job rules##gsq-off', 1, true)
       and not seen:find('Apply now##gsq-apply', 1, true), 'Rule Sets: Assign & Apply and Restore default job rules, no separate Apply now: ' .. tostring(errWin))
 buttons = {}
-S.view = 'ws'
+S.wsOpen = true
 okWin, errWin = pcall(M.draw)
 check(okWin and table.concat(buttons, '|'):find('Apply WS settings now##gsq-ws-apply', 1, true), 'Weapon Skills: "Apply WS settings now" (live, no new call) is kept: ' .. tostring(errWin))
-S.view = 'rules'
+S.wsOpen = false
 
 -- ================================================================= 8. the C++ triggers: specification table + source
 section('C++ weapon skill triggers: what they are meant to do (a Lua specification table, NOT the C++ itself)')

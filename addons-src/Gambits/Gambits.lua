@@ -19,7 +19,7 @@ Files: Gambits.lua (this shell), transport.lua (chat transport), squad_editor.lu
 
 addon.name    = 'Gambits'
 addon.author  = 'XI: Forever Offline'
-addon.version = '0.3.0'
+addon.version = '0.3.2'
 addon.desc    = 'Gambits: Rule Sets for your squad mates (Target -> Conditions -> Action).'
 addon.link    = ''
 
@@ -59,6 +59,10 @@ do
     -- the Trust-summoning spells (generated list): left out of the editor's Specific Spell choices
     local okTr, trusts = pcall(load_local, 'trust_spells')
     G.trusts = okTr and trusts or {}
+    -- (0.3.1) spell families and status effects from the server's data (generated): only for the editor's lists; without
+    -- it the lists are simply not filtered
+    local okData, data = pcall(load_local, 'gambits_data')
+    G.data = okData and data or nil
 end
 
 local imgui
@@ -92,7 +96,11 @@ local function chat()
 end
 
 -- ---------------------------------------------------------------- settings
-local DEFAULTS = { theme = 'classic', scale = 100, interval = 1.0, hide_echo = true, win_w = 0, win_h = 0 }
+-- (0.3.1) show_all: the editor's Show all (every spell family / spell the server offers); ws_open: the Weapon Skills
+-- section is open; (0.3.2) roles_open: the Party roles section is open
+local DEFAULTS = { theme = 'classic', scale = 100, interval = 1.0, hide_echo = true, win_w = 0, win_h = 0, show_all = false,
+                   ws_open = false, roles_open = false }
+local PREFS = { show_all = true, ws_open = true, roles_open = true } -- (the editor may read and set only these)
 local settingsLib
 do
     local ok, mod = pcall(require, 'settings')
@@ -108,6 +116,9 @@ local function clean_settings(s)
     s.hide_echo = s.hide_echo ~= false
     s.win_w = math.max(0, math.floor(tonumber(s.win_w) or 0)) -- the window size the player left (pixels; 0 = not set yet)
     s.win_h = math.max(0, math.floor(tonumber(s.win_h) or 0))
+    s.show_all = s.show_all == true
+    s.ws_open = s.ws_open == true
+    s.roles_open = s.roles_open == true
     return s
 end
 
@@ -499,6 +510,16 @@ function G.start()
             save_settings()
         end,
         trust_spells = G.trusts,
+        addon_data = G.data,
+        get_pref = function(key)
+            return PREFS[key] and G.settings[key] or nil
+        end,
+        set_pref = function(key, value)
+            if PREFS[key] then
+                G.settings[key] = value == true
+                save_settings()
+            end
+        end,
         get_scale = function()
             return G.settings.scale
         end,

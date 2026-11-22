@@ -2,6 +2,53 @@
 
 Newest first. The launcher shows this file on SYSTEM > Patch notes; the same notes go to #patch-notes on Discord.
 
+## v0.1.60 · 22 November 2026
+
+### Fixes
+• Threw away the Forever Beta Shirt while it showed as a nameless Lv127 item? You get another one. After this update it is waiting in your delivery box, and the game tells you so when you log in. Once per character, and only if you have none left (bags, Mog House and delivery box all count).
+
+## v0.1.59 · 22 November 2026
+
+### New
+• Casino Dealer in Southern San d'Oria, Bastok Markets, Windurst Woods and Lower Jeuno: trade gil, and you and the dealer each roll 0-999. Roll higher and your bet is doubled; a tie gives it back. (Yache)
+• Rules > Comforts, all off by default (out of era): "Caskets tell you the code" (Dugahst), "Guild shops never run out" (delukard), "Full merits" (every merit to its own maximum) and "Merit points you can hold" up to 99 (PTgamerguy, Ricc).
+• OPTIONS > Graphics > "Gamepad setup" opens FFXI's own gamepad tool, on Windows and Linux. (Sunie)
+• OPTIONS > Controller: set your controller up in the launcher. Pick Xbox, PlayStation 4 / 5 or Switch Pro and the buttons are laid out for it; change any button, confirm on the right (Nintendo / Japanese style), vibration, invert the camera, keep the pad working with the game in the background. Off by default: then the game keeps what its own gamepad tool saved. Ported from LocalXI (seamuswilkie31-dev, GPL-3.0). (Sunie)
+• WORLD page: six new switches for a livelier world, all on by default. Town crowds come and go through the zone lines and Mog House doors and may stop to wave at each other. Bot players emote (they cheer level ups, bow when they join you, wave goodbye), remember where they died and hunt somewhere else for a while, keep a life story between play sessions (!bots story Name), and leave and return through the town gate.
+• tCrossBar, on-screen controller macros, can be added from the add-on list. (Yache)
+• Gambits 0.3.2: job-aware spell and ability lists, a Weapon Skills section, and a Party roles section for who counts as Tank / Melee / Mage / Ranged. (wildthing)
+• The Job rules editor now explains what it does and points to Gambits for your own spell choices. (wildthing)
+• RULES > Skills and crafting > "Fishing minigame": on by default (today's fishing). Switch it off for era fishing: no fight on screen, the catch is decided as soon as the fish bites, and your skill still decides lost catches and broken lines.
+• SYSTEM > Settings > "Change game folder": moved FINAL FANTASY XI to another drive? Pick the new folder and keep playing. (K-Andy)
+
+### Squad
+• Gear chosen by hand is checked against the rest of the outfit: a Rare item can't be worn twice, and Sub must fit Main (a two-handed weapon takes a grip only). Old setups simply leave the extra piece off. (Ricc, Meli)
+• !squad give / equip / lockstyle take item names of several words: "Light Crossbow +1". (wildthing)
+• Squad mates lose enmity when they take damage, like players. (wildthing)
+• Squad Dragoons no longer get the Shikaree Z template's MP bonus. (wildthing)
+• Party roles apply at once. (wildthing)
+• The bard's "NOT MOVING" line only shows with !bard debug. (Meli, PTgamerguy)
+• Squad mates stay put while you use a home point, a survival guide, a treasure casket, chest or coffer, a Fields or Grounds book or a conquest guard (Signet). They are still hidden during cutscenes and longer talks with other NPCs. (Ricc, Altair, Yumainai, Dugahst, Meli)
+• A Dragoon's wyvern runs as fast as its master, so it keeps up with a raised run speed. (Yache)
+• Squad mates know a spell from their job's Trust template only when their own jobs learn it, and at the level they learn it: a squad Paladin has Flash from 37 (was 45) and a White Mage Paralyze from 4, and a squad Bard, Dragoon or Puppetmaster no longer casts White Mage spells its sub job doesn't have. (wildthing)
+• Squad Thieves get Trick Attack's sure critical hit (with Assassin, level 60+) like players do, and a squad Dark Knight's Souleater now really adds damage and costs HP.
+
+### Fixes
+• Forever Beta Shirt: on player installs it showed as a blank Lv127 item. It now gets its name, icon and look at the next PLAY, on Windows and Linux. (Ricc, Trinity, ザックス)
+• Character transfer: an out-of-range body size (CatsEye exports) no longer stops the import. (delukard, MrDink, Bigbadbill)
+• Port San d'Oria Home Point #1 sits on the ground and works again. (Tasou, Yache)
+• A Home Point teleport inside the same town to the moved Home Point #1s (Port San d'Oria, Bastok Markets, Port Bastok, Port Windurst) lands next to the crystal. (Yumainai)
+• Blue Mage AF quests no longer wait for Japanese midnight between steps. (Yache)
+• Treasure casket "ghost" after opening removed. (Yache)
+• Bot players fish at the water again: fishing spots are marked on the docks of Port San d'Oria, Port Bastok, Port Windurst, Selbina and Mhaura. (Tasou, Sunie)
+• Squad chat: a long line from a mate is no longer cut off in the middle of a word (the game stops at 150 characters). It now comes as two or three lines. (Altair)
+• Closing the launcher always stops its own database. It used to stay running in the background after a launcher had been closed from Task Manager. (Meli)
+• Server menu: MY AUTO off now always reaches autobox, so your rules no longer run while the menu says OFF. (wildthing, Altair)
+• Crystal Boy 1.8c: more detail in its trace files for crash reports, and a test switch for the crash that unloads every add-on: type /cb jit off, play, and tell us if it still happens (/cb jit on puts it back). (Ricc)
+• Combat and magic skill-up rate: above about 2x it did nothing more (a 50% ceiling). The ceiling now rises with the rate, and from 10x each skill-up is bigger too. (Ricc)
+• The launcher keeps the size you give it when you change pages. (Starfret)
+• Linux setup: when the database's first-time step fails, the full message is kept in mariadb/install-db.log (the screen only had room for its start and end). (ザックス)
+
 ## v0.1.58 · 21 November 2026
 
 ### Tetra Master (new)

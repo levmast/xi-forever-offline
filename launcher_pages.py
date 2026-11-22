@@ -19,7 +19,7 @@ from launcher_widgets import LINE as LINE_COLOUR
 # the page buttons along the bottom: (picture in assets\ui, name, the pages it opens)
 NAV_BUTTONS = (("home", "HOME", ("Play",)), ("world", "WORLD", ("World",)), ("rules", "RULES", ("Rules",)),
                ("squad", "SQUADS", ("Squad",)),
-               ("options", "OPTIONS", ("Graphics", "Shaders", "Addons", "Plugins", "Other")),
+               ("options", "OPTIONS", ("Graphics", "Shaders", "Controller", "Addons", "Plugins", "Other")),
                ("coop", "CO-OP", ("Co-op",)), ("system", "SYSTEM", ("Settings", "Patch notes", "Characters", "Era", "About")))
 WINDOW = (1100, 810)            # one size for every page
 BANNER = (800, 320)             # the Play page's picture (the classic page: 920 x 368)

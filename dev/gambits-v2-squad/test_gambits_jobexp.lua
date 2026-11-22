@@ -186,7 +186,7 @@ end
 section('catalog v6: Check Self -> Act on Enemy, catm "jm", content switched off')
 do
     local o = run('hello 1')
-    check(o[1] == 'GSQ|1|hello|6|32|120|64', 'hello: version 6 - ' .. tostring(o[1]))
+    check(o[1] == 'GSQ|1|hello|7|32|120|64', 'hello: version 7 (party roles) - ' .. tostring(o[1]))
     local t = catEntries(run('catm 2 9 jm'), 't')
     check(has(t, 'TRIGGER_SELF_ACTION_TARGET') and t[#t] == 'TRIGGER_SELF_ACTION_TARGET', 'the target TRIGGER_SELF_ACTION_TARGET is offered (last)')
     local cJM = catEntries(run('catm 3 9 jm'), 'c')
@@ -335,11 +335,11 @@ do
     check(p.cv.SQUAD_PROLE_ME == 0 and p.lv.SQUAD_ROLE == 0, 'ME (any case) -> auto')
     J.partyRoleCommand(p, sq, 'me', 'ranged', h)
     J.partyRoleCommand(p, sq, nil, nil, h)
-    local list = said[#said - 2]
+    local list = said[#said - 3] -- (the list, the usage, the auto note, the Squad Role note)
     check(list:find('you ranged', 1, true) and list:find('[1] Rook tank', 1, true) and list:find('[2] Dame melee', 1, true)
           and list:find('[4] Testwar mage', 1, true), 'the list shows each mate\'s slot: ' .. list)
-    check(said[#said - 1]:find('<slot|name|me>', 1, true) and said[#said - 1]:find('!squad list', 1, true) and #said[#said - 1] <= 140,
-          'the usage explains <slot|name|me> and points to !squad list (fits a chat line): ' .. said[#said - 1])
+    check(said[#said - 2]:find('<slot|name|me>', 1, true) and said[#said - 2]:find('!squad list', 1, true) and #said[#said - 2] <= 140,
+          'the usage explains <slot|name|me> and points to !squad list (fits a chat line): ' .. said[#said - 2])
     -- a role set by slot reaches the engine and a role-song Bard (BRD role-override test)
     local whmMate = ent({ id = 703, job = 3, master = p })
     whmMate:setLocalVar('SQUAD_ID', 14)
@@ -366,6 +366,130 @@ do
     check(J.inRole(pld, 1) and J.inRole(pld, 2) and not J.inRole(pld, 3), 'a PLD by job: tank and melee (the engine\'s groups), not mage')
     pld:setLocalVar('SQUAD_ROLE', 3)
     check(J.inRole(pld, 3) and not J.inRole(pld, 1), 'a PLD set to mage: only mage')
+end
+
+-- ================================================================= 4b. party roles: one setter, at once, effective roles
+section('party roles: J.setRole (UI and chat), live for your own summoned mate, auto vs set, the Aldric case')
+do
+    -- every job's auto targets: the same groups as J.inRole (and the engine, checked against the C++ source below)
+    local want = { [1] = 'M', [2] = 'M', [3] = 'C', [4] = 'C', [5] = 'C', [6] = 'M', [7] = 'TM', [8] = 'M', [9] = 'M', [10] = 'C',
+                   [11] = 'R', [12] = 'M', [13] = 'M', [14] = 'M', [15] = 'C', [16] = 'MC', [17] = 'R', [18] = 'M', [19] = 'M',
+                   [20] = 'C', [21] = 'C', [22] = 'TMC' }
+    local bad, agree = {}, true
+    for job, letters in pairs(want) do
+        if J.autoTargets(job) ~= letters then bad[#bad + 1] = job .. '=' .. J.autoTargets(job) end
+        local e = ent({ job = job })
+        for i, l in ipairs(J.TARGET_LETTER) do
+            agree = agree and (J.inRole(e, i) == (string.find(letters, l, 1, true) ~= nil))
+        end
+    end
+    check(#bad == 0, 'autoTargets for all 22 jobs: WAR M, PLD TM, RUN TMC, BLU MC, COR R ... ' .. table.concat(bad, ' '))
+    check(agree, 'autoTargets agrees with J.inRole for every job and role (role auto)')
+    check(J.effectiveTargets(0, 7) == 'TM' and J.effectiveTargets(1, 7) == 'T' and J.effectiveTargets(1, 1) == 'T'
+          and J.effectiveTargets(2, 7) == 'M' and J.effectiveTargets(3, 1) == 'C', 'effectiveTargets: auto PLD = Tank+Melee; an explicit role is exactly that one (PLD tank = T only)')
+    check(J.roleText(0, 1) == 'by job (melee)' and J.roleText(0, 7) == 'by job (tank, melee)' and J.roleText(3, 1) == 'mage (set)',
+          'chat text: "by job (melee)", "by job (tank, melee)", "mage (set)"')
+    -- the C++ groups (the engine) are the Lua groups
+    local src = SERVER_ROOT .. '/src/map/ai/helpers/'
+    local gc, gh = readAll(src .. 'gambits_container.cpp'), readAll(src .. 'gambits_container.h')
+    local function setOf(name)
+        local body = gh and gh:match('std::set<xi::Job> ' .. name .. ' = {(.-)};')
+        local s = {}
+        for j in string.gmatch(body or '', 'xi::Job::(%u+)') do s[j] = true end
+        return s
+    end
+    local JOBID = { WAR = 1, MNK = 2, WHM = 3, BLM = 4, RDM = 5, THF = 6, PLD = 7, DRK = 8, BST = 9, BRD = 10, RNG = 11, SAM = 12, NIN = 13,
+                    DRG = 14, SMN = 15, BLU = 16, COR = 17, PUP = 18, DNC = 19, SCH = 20, GEO = 21, RUN = 22 }
+    local mel, cas, same = setOf('melee_jobs'), setOf('caster_jobs'), next(setOf('melee_jobs')) ~= nil
+    for name, id in pairs(JOBID) do
+        same = same and ((mel[name] == true) == (string.find(want[id], 'M', 1, true) ~= nil))
+            and ((cas[name] == true) == (string.find(want[id], 'C', 1, true) ~= nil))
+    end
+    check(same and gc and gc:find('role == 1 || (role == 0 && (PMember->GetMJob() == xi::Job::PLD || PMember->GetMJob() == xi::Job::RUN))', 1, true)
+          and gc:find('role == 4 || (role == 0 && (PMember->GetMJob() == xi::Job::RNG || PMember->GetMJob() == xi::Job::COR))', 1, true),
+          'the C++ groups are the Lua groups: melee_jobs / caster_jobs, TANK = PLD/RUN, RANGED = RNG/COR (and the role replaces the job)')
+    check(gc and gc:find('GetLocalVar("SQUAD_ROLE")', 1, true), 'the engine reads the live SQUAD_ROLE (so setting it on a summoned mate works at once)')
+
+    -- the setter: a summoned mate of yours (master = you) gets it at once; one of another character with the same SQUAD_ID does not
+    local p = playerOf()
+    xi.objType = xi.objType or { PC = 1, TRUST = 2 }
+    local function trust(o)
+        local e = ent(o)
+        function e:getObjType() return xi.objType.TRUST end
+        e:setLocalVar('SQUAD_ID', o.squadId)
+        return e
+    end
+    local dual = playerOf()
+    function dual:getID() return 2 end
+    local aldric = trust({ id = 801, job = 1, lvl = 20, master = p, squadId = 21 })
+    local lyra = trust({ id = 802, job = 3, lvl = 30, master = p, squadId = 22 })
+    local other = trust({ id = 803, job = 1, master = dual, squadId = 21 })
+    p.party = { p, aldric, lyra, dual, other }
+    check(J.ownTrust(p, 21) == aldric and J.ownTrust(dual, 21) == nil and J.ownTrust(p, 99) == nil, 'ownTrust: only a trust whose master is you')
+    local st = J.setRole(p, { id = 21, slot = 1, name = 'Aldric', mjob = 1 }, 1)
+    check(st and st.set == 1 and st.live == 1 and st.out and aldric:getLocalVar('SQUAD_ROLE') == 1 and other:getLocalVar('SQUAD_ROLE') == 0,
+          'setRole on your summoned Aldric: stored and live at once; the other character\'s mate (same SQUAD_ID) untouched')
+    st = J.setRole(p, { id = 23, slot = 3, name = 'Hild', mjob = 7 }, 3)
+    check(st and st.set == 3 and st.live == nil and not st.out and p.cv.SQUAD_PROLE_23 == 3, 'setRole on a mate not out: stored only (from the next call)')
+    st = J.setRole(p, nil, 4)
+    check(st and st.set == 4 and st.live == 4 and p.lv.SQUAD_ROLE == 4, 'setRole on you: stored and live')
+    st = J.setRole(p, { id = 21, slot = 1, name = 'Aldric', mjob = 1 }, 0)
+    check(st and st.set == 0 and st.live == 0 and aldric:getLocalVar('SQUAD_ROLE') == 0, 'back to auto on a summoned mate: stored 0 and live 0 at once')
+    local snap = p.cv.SQUAD_PROLE_21
+    for _, v in ipairs({ 5, -1, 1.5, 'tank', nil }) do
+        local r, why = J.setRole(p, { id = 21 }, v)
+        check(r == nil and why ~= nil and p.cv.SQUAD_PROLE_21 == snap, 'setRole refuses ' .. tostring(v) .. ' and writes nothing')
+    end
+
+    -- the chat command uses the same setter: "now" when out, "from the next call" when not
+    local said = {}
+    local h = { say = function(_, text) said[#said + 1] = text end, findMate = function(sq, slot) for _, m in ipairs(sq) do if m.slot == slot then return m end end end }
+    local sq = { { slot = 1, id = 21, name = 'Aldric', mjob = 1 }, { slot = 3, id = 23, name = 'Hild', mjob = 7 } }
+    J.partyRoleCommand(p, sq, '1', 'tank', h)
+    check(said[#said] == 'Aldric counts as tank for Rule Sets now.' and aldric:getLocalVar('SQUAD_ROLE') == 1, 'chat partyrole 1 tank while out: "now", live at once')
+    J.partyRoleCommand(p, sq, '3', 'melee', h)
+    check(said[#said] == 'Hild counts as melee for Rule Sets from the next call.' and p.cv.SQUAD_PROLE_23 == 2, 'chat partyrole for a mate not out: "from the next call"')
+    J.partyRoleCommand(p, sq, '1', 'auto', h)
+    check(aldric:getLocalVar('SQUAD_ROLE') == 0 and p.cv.SQUAD_PROLE_21 == 0, 'chat partyrole 1 auto: live and stored back to auto')
+    J.partyRoleCommand(p, sq, nil, nil, h)
+    check(said[#said - 3]:find('[1] Aldric by job (melee)', 1, true) and said[#said - 3]:find('[3] Hild melee (set)', 1, true)
+          and said[#said]:find('Squad menu\'s Role', 1, true), 'chat list: "[1] Aldric by job (melee)", "[3] Hild melee (set)", and the Squad Role note')
+    for _, l in ipairs(said) do check(#l <= 140 or l:find('Party roles', 1, true), 'a chat line fits (' .. #l .. ')') end
+    -- the !squad role hint (the Squad AI Role itself is not changed by party roles)
+    check(J.squadRoleHint(p, sq[1], 'tank', '1'):find('!squad partyrole 1 tank', 1, true), '!squad role 1 tank on a WAR (auto): the hint')
+    p.cv.SQUAD_PROLE_21, p.cv.SQUAD_PROLE_23 = 1, 0
+    check(J.squadRoleHint(p, sq[1], 'tank', '1') == nil and J.squadRoleHint(p, sq[2], 'tank', '3') == nil and J.squadRoleHint(p, sq[1], 'healer', '1') == nil,
+          'no hint when it already counts as tank (set, or PLD by job on auto), or for another Role')
+    p.cv.SQUAD_PROLE_23 = 2
+    check(J.squadRoleHint(p, sq[2], 'tank', '3') ~= nil, 'a PLD whose party role is melee: the hint (it is not a Tank target now)')
+    p.cv.SQUAD_PROLE_21 = 0
+
+    -- the Aldric case: WAR 20 out, a WHM's Rule Set "Tank -> missing Regen -> Regen". The Tank target is the engine's rule
+    -- (J.inRole(member, 1) = role 1, or role 0 and PLD/RUN); nobody else in the party is PLD/RUN.
+    local function tanks()
+        local out = {}
+        for _, m in ipairs({ aldric, lyra }) do if J.inRole(m, 1) then out[#out + 1] = m:getID() end end
+        return out
+    end
+    check(#tanks() == 0, 'Aldric: WAR on auto is not a Tank target (no Regen for the Tank rule)')
+    J.setRole(p, { id = 21, slot = 1, name = 'Aldric', mjob = 1 }, 1)
+    check(#tanks() == 1 and tanks()[1] == 801 and not J.inRole(aldric, 2),
+          'set to tank while out: Aldric is the Tank target AT ONCE (no recall), and no longer Melee')
+    J.setRole(p, { id = 21, slot = 1, name = 'Aldric', mjob = 1 }, 0)
+    check(#tanks() == 0 and J.inRole(aldric, 2), 'back to auto: not a Tank target again, Melee again')
+    -- a respawn keeps the stored role (applyRoles unchanged)
+    J.setRole(p, { id = 21, slot = 1, name = 'Aldric', mjob = 1 }, 1)
+    aldric:setLocalVar('SQUAD_ROLE', 0)
+    J.applyRoles(aldric)
+    check(aldric:getLocalVar('SQUAD_ROLE') == 1, 'a new call (applyRoles) gives Aldric the stored tank again')
+    -- Bard role songs follow the live role at once: "Tank -> March", "Melee -> Minuet"
+    local bard = ent({ id = 805, job = 10 })
+    J.analyse(bard, { G.decodeRule('1,TANK,NOT_STATUS,MARCH,,,f,MARCH,', 1), G.decodeRule('1,MELEE,NOT_STATUS,MINUET,,,f,VALOR_MINUET,', 2) })
+    check(J.songRecipient(bard, aldric, xi.magic.spell.ADVANCING_MARCH) and not J.songRecipient(bard, aldric, xi.magic.spell.VALOR_MINUET),
+          'Aldric set to tank: gets the Tank song (March), not the Melee one (Minuet)')
+    J.setRole(p, { id = 21, slot = 1, name = 'Aldric', mjob = 1 }, 0)
+    check(not J.songRecipient(bard, aldric, xi.magic.spell.ADVANCING_MARCH) and J.songRecipient(bard, aldric, xi.magic.spell.VALOR_MINUET),
+          'back to auto (no recall): the Melee song again, not the Tank one')
 end
 
 -- ================================================================= 5. Sneak Attack / Trick Attack under the Rule Set

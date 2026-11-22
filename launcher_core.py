@@ -510,6 +510,7 @@ RATE_FIELDS = [
     ("map.CRAFT_CHANCE_MULTIPLIER",     "map.lua",  "CRAFT_CHANCE_MULTIPLIER",     "Crafting skill-up chance",              1.0, 0.0, 20.0,  "float"),
     ("map.CRAFT_HQ_CHANCE_MULTIPLIER",  "map.lua",  "CRAFT_HQ_CHANCE_MULTIPLIER",  "Crafting high-quality chance",          1.0, 0.0, 20.0,  "float"),
     ("map.FISHING_SKILL_MULTIPLIER",    "map.lua",  "FISHING_SKILL_MULTIPLIER",    "Fishing skill-up chance",               1.0, 0.0, 20.0,  "float"),
+    ("map.FISHING_MINIGAME",            "map.lua",  "FISHING_MINIGAME",            "Fishing minigame (1 = on, 0 = era fishing)", 1, 0, 1, "int"),
     ("main.MAX_LEVEL",                  "main.lua", "MAX_LEVEL",                   "Level cap",                             75,  50,  99,    "int"),
     ("main.ENABLE_COP",                 "main.lua", "ENABLE_COP",                  "Chains of Promathia (1 = on)",          1,   0,   1,     "int"),
     ("main.ENABLE_TOAU",                "main.lua", "ENABLE_TOAU",                 "Treasures of Aht Urhgan (1 = on)",      1,   0,   1,     "int"),
@@ -530,6 +531,12 @@ RATE_FIELDS = [
     # the new character is stuck (Ste, Odeken, tarolin, shujimi): the era event files were made for October. A world
     # that already has a saved value keeps it. Put the default back to 1 once the era files match the game again.
     ("main.NEW_CHARACTER_CUTSCENE",     "main.lua", "NEW_CHARACTER_CUTSCENE",      "New-character cutscenes (1 = on)", 0, 0, 1, "int"),
+    # (2026-11-22, suggestions: Dugahst, delukard, PTgamerguy, Ricc) comforts, off = the era (server: custom/late/comforts.lua,
+    # merit.cpp)
+    ("main.CASKET_SHOW_CODE",           "main.lua", "CASKET_SHOW_CODE",            "Caskets tell you their combination (1 = on)", 0, 0, 1, "int"),
+    ("main.GUILD_SHOPS_ALWAYS_STOCKED", "main.lua", "GUILD_SHOPS_ALWAYS_STOCKED",  "Guild shops never run out (1 = on)",  0,   0,   1,     "int"),
+    ("map.FULL_MERITS",                 "map.lua",  "FULL_MERITS",                 "Every merit to its maximum (1 = on)", 0,   0,   1,     "int"),
+    ("map.MAX_MERIT_POINTS",            "map.lua",  "MAX_MERIT_POINTS",            "Merit points you can hold",          30,  10,  99,    "int"),
     ("main.HOMEPOINT_TELEPORT",         "main.lua", "HOMEPOINT_TELEPORT",          "Home Point teleports (1 = on, 0 = classic)", 1, 0, 1, "int"),
     ("main.ENABLE_SURVIVAL_GUIDE",      "main.lua", "ENABLE_SURVIVAL_GUIDE",       "Survival Guide teleports (1 = on, 0 = classic)", 1, 0, 1, "int"),
     ("map.BASE_SPEED",                  "map.lua",  "BASE_SPEED",                  "Run speed (50 = retail)",               50,  40,  120,   "int"),
@@ -546,6 +553,10 @@ RATE_DEFAULTS.update({"bots_growth": "realistic"})
 RATE_DEFAULTS.update({"bots_head_start": False, "bots_head_start_done": False})   # one-time bot head start (bots_growth.lua)
 RATE_DEFAULTS.update({"squad_all_gear": False})   # (Yache) every piece of gear counts as given to the squad (squad.lua squadAllGear)
 RATE_DEFAULTS.update({"bots_pass_loot": True})   # (delukard) bot players in your party pass every drop at once (bots.cpp)
+# (2026-11-21) crowd members through the gates / stopping for each other, bot players' emotes, death memory, life
+# stories and gate travel (modules/custom/lua/extras.lua reads extras_config.lua; in game: !extras). All on by default.
+EXTRAS_KEYS = ("crowd_gates", "crowd_meet", "bot_social", "bot_memory", "bot_story", "bot_gates")
+RATE_DEFAULTS.update({key: True for key in EXTRAS_KEYS})
 RATE_DEFAULTS.update({"training_dummies": False})   # (Jon Tanta) !sandbox training dummies in Rolanberry Fields, a testing tool (squad_sandbox.lua)
 RATE_DEFAULTS.update({"squad_keep_gear": False})   # gear given to the squad is unlocked and you keep the piece (squad.lua squadKeepGear)
 RATE_DEFAULTS.update({"spell_scrolls": False})  # squad mates need scrolls for spells of level 18+ (blue magic from monsters) (squad.lua)
@@ -721,6 +732,10 @@ def write_crowds_config(server_dir, rates):
             "true" if rates.get("bots", True) else "false", max(0, min(600, int(rates.get("bots_roster", 100) or 0))),
             max(0, min(550, int(rates.get("bots_online", 50) or 0))), growth, "true" if head_start else "false",
             "true" if rates.get("bots_pass_loot", True) else "false"))
+    with open(os.path.join(module_dir, "extras_config.lua"), "w", encoding="utf-8", newline="\n") as f:
+        f.write("-- Written by the XI: Forever Offline launcher (Rates tab). Do not edit: it is rewritten every launch.\n")
+        f.write("return { %s }\n" % ", ".join(
+            "%s = %s" % (key, "true" if rates.get(key, True) else "false") for key in EXTRAS_KEYS))
     with open(os.path.join(module_dir, "squad_config.lua"), "w", encoding="utf-8", newline="\n") as f:
         f.write("-- Written by the XI: Forever Offline launcher (Rates tab). Do not edit: it is rewritten every launch.\n")
         f.write("return { call_cooldown_min = %d, spell_scrolls = %s, keep_gear = %s, training_dummies = %s, all_gear = %s }\n" % (
@@ -864,6 +879,9 @@ def load_rates(here):
             rates["training_dummies"] = bool(saved["training_dummies"])
         if "bots_pass_loot" in saved:
             rates["bots_pass_loot"] = bool(saved["bots_pass_loot"])
+        for key in EXTRAS_KEYS:
+            if key in saved:
+                rates[key] = bool(saved[key])
         if "squad_all_gear" in saved:
             rates["squad_all_gear"] = bool(saved["squad_all_gear"])
         if "short_quest_waits" in saved:
@@ -980,6 +998,8 @@ def apply_preset(rates, name):
                          ("short_quest_waits", True), ("events", "date"), ("event_harvest", True), ("event_starlight", True), ("event_egg_hunt", True), ("event_horro", True), ("event_sunbreeze", True)):
         out[key] = rates.get(key, default)
     out["crowds_per_zone"] = rates.get("crowds_per_zone", 15)
+    for key in EXTRAS_KEYS:
+        out[key] = rates.get(key, True)
     out["main.MAX_LEVEL"] = rates.get("main.MAX_LEVEL", 75)
     out.update(RATE_PRESETS.get(name, {}))
     return out
@@ -1126,6 +1146,13 @@ def apply_rates(server_dir, rates):
     wanted["map.lua"].append(("SPEED_LIMIT", max(80, _mount, min(255, round(_base * 1.6))), "int"))
     # (2026-11-20, Trinity: "Is fishing disabled?") the server default switches all fishing off (a guard against fishing
     # bots on public servers, "enable at your own risk"); there is no such risk on your own world
+    # (2026-11-22, Ricc: skill-ups at 20x still slow) a high skill-up rate also raises how much each skill-up gives:
+    # SKILLUP_AMOUNT_MULTIPLIER = rate / 5, which the server uses from 2 up: 10x = three times as much, 20x = five times
+    try:
+        _skill = float(rates.get("map.SKILLUP_CHANCE_MULTIPLIER", 1.0))
+    except (TypeError, ValueError):
+        _skill = 1.0
+    wanted["map.lua"].append(("SKILLUP_AMOUNT_MULTIPLIER", max(1, int(_skill // 5)), "int"))
     wanted["map.lua"].append(("FISHING_ENABLE", True, "bool"))
     # (2026-11-20, the user: "there is no reason for a limit here") no daily limits on your own world: fishing (200
     # catches a day and the fatigue meter; needs the server from this release on, older ones skip the key) and

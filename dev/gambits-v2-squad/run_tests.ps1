@@ -48,6 +48,7 @@ foreach ($f in $files) {
 & $PythonExe -I (Join-Path $t 'make_squad_ja_jobs.py') --check (Join-Path $Server 'sql\abilities.sql') (Join-Path $lua 'squad_ja_jobs_data.lua'); Write-Result 'squad_ja_jobs_data.lua' $LASTEXITCODE
 & $PythonExe -I (Join-Path $t 'make_squad_spell_jobs.py') --check (Join-Path $Server 'sql\spell_list.sql') (Join-Path $Server 'scripts\enum\magic.lua') (Join-Path $Server 'sql\item_basic.sql') (Join-Path $lua 'squad_spell_jobs_data.lua'); Write-Result 'squad_spell_jobs_data.lua' $LASTEXITCODE
 & $PythonExe -I (Join-Path $t 'make_squad_spell_jobs.py') --check-trusts (Join-Path $Server 'sql\spell_list.sql') (Join-Path $Server 'scripts\enum\magic.lua') (Join-Path $add 'trust_spells.lua'); Write-Result 'addon trust_spells.lua' $LASTEXITCODE
+& $PythonExe -I (Join-Path $t 'make_gambits_addon_data.py') --check $Server (Join-Path $add 'gambits_data.lua'); Write-Result 'addon gambits_data.lua' $LASTEXITCODE
 
 Push-Location $t
 try {
@@ -60,7 +61,8 @@ try {
             @{ n = 'Rule Sets and U13 (test_squad_rulesets.lua)';        a = @('test_squad_rulesets.lua', (Join-Path $lua 'squad.lua'), (Join-Path $lua 'squad_starter_gear.lua'), $gl, (Join-Path $lua 'squad_rulesets.lua'), $orig, $ja) },
             @{ n = 'squad.lua integration (test_squad_upstream_integration.lua)'; a = @('test_squad_upstream_integration.lua', $lua, $gl, $ja, $orig, $Work) + $data },
             @{ n = 'WAR/PLD/RDM/WS batch (test_gambits_ws_batch.lua)';  a = @('test_gambits_ws_batch.lua', $lua, $gl, $ja, $add, $Work, $Server) },
-            @{ n = 'job expansion (test_gambits_jobexp.lua)';           a = @('test_gambits_jobexp.lua', $lua, $gl, $ja, $add, $Work, $Server) }
+            @{ n = 'job expansion (test_gambits_jobexp.lua)';           a = @('test_gambits_jobexp.lua', $lua, $gl, $ja, $add, $Work, $Server) },
+            @{ n = 'UI/UX 0.3.1 (test_gambits_uiux.lua)';               a = @('test_gambits_uiux.lua', $lua, $gl, $ja, $add, $Work, $Server) }
         )
         foreach ($s in $suites) {
             $out = & $run.exe @pre @($s.a) 2>&1 | ForEach-Object { "$_" }

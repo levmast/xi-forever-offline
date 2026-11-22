@@ -443,11 +443,10 @@ def item_ok(g):
         return False
 
 
-def apply(g, log=print, force=False):
-    """Writes only what is missing. Returns a message, or None when everything was already in place."""
-    st = load_state(); done = []
+def _apply_look(g, st, rebuild, log):
+    """The shirt's look (body model 399, all races). Returns the races written."""
+    done = []
     src_files, new_files = model_files(g, SRC_MODEL), model_files(g, NEW_MODEL)
-    rebuild = force or st.get("version") != VERSION
     for race in RACES:
         sp, np_ = gpath(g, src_files[race]), gpath(g, new_files[race])
         if rebuild or sha(read(np_)) != st.get("models", {}).get(race):
@@ -459,6 +458,24 @@ def apply(g, log=print, force=False):
             write(np_, data)
             st.setdefault("models", {})[race] = sha(data); st.setdefault("maat", {})[race] = sha(src)
             done.append(race)
+    return done
+
+
+def apply(g, log=print, force=False):
+    """Writes only what is missing. Returns a message, or None when everything was already in place."""
+    st = load_state(); done = []; problem = None
+    rebuild = force or st.get("version") != VERSION
+    # (2026-11-22, Ricc, FalconX51, PTgamerguy, Egon: the shirt arrived with no name) the item entry no longer depends on
+    # the look: the look needs more of Pillow than the launcher exe of v0.1.58 carried, and a look that could not be built
+    # used to stop the item entry too
+    try:
+        look_done = _apply_look(g, st, rebuild, log)
+    except PermissionError:
+        raise
+    except Exception as e:                   # the item still gets its name; the look is tried again at the next PLAY
+        look_done, problem = [], e
+        st["version"] = None                 # (so the next PLAY retries the look)
+    done += look_done
     save_state(st)                          # models are kept even if the item file is locked (game running)
     if rebuild or not item_ok(g):
         path = gpath(g, ITEM_FILE)
@@ -477,8 +494,12 @@ def apply(g, log=print, force=False):
         if not item_ok(g):
             raise RuntimeError("read-back check of the item failed")
         done.append("item")
-    st["version"] = VERSION
+    if problem is None:
+        st["version"] = VERSION
     save_state(st)
+    if problem is not None:
+        return "Forever Beta Shirt: item %s; its look was skipped (%s)." % (
+            "updated" if "item" in done else "in place", problem)
     if not done:
         return None
     return "Forever Beta Shirt: game files updated (%s)." % ", ".join(done)

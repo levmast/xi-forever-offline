@@ -20,6 +20,9 @@ PlayOnline Tetra Master game, (c) SQUARE ENIX CO., LTD. They are used in tribute
 - [LandSandBoat](https://github.com/LandSandBoat/server): the FFXI server emulator Phoenix is based on (GPL v3).
 - [AirSkyBoat](https://github.com/AirSkyBoat/AirSkyBoat): the Starlight Celebration's Smilebringer activities (presents, greetings, Goblin Merrymakers, Boot Camp, token and vendor moogles) and the Goblin routes and Jeuno decorations, ported into modules/custom/lua/starlight_smilebringers.lua (GPL v3).
 
+## Launcher
+- [LocalXI](https://github.com/seamuswilkie31-dev/LocalXI) by seamuswilkie31-dev: the controller setup (OPTIONS > Controller, launcher_gamepad.py) is ported from its Gamepad.cs (GPL v3).
+
 ## Downloaded at install, not included here
 Each comes from its official release page and keeps its own license.
 
@@ -37,6 +40,7 @@ Each comes from its official release page and keeps its own license.
 | [Cadence](https://github.com/KiplingFFXI/cadence) | KiplingFFXI | GPL v3 |
 | [Checkmate](https://github.com/KiplingFFXI/checkmate) | KiplingFFXI | GPL v3 |
 | [Momentum](https://github.com/KiplingFFXI/momentum) | KiplingFFXI | GPL v3 |
+| [tCrossBar](https://github.com/ThornyFFXI/tCrossBar) (add-on download, unchanged) | Thorny | MIT |
 | [FFXIPort](https://github.com/wildcabbagepatch/FFXIPort) (add-on download; its server module ships with the server, one change: follows the Fast travel switch) | wildthing | GPL v3 |
 | [VanaFish](https://github.com/VanaDreams/vanadreams-launcher/tree/main/addons/vanafish) (add-on download, unchanged) | VanaDreams | used with the authors' permission |
 | [VanaCam](https://github.com/VanaDreams/vanadreams-launcher/tree/main/addons/vanacam) (add-on download, unchanged; its camera core is XICamera's, BSD) | VanaDreams | used with the authors' permission |
@@ -63,6 +67,8 @@ Gambits began as the TitanGambits engine and was brought here by its author.
   cursor and explosion animations and the sounds in `tetramaster/assets/` (his own redrawn work), and the original
   Tetra Master add-on for FFXI, whose rules our server version follows exactly. Used with his permission.
 - Cinzel font: Natanael Gama (SIL Open Font License).
+- Kanit font (the lettering on the XIFO banner): Cadson Demak (SIL Open Font License).
+- Righteous font (the neon sign on the XIFO banner): Astigmatic (SIL Open Font License).
 
 ## Crystal Boy mini games
 
