@@ -515,6 +515,7 @@ RATE_FIELDS = [
     ("main.ENABLE_COP",                 "main.lua", "ENABLE_COP",                  "Chains of Promathia (1 = on)",          1,   0,   1,     "int"),
     ("main.ENABLE_TOAU",                "main.lua", "ENABLE_TOAU",                 "Treasures of Aht Urhgan (1 = on)",      1,   0,   1,     "int"),
     ("main.ENABLE_WOTG",                "main.lua", "ENABLE_WOTG",                 "Wings of the Goddess (1 = on)",         0,   0,   1,     "int"),
+    ("main.ERA_RULES_WOTG",             "main.lua", "ERA_RULES_WOTG",              "Keep Aht Urhgan-era balance with WotG (1 = on)", 1, 0, 1, "int"),
     ("main.ENABLE_ACP",                 "main.lua", "ENABLE_ACP",                  "A Crystalline Prophecy (1 = on)",       0,   0,   1,     "int"),
     ("main.ENABLE_AMK",                 "main.lua", "ENABLE_AMK",                  "A Moogle Kupo d'Etat (1 = on)",         0,   0,   1,     "int"),
     ("main.ENABLE_ASA",                 "main.lua", "ENABLE_ASA",                  "A Shantotto Ascension (1 = on)",        0,   0,   1,     "int"),
@@ -660,7 +661,7 @@ RATE_PRESETS = {
 # Player installs (first-run setup) only see the options that fit this era project. The rest stay at their era values
 # (the RATE_DEFAULTS above): level cap 75, everything after Aht Urhgan off, switched-off content hidden, no Trust quests
 # or Gobbie Mystery Box, the Harvest Festival as set, and the Aht Urhgan-era exp tables on. The dev launcher shows all of it.
-PLAYER_HIDDEN_RATES = {"map.CAPACITY_RATE", "main.SPARKS_RATE", "main.MAX_LEVEL", "main.ENABLE_WOTG", "main.ENABLE_ACP",
+PLAYER_HIDDEN_RATES = {"map.CAPACITY_RATE", "main.SPARKS_RATE", "main.MAX_LEVEL", "main.ENABLE_ACP",
                        "main.ENABLE_AMK", "main.ENABLE_ASA", "main.ENABLE_ABYSSEA", "main.ENABLE_SOA", "main.ENABLE_ROV",
                        "main.ENABLE_VOIDWATCH", "main.ENABLE_TVR", "main.RESTRICT_CONTENT", "main.ENABLE_TRUST_QUESTS",
                        "main.ENABLE_DAILY_TALLY", "main.HALLOWEEN_2005",

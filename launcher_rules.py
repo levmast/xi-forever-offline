@@ -13,7 +13,7 @@ import os
 import re
 
 JOB_ORDER = ["WAR", "MNK", "WHM", "BLM", "RDM", "THF", "PLD", "DRK", "BST", "BRD", "RNG", "SAM", "NIN", "DRG", "SMN",
-             "BLU", "COR", "PUP"]   # (BLU/COR/PUP: the Aht Urhgan jobs, 2026-11-17)
+             "BLU", "COR", "PUP", "DNC", "SCH"]   # (BLU/COR/PUP: the Aht Urhgan jobs, 2026-11-17; DNC/SCH: Wings of the Goddess, 2026-11-22)
 PARTS = ["ja", "magic"]
 PART_LABELS = {"ja": "Job abilities", "magic": "Spells and ranged attacks"}
 MARKER = "-- Written by the XI: Forever Offline launcher (Squad tab > Edit job rules). It is rewritten when you save there."
@@ -45,6 +45,10 @@ ACTIONS = {
     "ranged": "a ranged attack",
     "nuke": "the strongest nuke it knows",
     "burst": "a magic burst",
+    "waltz": "the best Curing Waltz (DNC)",
+    "samba": "the best samba (DNC)",
+    "storm": "the storm of the day (SCH)",
+    "helix": "the helix of the day (SCH)",
 }
 NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 RULE_FIELDS = ["on", "target", "cond", "cond2", "action", "retry", "level"]
@@ -86,7 +90,8 @@ def action_text(action):
         return f"{pretty_name(action[1])} (best learned)"
     if kind in ("spell", "ja"):
         return pretty_name(action[1])
-    return {"ranged": "Ranged attack", "nuke": "Strongest nuke", "burst": "Magic burst"}.get(kind, kind)
+    return {"ranged": "Ranged attack", "nuke": "Strongest nuke", "burst": "Magic burst", "waltz": "Best Curing Waltz",
+            "samba": "Best samba", "storm": "Storm of the day", "helix": "Helix of the day"}.get(kind, kind)
 
 
 def rule_columns(rule):

@@ -88,8 +88,12 @@ end
 M.say = say
 
 -- ---------------------------------------------------------------- rule codec (the same as gambits_squad.lua)
-local KIND_CODE = { family = 'f', ja = 'j', spell = 's', ranged = 'r', nuke = 'n', burst = 'b' }
-local CODE_KIND = { f = 'family', j = 'ja', s = 'spell', r = 'ranged', n = 'nuke', b = 'burst' }
+local KIND_CODE = { family = 'f', ja = 'j', spell = 's', ranged = 'r', nuke = 'n', burst = 'b',
+                   waltz = 'w', samba = 'd', storm = 'e', helix = 'h' }
+local CODE_KIND = { f = 'family', j = 'ja', s = 'spell', r = 'ranged', n = 'nuke', b = 'burst',
+                   w = 'waltz', d = 'samba', e = 'storm', h = 'helix' }
+-- (WotG, 2026-11-22) the DNC/SCH actions, which need a version 8 server (gambits_squad.lua)
+M.WOTG_KINDS    = { waltz = true, samba = true, storm = true, helix = true }
 M.NAMED_KINDS   = { family = true, ja = true, spell = true }   -- kinds with a name (ranged, nuke, burst have none)
 M.MIN_SERVER    = 3                                             -- the wire format this editor writes (gambits_squad.lua)
 
@@ -402,6 +406,14 @@ function M.pack(d, token)
     local v = S.server and S.server.version or 1
     if v < M.MIN_SERVER then
         return nil, 'the server needs the update (gambits_squad.lua version ' .. M.MIN_SERVER .. ') to save from this editor'
+    end
+
+    if v < 8 then
+        for i, r in ipairs(d and d.rules or {}) do
+            if M.WOTG_KINDS[r.kind] then
+                return nil, 'rule ' .. i .. ': ' .. tostring(r.kind) .. ' needs the server update (gambits_squad.lua version 8)'
+            end
+        end
     end
 
     return M.pack_stream(d, token, S.server.maxChunks)
@@ -2075,10 +2087,11 @@ M.TARGET_HELP = {
         .. 'E.g. "MP below 50 %" -> Aspir the enemy, or "HP below 50 %" -> Drain the enemy.',
 }
 M.KIND_LABELS   = { family = 'Best of Family', spell = 'Specific Spell', ja = 'Job Ability', ranged = 'Ranged attack',
-                    nuke = 'Best nuke (weakness)', burst = 'Magic burst' }
+                    nuke = 'Best nuke (weakness)', burst = 'Magic burst', waltz = 'Best Curing Waltz',
+                    samba = 'Best Samba', storm = 'Storm of the day', helix = 'Helix of the day' }
 -- (job expansion) offered for new rules: ranged (RNG/COR), nuke (the best nuke for the enemy's weakness) and burst (the
 -- best spell for the open magic burst window) too
-M.NEW_KINDS     = { 'family', 'spell', 'ja', 'ranged', 'nuke', 'burst' }
+M.NEW_KINDS     = { 'family', 'spell', 'ja', 'ranged', 'nuke', 'burst', 'waltz', 'samba', 'storm', 'helix' }
 M.KIND_HELP     = {
     family = 'The best spell of a family the mate knows (e.g. Cure -> Cure IV).',
     spell  = 'One exact spell.',
@@ -2087,6 +2100,11 @@ M.KIND_HELP     = {
     nuke   = 'The strongest elemental nuke of the element the enemy is weakest to.',
     burst  = 'The best spell for the open magic burst: an element of the skillchain, the enemy\'s weakest resistance, '
         .. 'enough MP, not on recast, and a cast that ends before the window closes. Use it with "A magic burst is possible".',
+    waltz  = 'DNC: the strongest Curing Waltz the mate\'s level and TP allow. Use it with "HP below" on a party target.',
+    samba  = 'DNC: Haste Samba when the party has a healer (level 66+), else the best Drain Samba. Use it with "No samba '
+        .. 'active" on Self.',
+    storm  = 'SCH: the storm of the day\'s element (Firestorm on Firesday...). Use it with "No storm active" on Self.',
+    helix  = 'SCH: the helix of the day\'s element on the enemy. Pair it with the storm.',
 }
 
 -- The condition builder (Target -> Conditions -> Action): a subject, a comparison and a value. Each pair is one engine

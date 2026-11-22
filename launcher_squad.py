@@ -9,7 +9,7 @@ import re
 
 RACES = ["Hume M", "Hume F", "Elvaan M", "Elvaan F", "Tarutaru M", "Tarutaru F", "Mithra", "Galka"]  # ids 1-8
 JOBS = ["WAR", "MNK", "WHM", "BLM", "RDM", "THF", "PLD", "DRK", "BST", "BRD", "RNG", "SAM", "NIN", "DRG", "SMN",
-        "BLU", "COR", "PUP"]  # ids 1-18 (16-18: the Aht Urhgan jobs, squad.lua v1.17)
+        "BLU", "COR", "PUP", "DNC", "SCH"]  # ids 1-20 (16-18: the Aht Urhgan jobs, squad.lua v1.17; 19-20: Wings of the Goddess, 2026-11-22)
 MAX_SLOTS = 6
 MAX_LEVEL = 75
 

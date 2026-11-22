@@ -60,7 +60,7 @@ end
 -- ---------------------------------------------------------------- constants
 local ROLES = { 'auto', 'tank', 'damage', 'healer', 'support' };
 local MODES = { 'balanced', 'aggressive', 'conserve' };
-local JOBS  = { 'WAR', 'MNK', 'WHM', 'BLM', 'RDM', 'THF', 'PLD', 'DRK', 'BST', 'BRD', 'RNG', 'SAM', 'NIN', 'DRG', 'SMN', 'BLU', 'COR', 'PUP' };
+local JOBS  = { 'WAR', 'MNK', 'WHM', 'BLM', 'RDM', 'THF', 'PLD', 'DRK', 'BST', 'BRD', 'RNG', 'SAM', 'NIN', 'DRG', 'SMN', 'BLU', 'COR', 'PUP', 'DNC', 'SCH' };
 
 -- the stat sheet: the server sends the switches as a mask (1 melee, 2 ranged, 4 ja, 8 magic), 15 = all on
 local SWITCHES = { 'melee', 'ranged', 'ja', 'magic' };

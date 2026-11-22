@@ -102,6 +102,12 @@ S("main.NM_LOTTERY_COOLDOWN", "rules", "Notorious monsters", RATE, "Wait after a
   tip="The time after a kill before the NM can be rolled again. 1 = retail, 0 = none.")
 S("main.ENABLE_COP", "rules", "Expansions", FLAG, "Chains of Promathia")
 S("main.ENABLE_TOAU", "rules", "Expansions", FLAG, "Treasures of Aht Urhgan")
+S("main.ENABLE_WOTG", "rules", "Expansions", FLAG, "Wings of the Goddess",
+  tip="Cavernous Maws and the past zones, the WotG missions and quests, Dancer and Scholar, and the new spells and "
+      "abilities for every job. The level cap stays as set. Your game needs the Wings of the Goddess data files.")
+S("main.ERA_RULES_WOTG", "rules", "Expansions", FLAG, "Keep Aht Urhgan-era balance",
+  tip="With Wings of the Goddess on: weapon skills, damage caps, job and pet numbers and experience stay as they were "
+      "before WotG's updates (modules/custom/lua/era_rules.lua). Off = the later retail numbers.")
 S("map.DROP_RATE_MULTIPLIER", "rules", "Loot and gil", RATE, "Monster item drops")
 S("map.MOB_GIL_MULTIPLIER", "rules", "Loot and gil", RATE, "Gil from monsters")
 S("main.GIL_RATE", "rules", "Loot and gil", RATE, "Gil from quests")
@@ -192,7 +198,6 @@ S("era_exp", "era", "Era", SWITCH, "Aht Urhgan-era experience tables", dev=True,
   tip="Kill exp and the per-monster cap. Keep 'From monsters' at 1 with this on.")
 S("main.RESTRICT_CONTENT", "era", "Era", FLAG, "Hide switched-off content", dev=True)
 S("main.HALLOWEEN_2005", "era", "Era", FLAG, "Harvest Festival", dev=True, tip="Oct 20 - Nov 1.")
-S("main.ENABLE_WOTG", "era", "Later expansions", FLAG, "Wings of the Goddess", dev=True)
 S("main.ENABLE_ACP", "era", "Later expansions", FLAG, "A Crystalline Prophecy", dev=True)
 S("main.ENABLE_AMK", "era", "Later expansions", FLAG, "A Moogle Kupo d'Etat", dev=True)
 S("main.ENABLE_ASA", "era", "Later expansions", FLAG, "A Shantotto Ascension", dev=True)
