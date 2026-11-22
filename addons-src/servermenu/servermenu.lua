@@ -35,7 +35,7 @@ Settings (button place, last tab): config/addons/servermenu/settings.cfg
 
 addon.name    = 'servermenu';
 addon.author  = 'XI: Forever Offline';
-addon.version = '1.26b';
+addon.version = '1.26c';
 addon.desc    = 'The XI: Forever Offline menu: squad mates, and the dualbox character with his gambits.';
 addon.link    = '';
 
@@ -168,6 +168,9 @@ local function say(text) print('[servermenu] ' .. tostring(text)); end
 
 local function strip(message)
     local text = tostring(message or ''):gsub('%z', ''):gsub('[\30\31].', ''):gsub('^%s+', ''):gsub('%s+$', '');
+    -- (1.26c) the timestamp addon (loaded first) puts [hh:mm:ss] in front of every line; without this the
+    -- "A command error occurred" and !squad echo filters below never matched once timestamps were on
+    text = text:gsub('^%[%d+:%d+:?%d*%]%s*', '');
     return text;
 end
 
@@ -296,10 +299,14 @@ local function pump(t)
     if not pick then return; end
     local chat = chatManager();
     if chat == nil or typing(chat) then return; end
+    -- the game drops chat lines sent close together: every Squads action (call, dismiss, switches, options, the sheet) goes out 2.2 seconds after the one before, however fast you click
+    -- (1.26c) that holds after a "!squad panel" ask too: only panel after panel may go 0.6 s apart. An action or the sheet used to go
+    -- 0.6 s after a panel ask, and the game answered "A command error occurred" (seen on !squad sheet)
+    local function isAction(command) return command:find('^/say !') ~= nil and not command:find('^/say !squad panel'); end
+    if isAction(S.queue[pick].command) and t - S.lastSend < 2.2 then return; end
     local first = table.remove(S.queue, pick);
     S.lastSend = t;
-    -- the game drops chat lines sent close together: every Squads action (call, dismiss, switches, options) goes out 2.2 seconds after the one before, however fast you click
-    S.sendGap = (first.command:find('^/say !') and not first.command:find('^/say !squad panel')) and 2.2 or 0.6;
+    S.sendGap = isAction(first.command) and 2.2 or 0.6;
     S.hideUntil = t + 6;   -- (1.25: was 2.5 s; a busy server answers later than that)
     pcall(function() chat:QueueCommand(1, first.command); end);
 end
