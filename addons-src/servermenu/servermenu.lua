@@ -35,7 +35,7 @@ Settings (button place, last tab): config/addons/servermenu/settings.cfg
 
 addon.name    = 'servermenu';
 addon.author  = 'XI: Forever Offline';
-addon.version = '1.26c';
+addon.version = '1.26d';
 addon.desc    = 'The XI: Forever Offline menu: squad mates, and the dualbox character with his gambits.';
 addon.link    = '';
 
@@ -240,11 +240,26 @@ local function typing(chat)
     return ok and (open == true or (type(open) == 'number' and open ~= 0));
 end
 
+-- (1.26d) the panel and sheet asks are refreshes; anything else is something you clicked
+local function isRefresh(command)
+    return command:find('^/say !squad panel') ~= nil or command:find('^/say !squad sheet') ~= nil;
+end
+
 local function enqueue(command, delay)
+    if not isRefresh(command) then S.lastClick = now(); end
     S.queue[#S.queue + 1] = { at = now() + (delay or 0), command = command };
 end
 
+-- (1.26d) one refresh is enough: a new ask replaces one still waiting in the queue, so five quick clicks
+-- end in one panel refresh after the last of them instead of five refreshes 2.2 s apart in between
+local function dropQueued(prefix)
+    for i = #S.queue, 1, -1 do
+        if S.queue[i].command:find(prefix, 1, true) == 1 then table.remove(S.queue, i); end
+    end
+end
+
 local function ask(delay)
+    dropQueued('/say !squad panel');
     enqueue('/say !squad panel', delay or 0);
     S.waitUntil = now() + (delay or 0) + 5;
     S.lastAsk = now();
@@ -295,7 +310,8 @@ local function pump(t)
         end
     end
     local pick = nil;                                   -- the first command that is due (a later "ask again" does not hold up a click)
-    for i, item in ipairs(S.queue) do if item.at <= t then pick = i; break; end end
+    for i, item in ipairs(S.queue) do if item.at <= t and not isRefresh(item.command) then pick = i; break; end end   -- (1.26d) a click goes before a due refresh
+    if not pick then for i, item in ipairs(S.queue) do if item.at <= t then pick = i; break; end end end
     if not pick then return; end
     local chat = chatManager();
     if chat == nil or typing(chat) then return; end
@@ -483,6 +499,7 @@ end
 -- ---------------------------------------------------------------- the stat sheet (one short line per value)
 local function askSheet(delay)
     if S.sheetSlot == nil then return; end
+    dropQueued('/say !squad sheet');
     enqueue(string.format('/say !squad sheet %d', S.sheetSlot), delay or 0);
     S.sheetWaitUntil = now() + (delay or 0) + 5;
     S.lastSheetAsk = now();
@@ -2518,8 +2535,10 @@ ashita.events.register('d3d_present', 'servermenu_present', function ()
     syncAutoFlag()
     local t = now();
     pump(t);
-    if S.open[1] and #S.queue == 0 and t - S.lastAsk > 15 and S.tab == 'Squad' then ask(); end   -- keeps the squad current while it is shown
-    if S.sheetOpen[1] and #S.queue == 0 and t - S.lastSheetAsk > 5 then askSheet(); end          -- hit points and TP move
+    -- (1.26d) no background refresh within 8 s of a click, so the next click is not stuck 2.2 s behind one
+    local idle = t - (S.lastClick or -1000) > 8;
+    if idle and S.open[1] and #S.queue == 0 and t - S.lastAsk > 15 and S.tab == 'Squad' then ask(); end   -- keeps the squad current while it is shown
+    if idle and S.sheetOpen[1] and #S.queue == 0 and t - S.lastSheetAsk > 5 then askSheet(); end          -- hit points and TP move
     if t - S.duoRead >= 1 then readDuo(); end
     flushDuo(t);
     if S.open[1] and S.tab == 'Dualbox' and S.duoGambits and t - S.sheetRead >= 1.5 then readSheet(t); end
