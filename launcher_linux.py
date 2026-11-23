@@ -250,7 +250,7 @@ def host_python(which=shutil.which, run=subprocess.run):
             continue
         try:
             out = run([exe, "-c", "import sys; print(sys.version_info[0] * 100 + sys.version_info[1])"],
-                      capture_output=True, text=True, timeout=10)
+                      capture_output=True, text=True, errors="replace", timeout=10)
             if int((out.stdout or "0").strip() or 0) >= 310:
                 return exe
         except (OSError, ValueError, subprocess.SubprocessError):

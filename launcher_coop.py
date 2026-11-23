@@ -971,7 +971,7 @@ def tailscale_address(run=subprocess.run):
     if program is None:
         return None
     try:
-        result = run([program, "ip", "-4"], capture_output=True, text=True, timeout=8, creationflags=NO_WINDOW if os.name == "nt" else 0)
+        result = run([program, "ip", "-4"], capture_output=True, text=True, errors="replace", timeout=8, creationflags=NO_WINDOW if os.name == "nt" else 0)
         found = re.search(r"\b100\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", result.stdout or "")
         return found.group(0) if found else None
     except Exception:
@@ -1044,7 +1044,7 @@ def signed_by_tailscale(path, run=subprocess.run):
               "if ($s.SignerCertificate) { Write-Output $s.SignerCertificate.Subject }")
     try:
         result = run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
-                     capture_output=True, text=True, creationflags=NO_WINDOW, timeout=60, env=dict(os.environ, XIFO_CHECK_FILE=path))
+                     capture_output=True, text=True, errors="replace", creationflags=NO_WINDOW, timeout=60, env=dict(os.environ, XIFO_CHECK_FILE=path))
     except Exception as e:
         return False, f"its signature could not be checked ({type(e).__name__})"
     lines = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
@@ -1234,7 +1234,7 @@ def firewall_open(server_dir, port, mode, run=subprocess.run):
         return True, f"Linux: if this PC has a firewall switched on, let in TCP ports {ports} and {int(port)}, and UDP 54230."
     try:
         result = run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", firewall_script(server_dir, port, mode)],
-                     capture_output=True, text=True, creationflags=NO_WINDOW, timeout=60)
+                     capture_output=True, text=True, errors="replace", creationflags=NO_WINDOW, timeout=60)
     except Exception as e:
         return False, f"Could not change the Windows firewall ({type(e).__name__})."
     count = (result.stdout or "").strip().splitlines()[-1:] or [""]
@@ -1249,7 +1249,7 @@ def firewall_close(run=subprocess.run):
     try:
         run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
              f"Get-NetFirewallRule -DisplayName '{FIREWALL_RULE}' -ErrorAction SilentlyContinue | Remove-NetFirewallRule"],
-            capture_output=True, text=True, creationflags=NO_WINDOW, timeout=60)
+            capture_output=True, text=True, errors="replace", creationflags=NO_WINDOW, timeout=60)
         return True
     except Exception:
         return False
@@ -1315,7 +1315,7 @@ def full_backup(cfg, kit, log=print, run=subprocess.run):
     command = tool + [f"--host={cfg.get('db_host', '127.0.0.1')}", f"--port={int(cfg.get('db_port', 3306))}", f"--user={cfg['db_user']}",
                f"--password={cfg['db_pass']}", "--single-transaction", f"--result-file={path}", cfg["db_name"]]
     try:
-        result = run(command, capture_output=True, text=True, creationflags=NO_WINDOW, timeout=900,
+        result = run(command, capture_output=True, text=True, errors="replace", creationflags=NO_WINDOW, timeout=900,
                      **({"env": env} if env else {}))
         if result.returncode == 0 and os.path.exists(path):
             log("Co-op: saved a copy of your database first (backups folder).")

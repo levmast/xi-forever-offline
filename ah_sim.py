@@ -594,6 +594,17 @@ def items_to_hide(conn, settings):
     return out
 
 
+def clear_listings(conn):
+    """(delukard, 2026-11-22: "I have turned off the AH stocking and buying and it still has items on it") Takes every
+    unsold listing of the simulator off the auction house (seller 0). What you, another player or a bot player listed
+    stays, and so does the sales history. Returns how many listings went. Switching the simulator off only stops new
+    stock, so this is the way to an empty auction house."""
+    count = int(query(conn, "SELECT COUNT(*) FROM auction_house WHERE seller = 0 AND sale = 0")[0][0])
+    if count:
+        execute(conn, "DELETE FROM auction_house WHERE seller = 0 AND sale = 0")
+    return count
+
+
 def remove_ineligible_listings(conn, items):
     """The simulator's unsold listings of items it no longer stocks (e.g. out-of-era scrolls) are taken down. Your own listings stay."""
     rows = query(conn, "SELECT DISTINCT itemid FROM auction_house WHERE seller = 0 AND sale = 0")

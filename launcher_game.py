@@ -348,6 +348,61 @@ def detect_lang(ffxi_dir, reg=None):
     return "US"
 
 
+def install_lang(cfg, reg=None):
+    """US, EU or JP when it is known which PlayOnline this install starts, else None. A copy remembers the language of
+    the install it was made from; an installed game is the PlayOnline entry whose FFXI folder is this one."""
+    lang = str(cfg.get("pol_lang") or "").upper()
+    if lang in LANG_KEY:
+        return lang
+    ffxi = cfg.get("ffxi_client_dir", "")
+    if not ffxi:
+        return None
+    try:
+        reg = reg or registry()
+    except ImportError:
+        return None
+    for lang, key in (("US", "PlayOnlineUS"), ("EU", "PlayOnlineEU"), ("JP", "PlayOnline")):
+        if _same(reg.get(rf"SOFTWARE\{key}\InstallFolder", "0001"), ffxi):
+            return lang
+    return None
+
+
+BOOT_LANG = {"JP": "1", "US": "2", "EU": "3"}         # Ashita's [ashita.language] playonline
+BOOT_LANG_BACKUP = ".before-pol-language"
+
+
+def apply_boot_lang(boot_ini, lang):
+    """(2026-11-22, Sirloinofbeef: a Steam EU game on a PC with registry leftovers of an uninstalled US game. The loader
+    went for the US PlayOnline and stopped with "polcore (US) file ... doesn't exist".) An EU or JP game is named to
+    the loader (--lang on the boot file's command line) and to Ashita ([ashita.language] playonline), as the Linux
+    launcher already does, so entries of another language can't be picked in its place. A US game: the boot file is
+    left alone, unless its command line still carries a --lang from another game. An unknown language (None) changes
+    nothing. The first change keeps a copy of the boot file. Returns True when the file was changed."""
+    import re
+    if lang not in BOOT_LANG:
+        return False
+    with open(boot_ini, "r", encoding="utf-8-sig", newline="") as handle:
+        text = handle.read()
+    line = re.search(r"(?m)^command[ \t]*=[ \t]*([^\r\n]*)", text)
+    had = bool(line and re.search(r"(?:^|\s)--lang\s+\S+", line.group(1)))
+    if lang == "US" and not had:
+        return False
+
+    def command(match):
+        rest = re.sub(r"\s*--lang\s+\S+", "", match.group(2)).strip()
+        return match.group(1) + (rest + (f" --lang {lang}" if lang != "US" else "")).strip()
+
+    new = re.sub(r"(?m)^(command[ \t]*=[ \t]*)([^\r\n]*)", command, text, count=1)
+    new = re.sub(r"(?m)^(playonline[ \t]*=[ \t]*)\d+", lambda m: m.group(1) + BOOT_LANG[lang], new, count=1)
+    if new == text:
+        return False
+    if not os.path.exists(boot_ini + BOOT_LANG_BACKUP):
+        shutil.copyfile(boot_ini, boot_ini + BOOT_LANG_BACKUP)
+    with open(boot_ini, "w", encoding="utf-8", newline="") as handle:
+        handle.write(new)
+    return True
+
+
 # ----- making a copy -----
 def find_viewer(ffxi_dir, lang="US", reg=None):
     """The PlayOnline viewer folder that belongs with this FFXI folder."""

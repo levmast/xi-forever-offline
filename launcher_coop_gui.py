@@ -20,6 +20,11 @@ import launcher_passport as pp
 
 BG, PANEL, PANEL2, FG, DIM = "#0a1118", "#101c28", "#162634", "#e9f1f5", "#8aa0ad"
 BORDER, GOLD, GREEN, RED, ACCENT = "#1d3445", "#e6be64", "#3ecf6e", "#e5534b", "#35c4e0"
+try:        # a limited-time look (a dated .json in assets\press) stands in for these colours while it is in date: launcher_theme.py
+    import launcher_theme
+    globals().update(launcher_theme.colours(globals()))
+except Exception:
+    pass
 _UI_FONT = core.ui_fonts()[0]
 FONT, SMALL, BOLD = (_UI_FONT, 10), (_UI_FONT, 9), (_UI_FONT, 10, "bold")
 KEEP_SECONDS = 20                    # how often a visit is looked at (is the host there, time for a fresh copy...)

@@ -395,7 +395,7 @@ check(cmd('/gv2') == true and GV.open[1] == true, '/gv2 is handled (blocked) and
 check(cmd('/gambits help') == true and cmd('/autobox') == false, '/gambits is this addon\'s command; /autobox (the old engine) is not touched')
 check(cmd('/GV2 help') == true, 'the command is not case sensitive')
 local ok1, t1 = run_until(function() return Ed._S.server and Ed._S.cat ~= nil and #Ed._S.sets > 0 end, 30)
-check(ok1 and Ed._S.server.version == 7 and Ed._S.mates[1].name == 'Mira', string.format('opening asks the server: hello (version %s), Mira, sets, choices (%.1f s)',
+check(ok1 and Ed._S.server.version == 9 and Ed._S.mates[1].name == 'Mira', string.format('opening asks the server: hello (version %s), Mira, sets, choices (%.1f s)',
       tostring(Ed._S.server and Ed._S.server.version), t1))
 check(balanced(gui) and gui.title:find('Gambits v2', 1, true), 'the window draws balanced (colours, style, IDs, children, window)')
 check(not visible_has('GSQ|') and not visible_has('command error') and not visible_has('^>>'), 'no GSQ answer, refusal or error line is visible')

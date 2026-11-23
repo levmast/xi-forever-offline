@@ -84,6 +84,8 @@ def launch(work, step, out):
     press = os.path.join(kit, "assets", "press")
     once_files = sorted(n for n in os.listdir(press) if TAG in n.lower())
     usual = [n for n in os.listdir(press) if TAG not in n.lower() and n.lower().endswith((".png", ".jpg", ".jpeg"))]
+    if hasattr(gui, "press_names"):              # limited-time banners (__until-DATE) may stand in for the usual ones today
+        usual = gui.press_names(os.listdir(press))
     app = gui.App()
     fails = []
 
@@ -112,7 +114,7 @@ def launch(work, step, out):
     if step == "first":
         check(app.once_banner is not None, "first start: there is a one-time banner")
         check(showing() == str(app.once_banner), "first start: the Play page shows it")
-        check(len(app.heroes) == len(usual), f"it is not in the rotation ({len(app.heroes)} usual banners loaded, {len(usual)} files)")
+        check(len(app.heroes) == len(usual), f"it is not in the rotation ({len(app.heroes)} banners loaded, {len(usual)} files in the rotation today)")
         check(str(app.once_banner) not in [str(p) for p in app.pictures], "it is not among the loading pictures")
         check(not seen(kit), "not marked as shown in the first second")
         shot("once-first-start")

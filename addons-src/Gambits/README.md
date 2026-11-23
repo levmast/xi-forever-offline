@@ -90,13 +90,38 @@ Settings live in `config/addons/GambitsV2/` (per character). An unsaved draft is
   mean more than one target (a PLD is "Auto (Tank, Melee)"); a role you choose replaces the job for every target (a
   PLD set to Melee is no longer a Tank) and stays when the job changes, until you choose Auto again. A change counts
   only when the server confirms it; it works at once for a mate that is out, else from its next call. It is **not**
-  the Squad menu's Role (tank/damage/healer/support), which only changes how a mate acts itself. Closed, the section
+  the Squad menu's Role (Auto / Tank / Damage / Healer / Support): that one filters a mate's default job rules (Damage,
+  for one, cures only below 30% HP and drops status removal), is not used while a Rule Set is assigned, and never
+  decides who a target is. The target tooltips and the "uses: default job rules" line say so too. Closed, the section
   shows who counts as what in your whole party, dualbox characters and other members included (read-only: they set
   their own with `!squad partyrole me <role>`). Needs gambits_squad.lua version 7; with an older server the section
   only says so.
   Known limits (unchanged engine rules): the conditions "Tank in party" / "No tank" also count a NIN by job and the
   mate checking the rule itself (a WAR set to Tank with "No tank -> Provoke" does not Provoke); a target still has to
   be alive, in the zone and in range.
+- **One song of a song type (0.3.3):** with **Has / Missing effect** and a Bard song type (March, Minuet, Madrigal,
+  Ballad, Minne, Paeon, Prelude, Mambo, Operetta), a second dropdown chooses **Any March** (as before) or one
+  song, e.g. **Victory March**. Then "Missing effect Victory March -> Victory March" and "Missing effect Advancing March
+  -> Advancing March" keep both Marches up, each sung again only when it wears off. A squad Bard holds two songs per
+  target, as before. Songs sung for Tank / Melee / Mage / Ranged by a rule that names one song reach that rule's roles
+  only (two Marches for two roles stay apart). Etudes, Carols and Mazurkas cannot be told apart this way (their songs
+  share one tier). Needs gambits_squad.lua version 8 and the matching map server.
+- **Include / Exclude roles (0.3.3):** with the target Tank, Melee, Mage or Ranged, each other role has one choice: **-**
+  (ignored), **Include** (its members also count) or **Exclude** (its members never count, even with an included role).
+  The target's own role always counts.
+  A Paladin on Auto is both Tank and Melee, so "Melee, exclude Tank" sings the Marches for the melee only, and "Tank,
+  include Mage" gives Mage's Ballad to tanks and mages. It works the same for every job and action (a WHM's Haste for
+  "Melee, exclude Tank", an RDM's Refresh for "Tank, include Mage"). Without boxes ticked a rule works exactly as before. Roles come
+  from Party roles (Auto by main job, or the role you set). Needs gambits_squad.lua version 9 and the matching map
+  server.
+- **Share codes (0.3.3):** **Export** (next to New) shows the open Rule Set (name, job, number of rules) and its share
+  code, a line of letters and digits such as `GS1...`; **Copy Share Code** puts it on the clipboard to paste into
+  Discord or a message. **Import**: paste a code into the box, **Preview Import** (name, job and every rule), then
+  **Import as New Rule Set**: it opens as a new, unsaved Rule Set - nothing is saved, replaced, assigned or applied, and
+  a name you already have gets a number ("My set 2"). A code holds everything (rule order, on/off, conditions, song
+  tiers, role filters, actions, waits, levels, ids) and a check number; it is only data (never run). A cut or changed
+  code, a newer format or a broken rule is refused with the reason. Older shared text (`GRS1|...`) still imports.
+  **Save** then checks the set on the server as any other.
 - **Level Sync** does not change the choices; the server runs each rule at the mate's current level, and Check says
   which level it checked.
 - **Saved rules are never rewritten:** a spell or ability that is not in the list any more stays as saved, with a note;
@@ -125,7 +150,7 @@ The job ability check (level, sub job, merits) applies to every squad mate's job
 
 ## Files
 `GambitsV2.lua` (window, settings, commands, events), `transport.lua` (chat transport), `squad_editor.lua` (the
-editor), `trust_spells.lua` (generated: Trust spells left out of the spell list), `gambits_data.lua` (generated from
+editor), `share_code.lua` (Rule Set share codes, 0.3.3), `trust_spells.lua` (generated: Trust spells left out of the spell list), `gambits_data.lua` (generated from
 the server's data: spell families, status effects and what gives them, and each job ability's job, level and sub job /
 merit restrictions; 0.3.1). Tests and tools:
 `dev/gambits-v2-squad/`.

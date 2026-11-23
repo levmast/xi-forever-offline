@@ -115,12 +115,203 @@ M.split = split
 -- an editor row { on, target, cond, arg, cond2, arg2, kind, name, retry, level, id } <->
 -- "1,PARTY,HPP_LT,50,,,f,CURE,[,LEVEL[,ID]]" (the same as gambits_squad.lua version 3; LEVEL and ID only when set;
 -- ID only for a rule whose id is not "r<position>")
+-- (0.3.3, server version 9) a role target's included / excluded roles ride in the TARGET field: "MELEE-TANK" (melee, not
+-- tanks), "TANK.CASTER" (tanks or mages). In the row: r.rolesIn / r.rolesOut, role names joined by "." in M.ROLE_ORDER.
+M.ROLE_ORDER  = { 'TANK', 'MELEE', 'CASTER', 'RANGED' }
+M.ROLE_TARGET = { TANK = true, MELEE = true, CASTER = true, RANGED = true }
+M.ROLE_SERVER = 9
+
+function M.target_token(r)
+    local text = r.target == nil and '' or tostring(r.target)
+    for role in string.gmatch(r.rolesIn or '', '[^%.]+') do
+        text = text .. '.' .. role
+    end
+
+    for role in string.gmatch(r.rolesOut or '', '[^%.]+') do
+        text = text .. '-' .. role
+    end
+
+    return text
+end
+
+-- "MELEE-TANK" -> 'MELEE', nil, 'TANK' (nil target for a malformed field)
+function M.parse_target(token)
+    local parts = split(token or '', '-')
+    local head = split(parts[1], '.')
+    if head[1] == '' and #head == 1 and #parts == 1 then
+        return nil, nil, nil, true -- (an empty target: as before)
+    end
+
+    for i, name in ipairs(head) do
+        if not string.match(name, '^[A-Z][A-Z_]*$') then
+            return nil
+        end
+    end
+
+    for i = 2, #parts do
+        if not string.match(parts[i], '^[A-Z][A-Z_]*$') then
+            return nil
+        end
+    end
+
+    local inc, exc = {}, {}
+    for i = 2, #head do inc[#inc + 1] = head[i] end
+    for i = 2, #parts do exc[#exc + 1] = parts[i] end
+    return head[1], #inc > 0 and table.concat(inc, '.') or nil, #exc > 0 and table.concat(exc, '.') or nil
+end
+
+function M.role_set(text)
+    local t = {}
+    for role in string.gmatch(text or '', '[^%.]+') do
+        t[role] = true
+    end
+
+    return t
+end
+
+-- turns one role on or off in r.rolesIn ('in') or r.rolesOut ('out'); a role is in one list at most, never the target's
+-- own role; the lists stay in M.ROLE_ORDER
+function M.set_role(r, which, role, on)
+    local inc, exc = M.role_set(r.rolesIn), M.role_set(r.rolesOut)
+    local mine, other = which == 'in' and inc or exc, which == 'in' and exc or inc
+    if role == r.target then
+        on = false
+    end
+
+    mine[role] = on or nil
+    if on then
+        other[role] = nil
+    end
+
+    local function text(set)
+        local out = {}
+        for _, name in ipairs(M.ROLE_ORDER) do
+            if set[name] then out[#out + 1] = name end
+        end
+
+        return #out > 0 and table.concat(out, '.') or nil
+    end
+
+    r.rolesIn, r.rolesOut = text(inc), text(exc)
+end
+
+-- (0.3.3) one role's state in a rule: 'target' (the target's own role), 'out', 'in' or 'none'. A role in BOTH lists
+-- (hand-made data) is 'out': the engine gives exclusion the precedence. Reading never changes the rule.
+function M.role_state(r, role)
+    if role == r.target then
+        return 'target'
+    elseif M.role_set(r.rolesOut)[role] then
+        return 'out'
+    elseif M.role_set(r.rolesIn)[role] then
+        return 'in'
+    end
+
+    return 'none'
+end
+
+-- sets one role to 'none', 'in' or 'out' (never both; the target's own role is never changed)
+function M.set_role_state(r, role, state)
+    if role == r.target then
+        return
+    end
+
+    M.set_role(r, 'in', role, state == 'in')
+    M.set_role(r, 'out', role, state == 'out')
+end
+
+-- true when a role is in both lists, or the target's own role is in one of them (data the editor never makes itself)
+function M.roles_conflict(r)
+    local inc, exc = M.role_set(r.rolesIn), M.role_set(r.rolesOut)
+    if r.target and (inc[r.target] or exc[r.target]) then
+        return true
+    end
+
+    for role in pairs(exc) do
+        if inc[role] then
+            return true
+        end
+    end
+
+    return false
+end
+
+-- the rule's roles as the engine reads them: a role in both lists only Excluded, the target's own role in neither list
+-- (it always counts); the lists in M.ROLE_ORDER. Changes the rule; returns true when something changed.
+function M.normalize_roles(r)
+    if r.rolesIn == nil and r.rolesOut == nil then
+        return false
+    end
+
+    local before = (r.rolesIn or '') .. '|' .. (r.rolesOut or '')
+    local inc, exc = M.role_set(r.rolesIn), M.role_set(r.rolesOut)
+    local function text(set, drop)
+        local out = {}
+        for _, name in ipairs(M.ROLE_ORDER) do
+            if set[name] and not drop[name] and name ~= r.target then out[#out + 1] = name end
+        end
+
+        return #out > 0 and table.concat(out, '.') or nil
+    end
+
+    r.rolesIn, r.rolesOut = text(inc, exc), text(exc, {})
+    return (r.rolesIn or '') .. '|' .. (r.rolesOut or '') ~= before
+end
+
+-- a normalised copy (for the editor's display and checks without touching the rule)
+function M.normalized_copy(r)
+    local c = {}
+    for k, v in pairs(r) do c[k] = v end
+    M.normalize_roles(c)
+    return c
+end
+-- after the target changed: no role filter for a target without roles; the new target's own role leaves the lists
+function M.fit_roles(r)
+    if not M.ROLE_TARGET[r.target or ''] then
+        r.rolesIn, r.rolesOut = nil, nil
+    elseif r.rolesIn or r.rolesOut then
+        M.set_role(r, 'in', r.target, false)
+        M.set_role(r, 'out', r.target, false)
+    end
+end
+
+-- why a rule's role filter is wrong, or nil
+function M.role_problem(r)
+    if r.rolesIn == nil and r.rolesOut == nil then
+        return nil
+    end
+
+    if not M.ROLE_TARGET[r.target or ''] then
+        return 'include / exclude roles only work with the targets Tank, Melee, Mage or Ranged'
+    end
+
+    local seen = { [r.target] = true }
+    for _, text in ipairs({ r.rolesIn or '', r.rolesOut or '' }) do
+        for role in string.gmatch(text, '[^%.]+') do
+            if not M.ROLE_TARGET[role] then
+                return 'unknown role ' .. role
+            end
+
+            if seen[role] then
+                return 'a role is either included or excluded, and never the target\'s own role (' .. M.target_label(role) .. ')'
+            end
+
+            seen[role] = true
+        end
+    end
+
+    if not (S.server and (S.server.version or 0) >= M.ROLE_SERVER) then
+        return 'include / exclude roles need the server update (gambits_squad.lua version ' .. M.ROLE_SERVER .. ')'
+    end
+
+    return nil
+end
+
 function M.encode_rule(r)
     local function s(v)
         return v == nil and '' or tostring(v)
     end
 
-    local fields = { r.on == false and '0' or '1', s(r.target), s(r.cond), s(r.arg), s(r.cond2), s(r.arg2),
+    local fields = { r.on == false and '0' or '1', M.target_token(r), s(r.cond), s(r.arg), s(r.cond2), s(r.arg2),
         KIND_CODE[r.kind] or s(r.kind), s(r.name), s(r.retry) }
     if r.level ~= nil or r.id ~= nil then
         fields[#fields + 1] = s(r.level)
@@ -159,8 +350,13 @@ function M.decode_rule(text)
         return nil
     end
 
-    return { on = f[1] ~= '0', target = v(f[2]), cond = v(f[3]), arg = v(f[4]), cond2 = v(f[5]), arg2 = v(f[6]),
-             kind = kind, name = v(f[8]), retry = v(f[9]), level = v(f[10]), id = v(f[11]) }
+    local target, rolesIn, rolesOut, empty = M.parse_target(f[2])
+    if target == nil and not empty then
+        return nil
+    end
+
+    return { on = f[1] ~= '0', target = target, rolesIn = rolesIn, rolesOut = rolesOut, cond = v(f[3]), arg = v(f[4]),
+             cond2 = v(f[5]), arg2 = v(f[6]), kind = kind, name = v(f[8]), retry = v(f[9]), level = v(f[10]), id = v(f[11]) }
 end
 
 function M.name_code(name)
@@ -187,6 +383,59 @@ function M.mod_parse(arg)
     end
 
     return name, tonumber(n)
+end
+
+-- (Bard song tiers, server version 8) Has / Missing effect may name ONE song of a song type: the argument "MARCH.2" is
+-- the effect MARCH at tier 2 = Victory March; a plain "MARCH" is any March, as before. The songs of each type in tier
+-- order (index = tier), the same as the server's enhancing_song.lua songPTable (the tests compare them). Etudes, Carols
+-- and Mazurkas are left out: their songs share one tier, so a tier cannot tell them apart.
+M.SONG_TIERS = {
+    MARCH    = { 'ADVANCING_MARCH', 'VICTORY_MARCH', 'HONOR_MARCH' },
+    MINUET   = { 'VALOR_MINUET', 'VALOR_MINUET_II', 'VALOR_MINUET_III', 'VALOR_MINUET_IV', 'VALOR_MINUET_V' },
+    MADRIGAL = { 'SWORD_MADRIGAL', 'BLADE_MADRIGAL' },
+    BALLAD   = { 'MAGES_BALLAD', 'MAGES_BALLAD_II', 'MAGES_BALLAD_III' },
+    MINNE    = { 'KNIGHTS_MINNE', 'KNIGHTS_MINNE_II', 'KNIGHTS_MINNE_III', 'KNIGHTS_MINNE_IV', 'KNIGHTS_MINNE_V' },
+    PAEON    = { 'ARMYS_PAEON', 'ARMYS_PAEON_II', 'ARMYS_PAEON_III', 'ARMYS_PAEON_IV', 'ARMYS_PAEON_V', 'ARMYS_PAEON_VI' },
+    PRELUDE  = { 'HUNTERS_PRELUDE', 'ARCHERS_PRELUDE' },
+    MAMBO    = { 'SHEEPFOE_MAMBO', 'DRAGONFOE_MAMBO' },
+    OPERETTA = { 'SCOPS_OPERETTA', 'PUPPETS_OPERETTA' },
+}
+M.TIER_SERVER = 8
+
+-- "MARCH.2" -> 'MARCH', 2;  "MARCH" -> 'MARCH', nil;  anything else -> arg, nil
+function M.tier_parse(arg)
+    local base, n = string.match(tostring(arg or ''), '^([A-Z][A-Z0-9_]*)%.(%d+)$')
+    if base == nil then
+        return arg, nil
+    end
+
+    return base, tonumber(n)
+end
+
+-- the song a tiered argument names ("MARCH.2" -> 'VICTORY_MARCH'), or nil
+function M.tier_song(arg)
+    local base, tier = M.tier_parse(arg)
+    local songs = tier and M.SONG_TIERS[base or '']
+    return songs and songs[tier] or nil
+end
+
+-- why a tiered effect argument is wrong, or nil (a plain effect name: nil)
+function M.tier_problem(arg)
+    local base, tier = M.tier_parse(arg)
+    if tier == nil then
+        return nil
+    end
+
+    local songs = M.SONG_TIERS[base or '']
+    if songs == nil then
+        return 'only song types (March, Minuet ...) can name one song'
+    elseif songs[tier] == nil then
+        return string.format('%s has songs 1-%d', M.pretty(base), #songs)
+    elseif not (S.server and (S.server.version or 0) >= M.TIER_SERVER) then
+        return 'one song of a type needs the server update (gambits_squad.lua version ' .. M.TIER_SERVER .. ')'
+    end
+
+    return nil
 end
 
 -- why a MOD_LT value is wrong, or nil
@@ -261,6 +510,11 @@ function M.check_draft(d, cat)
             return 'rule ' .. i .. ': unknown action ' .. tostring(r.kind)
         end
 
+        local roleWhy = M.role_problem(r) -- (0.3.3) include / exclude roles
+        if roleWhy then
+            return 'rule ' .. i .. ': ' .. roleWhy
+        end
+
         if M.NAMED_KINDS[r.kind] and (r.name == nil or r.name == '') then
             return 'rule ' .. i .. ': choose the ' .. (r.kind == 'spell' and 'spell' or r.kind == 'ja' and 'job ability' or 'spell family')
         end
@@ -281,8 +535,13 @@ function M.check_draft(d, cat)
                     return string.format('rule %d: %s needs a whole number %d-%d', i, M.cond_label(pair[1]), c.lo, c.hi)
                 end
             elseif c and c.kind == 'e' then
-                if not pair[2] or not string.match(pair[2], '^[A-Z][A-Z0-9_]*$') then
+                if not pair[2] or not string.match(pair[2], '^[A-Z][A-Z0-9_]*$') and not string.match(pair[2], '^[A-Z][A-Z0-9_]*%.%d+$') then
                     return string.format('rule %d: %s needs a status effect', i, M.cond_label(pair[1]))
+                end
+
+                local why = M.tier_problem(pair[2]) -- (Bard song tiers) "MARCH.2"
+                if why then
+                    return string.format('rule %d: %s: %s', i, M.cond_label(pair[1]), why)
                 end
             elseif c and c.kind == 'j' then
                 if not pair[2] or not string.match(pair[2], '^[A-Z][A-Z0-9_]*$') then
@@ -1164,13 +1423,15 @@ M.TEMPLATES = {
     BRD = { {
         name = 'Basic Bard',
         about = 'Songs by party role (each song reaches only that role; you can change who is what with !squad partyrole): '
-            .. 'Valor Minuet (level 3) and March (29) for the melee, Mage\'s Ballad (25) for the mages, Knight\'s Minne (1) '
-            .. 'for the tank. Elegy (39) on an enemy without it, Foe Requiem (7) every 60 s at most. A Bard gives at most '
-            .. 'two songs to one member: a third replaces the oldest.',
+            .. 'Valor Minuet (level 3) and March (29) for the melee but not the tank, Mage\'s Ballad (25) for the mages who '
+            .. 'are not melee, Knight\'s Minne (1) for the tank. Elegy (39) on an enemy without it, Foe Requiem (7) every '
+            .. '60 s at most. A Bard gives at most two songs to one member, so no one is given more: a Paladin (Tank and '
+            .. 'Melee on Auto) gets Minne, a Blue Mage (Melee and Mage) Minuet and March.',
         rules = {
-            { on = true, target = 'MELEE', cond = 'NOT_STATUS', arg = 'MINUET', kind = 'family', name = 'VALOR_MINUET' },
-            { on = true, target = 'MELEE', cond = 'NOT_STATUS', arg = 'MARCH', kind = 'family', name = 'MARCH' },
-            { on = true, target = 'CASTER', cond = 'NOT_STATUS', arg = 'BALLAD', kind = 'family', name = 'MAGES_BALLAD' },
+            -- (0.3.3) Exclude Tank / Exclude Melee: no member is given more songs than its two slots (no recast loop)
+            { on = true, target = 'MELEE', rolesOut = 'TANK', cond = 'NOT_STATUS', arg = 'MINUET', kind = 'family', name = 'VALOR_MINUET' },
+            { on = true, target = 'MELEE', rolesOut = 'TANK', cond = 'NOT_STATUS', arg = 'MARCH', kind = 'family', name = 'MARCH' },
+            { on = true, target = 'CASTER', rolesOut = 'MELEE', cond = 'NOT_STATUS', arg = 'BALLAD', kind = 'family', name = 'MAGES_BALLAD' },
             { on = true, target = 'TANK', cond = 'NOT_STATUS', arg = 'MINNE', kind = 'family', name = 'KNIGHTS_MINNE' },
             { on = true, target = 'TARGET', cond = 'NOT_STATUS', arg = 'ELEGY', kind = 'family', name = 'ELEGY' },
             { on = true, target = 'TARGET', cond = 'NOT_STATUS', arg = 'REQUIEM', kind = 'family', name = 'FOE_REQUIEM', retry = '60' },
@@ -1286,6 +1547,11 @@ function M.new_from_template(job, index, cat)
             end
         end
 
+        -- (0.3.3) role filters need server version 9: on an older server the rule is kept without them (as before)
+        if (copy.rolesIn or copy.rolesOut) and not (S.server and (S.server.version or 0) >= M.ROLE_SERVER) then
+            copy.rolesIn, copy.rolesOut = nil, nil
+        end
+
         return true
     end
 
@@ -1314,6 +1580,314 @@ function M.new_from_template(job, index, cat)
         .. 'the mate\'s usual job rules while it is assigned.%s', t.name,
         skipped > 0 and string.format(' %d rule(s) left out: this server does not offer them yet.', skipped) or ''), skipped > 0 and 'warn' or nil)
     return S.draft
+end
+
+-- ---------------------------------------------------------------- (0.3.3) Rule Set import / export
+-- Sharing a Rule Set: Export gives a SHARE CODE (share_code.lua: "GS1" + letters and digits, e.g. GS1Bq3...), Copy puts
+-- it on the clipboard, and the other player pastes it into Import. The code holds the whole set (job, name, every rule
+-- with its order, on/off, conditions, song tiers, role filters, action, wait, level and id) and a check number; it is
+-- data only (read bit by bit, never run). Import makes a NEW, unsaved Rule Set in the editor - it never replaces a set,
+-- never saves, assigns or applies anything; Save then checks it on the server as any other set.
+-- Older shared text (GRS1|job|name|count|rules|check, the first 0.3.3 test builds) is still read the same way.
+-- Spaces, line breaks and ` (Discord code blocks) around or inside a code or text are ignored.
+M.IO_TAG, M.IO_VERSION = 'GRS', 1
+M.IO_MAX_TEXT = 16384
+M.IO_JOBS = { WAR = true, MNK = true, WHM = true, BLM = true, RDM = true, THF = true, PLD = true, DRK = true, BST = true,
+              BRD = true, RNG = true, SAM = true, NIN = true, DRG = true, SMN = true, BLU = true, COR = true, PUP = true }
+
+-- share_code.lua (given by the shell, else required next to this file); nil when it is missing
+function M.share()
+    if M.SC == nil then
+        local SC = api.share_code
+        if type(SC) ~= 'table' then
+            local ok, mod = pcall(require, 'share_code')
+            SC = ok and type(mod) == 'table' and mod or nil
+        end
+
+        M.SC = SC or false
+    end
+
+    return M.SC or nil
+end
+
+-- the rules of a draft as Save sends them, or nil + why (a rule the editor cannot show exactly is never shared)
+local function shareable_texts(d)
+    if d == nil or type(d.rules) ~= 'table' or #d.rules == 0 then
+        return nil, 'open a Rule Set with at least one rule first'
+    end
+
+    if not M.IO_JOBS[d.job or ''] then
+        return nil, 'the Rule Set has no known job'
+    end
+
+    local name = d.name or ''
+    if name == '' or #name > M.NAME_MAX or not string.match(name, '^[%w %-]+$') then
+        return nil, 'the name must be 1-' .. M.NAME_MAX .. ' letters, digits, spaces or -'
+    end
+
+    local texts = {}
+    for i, r in ipairs(d.rules) do
+        if r.opaque then
+            return nil, 'rule ' .. i .. ' uses options this editor cannot show, so it cannot be shared exactly'
+        end
+
+        local text = M.encode_rule(r)
+        if M.decode_rule(text) == nil then
+            return nil, 'rule ' .. i .. ' is not complete'
+        end
+
+        texts[i] = text
+    end
+
+    return texts
+end
+
+-- a Rule Set (the editor's draft) -> its share code, or nil + why
+function M.export_code(d)
+    local texts, why = shareable_texts(d)
+    if texts == nil then
+        return nil, why
+    end
+
+    local SC = M.share()
+    if SC == nil then
+        return nil, 'share_code.lua is missing from the addon folder'
+    end
+
+    local rows = {}
+    for i, t in ipairs(texts) do
+        rows[i] = M.decode_rule(t) -- (exactly what the code will give back)
+    end
+
+    return SC.encode({ job = d.job, name = d.name, rules = rows })
+end
+
+-- the older text format (GRS1|...), kept so the editor can still write it for its own tests and comparisons
+function M.export_text(d)
+    local texts, why = shareable_texts(d)
+    if texts == nil then
+        return nil, why
+    end
+
+    local body = table.concat({ M.IO_TAG .. M.IO_VERSION, d.job, M.name_code(d.name), tostring(#texts), table.concat(texts, ';') }, '|')
+    return body .. '|' .. tostring(M.check(body))
+end
+
+-- a name no Rule Set of that job in the loaded list has: "Name", else "Name 2", "Name 3" ... (true when renamed)
+local function import_name(name, job)
+    local taken = {}
+    for _, set in ipairs(S.sets or {}) do
+        if set.job == job or set.job == nil then
+            taken[string.lower(set.name or '')] = true
+        end
+    end
+
+    if not taken[string.lower(name)] then
+        return name, false
+    end
+
+    for n = 2, 99 do
+        local suffix = ' ' .. n
+        local candidate = string.sub(name, 1, M.NAME_MAX - #suffix) .. suffix
+        if not taken[string.lower(candidate)] then
+            return candidate, true
+        end
+    end
+
+    return name, false
+end
+
+-- the older GRS1 text -> job, name (with spaces), rule texts, or nil + why
+local function read_grs1(clean)
+    local at = string.find(clean, M.IO_TAG .. '%d+|')
+    if at == nil then
+        return nil, 'this is not a Gambits share code (it starts with GS1)'
+    end
+
+    clean = string.sub(clean, at)
+    local version = tonumber(string.match(clean, '^' .. M.IO_TAG .. '(%d+)|'))
+    if version ~= M.IO_VERSION then
+        return nil, string.format('this Rule Set was shared in format %s; this Gambits reads format %d (update Gambits)',
+            tostring(version), M.IO_VERSION)
+    end
+
+    if not string.match(clean, '^[%w_%-%.,;|]+$') then
+        return nil, 'the text has characters a shared Rule Set never has (it was changed on the way)'
+    end
+
+    local f = M.split(clean, '|')
+    if #f ~= 6 then
+        return nil, 'the text is incomplete or has extra parts (' .. #f .. ' parts, 6 expected): copy all of it again'
+    end
+
+    local body = table.concat({ f[1], f[2], f[3], f[4], f[5] }, '|')
+    if not string.match(f[6], '^%d+$') or tonumber(f[6]) ~= M.check(body) then
+        return nil, 'the check number does not match: the text was cut or changed on the way (copy all of it again)'
+    end
+
+    local name = f[3]
+    if #name > M.NAME_MAX or not string.match(name, '^[%w_%-]+$') then
+        return nil, 'the name must be 1-' .. M.NAME_MAX .. ' letters, digits, spaces or -'
+    end
+
+    local texts = f[5] ~= '' and M.split(f[5], ';') or {}
+    if tonumber(f[4]) == nil or tonumber(f[4]) ~= #texts then
+        return nil, string.format('the text says %s rules but has %d', tostring(f[4]), #texts)
+    end
+
+    return f[2], (string.gsub(name, '_', ' ')), texts
+end
+
+-- a share code (or older GRS1 text) -> { draft = <a new unsaved set>, warnings = { ... } }, or nil + { problems }
+-- cat (optional): the loaded catalog; its checks are used only when it is for the imported set's job
+function M.parse_import(text, cat, catJob)
+    local problems = {}
+    local function fail(why)
+        problems[#problems + 1] = why
+        return nil, problems
+    end
+
+    if type(text) ~= 'string' or string.match(text, '^[%s`]*$') then
+        return fail('nothing to import: paste a share code first')
+    end
+
+    if #text > M.IO_MAX_TEXT then
+        return fail('the text is longer than ' .. M.IO_MAX_TEXT .. ' characters: that is not one Rule Set')
+    end
+
+    local clean = string.gsub(text, '[%s`]', '')
+    local job, name, texts
+    local SC = M.share()
+    if SC and SC.looks_like(clean) then
+        local set, why = SC.decode(clean)
+        if set == nil then
+            return fail(why)
+        end
+
+        job, name, texts = set.job, set.name, {}
+        for i, row in ipairs(set.rules) do
+            texts[i] = M.encode_rule(row)
+        end
+    elseif string.find(clean, M.IO_TAG .. '%d+|') then
+        local why
+        job, name, texts = read_grs1(clean)
+        if job == nil then
+            return fail(name)
+        end
+    elseif string.match(clean, '^GS%d') and not SC then
+        return fail('share_code.lua is missing from the addon folder: this Gambits cannot read share codes')
+    else
+        return fail('this is not a Gambits share code (it starts with GS1)')
+    end
+
+    if not M.IO_JOBS[job or ''] then
+        return fail('unknown job ' .. tostring(job))
+    end
+
+    if name == '' or #name > M.NAME_MAX or not string.match(name, '^[%w %-]+$') then
+        return fail('the name must be 1-' .. M.NAME_MAX .. ' letters, digits, spaces or -')
+    end
+
+    if #texts == 0 or #texts > M.MAX_RULES then
+        return fail('a Rule Set has 1-' .. M.MAX_RULES .. ' rules (this one has ' .. #texts .. ')')
+    end
+
+    local rules, ids = {}, {}
+    for i, t in ipairs(texts) do
+        local r = M.decode_rule(t)
+        if r ~= nil then
+            M.normalize_roles(r) -- (0.3.3) Include + Exclude of one role -> Exclude (what the engine does with it)
+        end
+
+        if r == nil then
+            problems[#problems + 1] = 'rule ' .. i .. ' is not readable'
+        else
+            if r.id ~= nil then
+                if ids[r.id] then
+                    problems[#problems + 1] = 'rule ' .. i .. ' has the same id as rule ' .. ids[r.id]
+                end
+
+                ids[r.id] = i
+            end
+
+            -- (Bard song tiers) "MARCH.2" is checked here too: without a catalog check_draft cannot tell its kind
+            for _, pair in ipairs({ { r.cond, r.arg }, { r.cond2, r.arg2 } }) do
+                local tierWhy = (pair[1] == 'STATUS' or pair[1] == 'NOT_STATUS') and M.tier_problem(pair[2]) or nil
+                if tierWhy then
+                    problems[#problems + 1] = string.format('rule %d: %s: %s', i, M.cond_label(pair[1]), tierWhy)
+                end
+            end
+
+            rules[i] = r
+        end
+    end
+
+    if #problems > 0 then
+        return nil, problems
+    end
+
+    local d = { num = 0, rev = nil, job = job, name = name, flags = 'o', dirty = true, rules = rules, imported = true }
+    local why = M.check_draft(d, (cat and catJob == job) and cat or nil)
+    if why then
+        return fail(why)
+    end
+
+    local warnings = {}
+    local renamed
+    d.name, renamed = import_name(d.name, job)
+    if renamed then
+        warnings[#warnings + 1] = string.format('A %s Rule Set called "%s" exists: the import is named "%s".', job, name, d.name)
+    end
+
+    if not (cat and catJob == job) then
+        warnings[#warnings + 1] = 'Checked for its form only: the choices of a ' .. job .. ' squad mate are not loaded. Save checks it on '
+            .. 'the server; Check shows what a mate would leave out.'
+    end
+
+    return { draft = d, warnings = warnings }
+end
+
+-- puts a parsed import into the editor as a new, unsaved Rule Set (nothing saved, assigned or applied)
+function M.import_apply(result)
+    if type(result) ~= 'table' or type(result.draft) ~= 'table' then
+        return false
+    end
+
+    local kept = M.keep_unsaved() -- (unsaved edits become the unsaved draft, never lost)
+    S.draft, S.checks, S.sel = result.draft, {}, 1
+    say(string.format('Imported "%s" (%s, %d rules) as a new Rule Set - not saved. Look it over, then Save; it is not assigned '
+        .. 'to anyone.%s', result.draft.name, result.draft.job, #result.draft.rules,
+        kept and ' Your earlier unsaved changes are kept as the unsaved draft.' or ''))
+    return true
+end
+
+-- Export: the share code of the Rule Set open in the editor (as shown), kept for the Export box; nil + why
+function M.export_current()
+    local code, why = M.export_code(S.draft)
+    S.io = S.io or {}
+    if code == nil then
+        S.io.code = nil
+        say('Not exported: ' .. why, false)
+        return nil
+    end
+
+    S.io.code, S.io.codeFor = code, S.draft
+    say(string.format('Share code for "%s" ready (%d characters)%s. Press Copy Share Code, then paste it into Discord or a '
+        .. 'message.', tostring(S.draft.name), #code, S.draft.dirty and ', with your unsaved changes as shown' or ''))
+    return code
+end
+
+-- Copy Share Code: true when the clipboard took it
+function M.copy_code(code)
+    local g = api.imgui
+    local ok = code ~= nil and g ~= nil and type(g.SetClipboardText) == 'function' and pcall(g.SetClipboardText, code)
+    if ok then
+        say('Share code copied to the clipboard.')
+    else
+        say('The clipboard could not be used: select the code in the box and copy it with Ctrl+C.', 'warn')
+    end
+
+    return ok == true
 end
 
 local function encodings(rules)
@@ -1428,6 +2002,13 @@ function M.save()
     end
 
     local d = S.draft
+    -- (0.3.3) a role saved as both Include and Exclude is saved as Exclude, the way it is shown and the engine reads it
+    for _, r in ipairs(d and not d.readonly and d.rules or {}) do
+        if not r.opaque then
+            M.normalize_roles(r)
+        end
+    end
+
     local why = M.check_draft(d, S.cat)
     if why then
         say('Not saved: ' .. why, false)
@@ -2086,6 +2667,17 @@ M.TARGET_HELP = {
     TRIGGER_SELF_ACTION_TARGET = 'The conditions are checked on the squad mate itself, the action goes to the enemy. '
         .. 'E.g. "MP below 50 %" -> Aspir the enemy, or "HP below 50 %" -> Drain the enemy.',
 }
+-- (role clarity) the four role targets are Gambits Party Roles, never the Squad menu's Role. Text only: who a target
+-- means is unchanged (the server's party roles decide).
+M.PARTY_ROLE_NOTE = '\n\nGambits Party Role: decides who this target is. Not the Squad menu\'s Squad Role, which only '
+    .. 'filters default job rules (a Rule Set replaces those and is not filtered).'
+for _, key in ipairs({ 'TANK', 'CASTER', 'MELEE', 'RANGED' }) do
+    M.TARGET_HELP[key] = M.TARGET_HELP[key] .. M.PARTY_ROLE_NOTE
+end
+-- (role clarity) the set panel's "uses: default job rules": the editor does not know a mate's Squad Role, so this
+-- only says how the two relate
+M.DEFAULT_RULES_HELP = 'Default job rules: the job\'s built-in rules, filtered by the Squad Role and Mode (Squad menu; '
+    .. 'e.g. Damage cures only below 30% HP). An assigned Rule Set replaces them and is not filtered.'
 M.KIND_LABELS   = { family = 'Best of Family', spell = 'Specific Spell', ja = 'Job Ability', ranged = 'Ranged attack',
                     nuke = 'Best nuke (weakness)', burst = 'Magic burst', waltz = 'Best Curing Waltz',
                     samba = 'Best Samba', storm = 'Storm of the day', helix = 'Helix of the day' }
@@ -2181,7 +2773,7 @@ M.SUBJECT_HELP = {
     STATUS     = 'Whether the target has a status effect (a buff or a debuff), e.g. Protect missing -> Protect.',
     ENEMY      = 'What the enemy is doing now (target Enemy only): casting a spell, or readying a weapon skill, special move '
         .. 'or job ability.',
-    COOLDOWN   = 'True while the squad mate\'s own recast of a job ability is running, whatever the rule\'s target is.',
+    COOLDOWN   = 'True while the squad mate cannot use the job ability yet because of its recast, whatever the rule\'s target is.',
     SHADOWS    = 'How many Utsusemi shadows or Blink images the target has left.',
     SKILLCHAIN = 'The enemy\'s skillchain state (target Enemy only): an open skillchain, or a magic burst window now.',
     LEVEL      = 'The target\'s level.',
@@ -2302,6 +2894,8 @@ function M.cond_text(id, arg, cat)
         return M.mod_text(arg)
     elseif unit == nil then
         return label
+    elseif unit == 'effect' and M.tier_song(arg) then
+        return label .. ' ' .. M.pretty(M.tier_song(arg)) -- (Bard song tiers) "Missing effect Victory March"
     elseif unit == 'effect' or unit == 'ja' then
         return label .. ' ' .. (arg and arg ~= '' and M.pretty(arg) or '?')
     elseif unit == 's' then
@@ -2347,6 +2941,24 @@ M.COND_SHORT_VALUE = { -- id -> prefix, suffix
     TIMER = { 'Every ', ' s' },
 }
 
+-- (0.3.3) a role target with filters, as players read it: "Melee, not Tank", "Tank or Mage"; nil without filters
+M.ROLE_LABEL = { TANK = 'Tank', MELEE = 'Melee', CASTER = 'Mage', RANGED = 'Ranged' }
+function M.roles_text(r)
+    if r == nil or (r.rolesIn == nil and r.rolesOut == nil) or not M.ROLE_TARGET[r.target or ''] then
+        return nil
+    end
+
+    local inc, exc = { M.ROLE_LABEL[r.target] }, {}
+    for role in string.gmatch(r.rolesIn or '', '[^%.]+') do inc[#inc + 1] = M.ROLE_LABEL[role] or M.pretty(role) end
+    for role in string.gmatch(r.rolesOut or '', '[^%.]+') do exc[#exc + 1] = M.ROLE_LABEL[role] or M.pretty(role) end
+    local text = table.concat(inc, ' or ')
+    if #exc > 0 then
+        text = text .. ', not ' .. table.concat(exc, ' or ')
+    end
+
+    return text
+end
+
 function M.cond_short(id, arg, cat)
     if id == nil then
         return ''
@@ -2355,9 +2967,9 @@ function M.cond_short(id, arg, cat)
     elseif M.COND_SHORT_VALUE[id] then
         return M.COND_SHORT_VALUE[id][1] .. tostring(arg or '?') .. M.COND_SHORT_VALUE[id][2]
     elseif id == 'STATUS' then
-        return 'Has ' .. (arg and M.pretty(arg) or '?')
+        return 'Has ' .. (arg and M.pretty(M.tier_song(arg) or arg) or '?')
     elseif id == 'NOT_STATUS' then
-        return 'No ' .. (arg and M.pretty(arg) or '?')
+        return 'No ' .. (arg and M.pretty(M.tier_song(arg) or arg) or '?')
     elseif id == 'JA_ON_COOLDOWN' then
         return (arg and M.pretty(arg) or '?') .. ' on cooldown'
     elseif id == 'MOD_LT' then
@@ -2381,7 +2993,7 @@ function M.rule_short(r, cat)
         when = when .. ' + ' .. M.cond_short(r.cond2, r.arg2, cat)
     end
 
-    local text = string.format('%s: %s -> %s', M.TARGET_SHORT[r.target or ''] or M.target_label(r.target), when ~= '' and when or '?',
+    local text = string.format('%s: %s -> %s', M.roles_text(r) or M.TARGET_SHORT[r.target or ''] or M.target_label(r.target), when ~= '' and when or '?',
         M.action_text(r))
     if r.retry and tonumber(r.retry) and tonumber(r.retry) > 0 then
         text = text .. string.format(' (wait %s s)', r.retry)
@@ -2409,7 +3021,7 @@ function M.rule_summary(r, cat)
         when = when .. ' and ' .. M.cond_text(r.cond2, r.arg2, cat)
     end
 
-    local text = string.format('%s: %s -> %s', M.target_label(r.target), when ~= '' and when or '(no condition)', M.action_text(r))
+    local text = string.format('%s: %s -> %s', M.roles_text(r) or M.target_label(r.target), when ~= '' and when or '(no condition)', M.action_text(r))
     if r.retry and r.retry ~= '' and tonumber(r.retry) and tonumber(r.retry) > 0 then
         text = text .. string.format(' (then waits %s s)', r.retry)
     end
@@ -2931,14 +3543,16 @@ function M.effect_selector(r, slot, cat, labelW)
     values[#values + 1] = M.CUSTOM_EFFECT
     S.effCustom = S.effCustom or {}
     local st = S.effCustom[slot]
-    local cur = r[ak]
+    -- (Bard song tiers) "MARCH.2": the dropdown shows the effect MARCH, the song picker after it the tier
+    local full = r[ak]
+    local cur, curTier = M.tier_parse(full)
     if st == nil or st.rule ~= r then
-        st = { rule = r, custom = false, value = cur }
+        st = { rule = r, custom = false, value = full }
         S.effCustom[slot] = st
     end
 
-    if st.value ~= cur then
-        st.value, st.text, st.pending, st.custom = cur, nil, nil, false -- (changed elsewhere: another subject, a reload)
+    if st.value ~= full then
+        st.value, st.text, st.pending, st.custom = full, nil, nil, false -- (changed elsewhere: another subject, a reload)
     end
 
     if cur ~= nil and jobOf[cur] == nil and not commonSet[cur] then
@@ -2964,10 +3578,11 @@ function M.effect_selector(r, slot, cat, labelW)
             st.custom, st.text, st.pending = true, cur and M.pretty(cur) or '', nil
         else
             r[ak], st.custom, st.text, st.pending, st.value = picked, false, nil, nil, picked
-            cur = picked
+            cur, curTier = picked, nil
         end
     end
 
+    M.song_tier_picker(r, ak, st, cur, curTier, slot, labelW)
     if not st.custom then
         return
     end
@@ -3015,6 +3630,70 @@ function M.effect_selector(r, slot, cat, labelW)
         same()
         note('(keeps ' .. M.pretty(cur) .. ')')
         tooltip('The field is empty or not a name: the rule keeps ' .. M.pretty(cur) .. '.')
+    end
+end
+
+-- (0.3.3) false for a song no squad mate can ever have on this server (gambits_data.lua q = 'x': Trust / Summoning /
+-- Geomancy groups, no scroll, or not in the spell list at all - Honor March); without the data: offered, as before
+function M.song_offered(name)
+    local row = M.DATA and M.DATA.spells and M.DATA.spells[name]
+    return not (row and row.q == 'x')
+end
+
+-- (0.3.3) the song picker's entries for a song type: 0 (Any) and the tiers of the songs this server has (a song the data
+-- marks as never a squad mate's spell, e.g. Honor March, is left out); a saved tier stays listed, unchanged
+function M.tier_choices(base, tier)
+    local values = { 0 }
+    for i, name in ipairs(M.SONG_TIERS[base or ''] or {}) do
+        if M.song_offered(name) or i == tier then
+            values[#values + 1] = i
+        end
+    end
+
+    return values
+end
+
+-- (Bard song tiers) after a song type (March, Minuet ...): "Any March" (as before) or one song of it. Only with a
+-- server that carries tiers (version 8); a saved tier on an older server stays as it is and is flagged.
+function M.song_tier_picker(r, ak, st, base, tier, slot, labelW)
+    local songs = M.SONG_TIERS[base or '']
+    if songs == nil then
+        return
+    end
+
+    if not (S.server and (S.server.version or 0) >= M.TIER_SERVER) then
+        if tier then
+            same()
+            colored(M.theme.bad, '(' .. M.tier_problem(r[ak]) .. ')')
+        end
+
+        return
+    end
+
+    local values = M.tier_choices(base, tier)
+    same_if_fits(s(190), labelW)
+    width(s(190))
+    local shown = (tier and songs[tier]) and tier or 0
+    local picked = combo('##gsq-tier' .. slot, shown, values, function(v)
+        return v == 0 and ('Any ' .. M.pretty(base)) or M.pretty(songs[v])
+    end, function(v)
+        if v == 0 then
+            return 'Any song of this type counts, whoever sang it (as before).'
+        end
+
+        return M.pretty(songs[v]) .. ' only. Other ' .. M.pretty(base) .. ' songs do not count, so two rules can keep two '
+            .. M.pretty(base) .. ' songs up (e.g. Victory March and Advancing March).'
+    end)
+    tooltip('Which song counts: Any, or one song of this type.')
+    if picked ~= shown then
+        local value = picked == 0 and base or string.format('%s.%d', base, picked)
+        r[ak], st.value = value, value
+    end
+
+    local why = M.tier_problem(r[ak])
+    if why then
+        same()
+        colored(M.theme.bad, '(' .. why .. ')')
     end
 end
 
@@ -3718,10 +4397,21 @@ function M.effect_choices(cat, mate, plan)
             end
         end
 
+        -- (0.3.3) the server's spell data gives songs no effect: a song the mate sings gives its song type (M.SONG_TIERS),
+        -- so a Bard finds March, Minuet ... in this list (and then chooses one song of it)
+        local songType = {}
+        for effect, songs in pairs(M.SONG_TIERS) do
+            for _, name in ipairs(songs) do
+                songType[name] = effect
+            end
+        end
+
         for _, sp in ipairs(M.spell_view(cat, mate, false, plan)) do
             local row = M.DATA.spells[sp.name]
             if row and row.e then
                 add(row.e, sp.name, 'spell', sp.level, sp.sub, sp.state)
+            elseif songType[sp.name] then
+                add(songType[sp.name], sp.name, 'spell', sp.level, sp.sub, sp.state)
             end
         end
     end
@@ -4079,9 +4769,58 @@ local function rule_editor(d, r, cat, readonly)
         targets[#targets + 1] = t
     end
 
+    local oldTarget = r.target
     r.target = combo('##gsq-target', r.target, targets, M.target_label, function(v) return M.TARGET_HELP[v or ''] end)
     tooltip(M.TARGET_HELP[r.target or ''] or 'Who the rule is about.')
+    if r.target ~= oldTarget then
+        M.fit_roles(r)
+    end
 
+    -- (0.3.3) a role target: for each other role ONE choice - ignored, Include (also counts) or Exclude (never counts);
+    -- the target's own role always counts. A role saved as both (hand-made data) shows as Exclude, the way the engine
+    -- reads it, and is saved as Exclude (M.normalize_roles).
+    if M.ROLE_TARGET[r.target or ''] and S.server and (S.server.version or 0) >= M.ROLE_SERVER then
+        if g.SetCursorPosX then
+            g.SetCursorPosX(labelW)
+        end
+
+        colored(M.theme.secondary, 'Roles')
+        tooltip('For each other role: ignore it, Include it (its members also count) or Exclude it (its members never count, '
+            .. 'even with an included role). E.g. Melee, Tank: Exclude = melee members, but not a Paladin on Auto (Tank and Melee).')
+        local states = { 'none', 'in', 'out' }
+        local stateLabel = { none = '-', ['in'] = 'Include', out = 'Exclude' }
+        for _, role in ipairs(M.ROLE_ORDER) do
+            same_if_fits(s(118), labelW)
+            if role == r.target then
+                colored(M.theme.ok, M.ROLE_LABEL[role] .. ': target')
+                tooltip('The target itself: ' .. M.ROLE_LABEL[role] .. ' always counts and cannot be excluded.')
+            else
+                width(s(118))
+                local cur = M.role_state(r, role)
+                local picked = combo('##gsq-role-' .. role, cur, states, function(v) return M.ROLE_LABEL[role] .. ': ' .. stateLabel[v] end,
+                    function(v)
+                        return v == 'in' and ('Also ' .. M.ROLE_LABEL[role] .. ' members.') or v == 'out' and ('Never '
+                            .. M.ROLE_LABEL[role] .. ' members.') or (M.ROLE_LABEL[role] .. ' does not matter.')
+                    end)
+                if picked ~= cur then
+                    M.set_role_state(r, role, picked)
+                end
+            end
+        end
+
+        if M.roles_conflict(r) then
+            wrapped(M.theme.gold, 'A role was saved as both Include and Exclude: it counts as Exclude, and is saved that way.')
+        end
+
+        local why = M.role_problem(M.normalized_copy(r))
+        if why then
+            wrapped(M.theme.bad, why)
+        elseif M.roles_text(r) then
+            wrapped(M.theme.secondary, 'Counts: ' .. M.roles_text(M.normalized_copy(r)) .. '.')
+        end
+    elseif r.rolesIn or r.rolesOut then
+        wrapped(M.theme.bad, M.role_problem(r) or 'This rule has role filters this server cannot use.')
+    end
     label('Condition')
     condition_editor(r, 1, cat, labelW)
     label('And')
@@ -4265,10 +5004,124 @@ function M.rule_list_height(nRules, rowH, bodyH, rest)
     return math.floor(math.max(rows, 1) * rowH + pad), rows
 end
 
+-- (0.3.3) Export: the open Rule Set's share code, read-only, with one Copy button. Import: paste a code, Preview, Import
+-- as New Rule Set. No files: a code is pasted and copied like any text.
+function M.code_for_draft(d)
+    S.io = S.io or {}
+    local key = d and table.concat({ tostring(d.job), tostring(d.name), table.concat(encodings(d.rules or {}), ';') }, '|') or ''
+    if S.io.codeKey ~= key then
+        S.io.codeKey = key
+        S.io.code, S.io.codeWhy = M.export_code(d)
+    end
+
+    return S.io.code, S.io.codeWhy
+end
+
+local function io_panel(mate)
+    local g = imgui()
+    S.io = S.io or {}
+    local io_ = S.io
+    local w = math.max(s(200), available() - s(4))
+    local readOnly = rawget(_G, 'ImGuiInputTextFlags_ReadOnly') or 0
+    g.Separator()
+    if S.ioOpen == 'export' then
+        heading('Export')
+        local d = S.draft
+        if d == nil then
+            wrapped(M.theme.secondary, 'Open a Rule Set first (click one above, or make a new one).')
+        else
+            wrapped(nil, string.format('"%s"  -  %s, %d rules%s', tostring(d.name), tostring(d.job), #d.rules,
+                d.dirty and '  (with your unsaved changes, as shown)' or ''))
+            local code, why = M.code_for_draft(d)
+            if code == nil then
+                wrapped(M.theme.bad, 'No share code: ' .. tostring(why))
+            else
+                local buf = { code }
+                if g.InputTextMultiline then
+                    g.InputTextMultiline('##gsq-io-code', buf, #code + 1, { w, s(48) }, readOnly)
+                else
+                    width(w)
+                    g.InputText('##gsq-io-code', buf, #code + 1, readOnly)
+                end
+
+                tooltip('The whole Rule Set as one code (' .. #code .. ' characters). Anyone with Gambits can import it.')
+                local clicked = false
+                with_colors({ { 'ImGuiCol_Button', M.theme.goGold }, { 'ImGuiCol_ButtonHovered', times(M.theme.goGold, 1.15) },
+                              { 'ImGuiCol_Text', M.theme.goText } }, function()
+                    clicked = button('Copy Share Code##gsq-io-copy', s(150))
+                end)
+                if clicked then
+                    M.copy_code(code)
+                end
+
+                tooltip('Copies the code. Paste it into Discord or a message; the other player pastes it into Import.')
+            end
+        end
+    else
+        heading('Import')
+        wrapped(M.theme.secondary, 'Paste a share code (Ctrl+V), then Preview Import.')
+        local buf = { io_.text or '' }
+        if g.InputTextMultiline then
+            g.InputTextMultiline('##gsq-io-text', buf, M.IO_MAX_TEXT + 1, { w, s(60) })
+        else
+            width(w)
+            g.InputText('##gsq-io-text', buf, M.IO_MAX_TEXT + 1)
+        end
+
+        if buf[1] ~= io_.text then
+            io_.text, io_.preview, io_.problems = buf[1], nil, nil
+        end
+
+        if button('Preview Import##gsq-io-preview') then
+            local catJob = mate and S.cat and mate.job or nil
+            io_.preview, io_.problems = M.parse_import(io_.text, S.cat, catJob)
+            if io_.preview then io_.problems = nil end
+        end
+
+        tooltip('Reads the code (data only) and shows the Rule Set. Nothing changes yet.')
+        if io_.preview then
+            same_if_fits(s(190))
+            if button('Import as New Rule Set##gsq-io-import') then
+                M.import_apply(io_.preview)
+                io_.preview, io_.text = nil, ''
+            end
+
+            tooltip('Opens it in the editor as a NEW Rule Set, not saved and not assigned. Your saved sets are not changed.')
+        end
+
+        if io_.problems then
+            for _, why in ipairs(io_.problems) do
+                wrapped(M.theme.bad, 'Not imported: ' .. tostring(why))
+            end
+        elseif io_.preview then
+            local d = io_.preview.draft
+            wrapped(M.theme.ok, string.format('"%s"  -  %s, %d rules', d.name, d.job, #d.rules))
+            if mate and d.job ~= mate.job then
+                wrapped(M.theme.gold, string.format('This is a %s Rule Set: after Save it is listed for %s squad mates, not for %s (%s).',
+                    d.job, d.job, mate.name, mate.job))
+            end
+
+            for i, r in ipairs(d.rules) do
+                wrapped(r.on == false and M.theme.secondary or nil, string.format('%d. %s%s', i, M.rule_summary(r, S.cat),
+                    r.on == false and '  (off)' or ''))
+            end
+
+            for _, w2 in ipairs(io_.preview.warnings or {}) do
+                wrapped(M.theme.gold, w2)
+            end
+        end
+    end
+
+    if button('Close##gsq-io-close') then
+        S.ioOpen = nil
+        S.io = { text = '' }
+    end
+end
 local function sets_panel(mate, panelH)
     local g = imgui()
     heading(mate.job .. ' Rule Sets')
     wrapped(M.theme.secondary, string.format('%s uses: %s', mate.name, mate.chosen > 0 and M.set_label(mate.chosen) or 'default job rules'))
+    tooltip(M.DEFAULT_RULES_HELP)
     -- (0.3.1) as high as its rows (at least 3), at most half the panel; "in use" (green) and "editing" (highlight) differ
     local listH = M.list_height(#S.sets, row_h(), math.max(s(80), (panelH or s(400)) * 0.5), 3)
     child('##gsq-sets', { 0, listH }, function()
@@ -4364,6 +5217,22 @@ local function sets_panel(mate, panelH)
         tooltip('A starting point for a new ' .. mate.job .. ' Rule Set (' .. #tpls .. ' to choose from).' .. starterNote)
     end
 
+    same_if_fits(s(70))
+    if button('Export##gsq-io-export') then
+        S.ioOpen = S.ioOpen ~= 'export' and 'export' or nil
+    end
+
+    tooltip('A share code for the Rule Set open in the editor, to copy into Discord or a message.')
+    same_if_fits(s(70))
+    if button('Import##gsq-io-import-open') then
+        S.ioOpen = S.ioOpen ~= 'import' and 'import' or nil
+    end
+
+    tooltip('Paste a share code someone gave you: it becomes a new Rule Set (not saved, not assigned).')
+    if S.ioOpen then
+        io_panel(mate)
+    end
+
     if S.confirmOpen then
         wrapped(M.theme.gold, string.format('"%s" has unsaved changes. Open %s anyway? Your changes are kept as the unsaved draft.',
             S.draft and S.draft.name or '?', M.set_label(S.confirmOpen)))
@@ -4430,7 +5299,7 @@ local function sets_panel(mate, panelH)
 
     if button('Restore default job rules##gsq-off') then M.assign(mate.slot, nil, true) end
     tooltip(mate.name .. ' stops using its Rule Set and goes back to the usual ' .. mate.job .. ' job rules (applied at once '
-        .. 'when summoned). Your saved Rule Sets are kept.')
+        .. 'when summoned). Your saved Rule Sets are kept. The Squad Role and Mode (Squad menu) filter those job rules again.')
     -- (the separate "Apply now" button is gone: Assign & Apply also re-calls a mate after its set was changed and saved)
     local r = S.restorable
     if r and r.job == mate.job and not (S.draft and S.draft.dirty) then
@@ -4798,9 +5667,9 @@ M.ROLE_NAMES   = { [0] = 'Auto', 'Tank', 'Melee', 'Mage', 'Ranged' }
 M.ROLE_LETTER  = { 'T', 'M', 'C', 'R' }
 M.LETTER_NAME  = { T = 'Tank', M = 'Melee', C = 'Mage', R = 'Ranged' }
 M.ROLE_VALUES  = { 0, 1, 2, 3, 4 }
-M.ROLES_HELP   = 'Who your squad\'s Rule Set targets Tank, Melee, Mage and Ranged mean, and who a Bard\'s songs for those '
-    .. 'roles reach. This is not the Squad menu\'s Role (tank / damage / healer / support): that one only changes how a '
-    .. 'mate acts itself and does not make it a Tank target.'
+M.ROLES_HELP   = 'Gambits Party Roles: who the Tank, Melee, Mage (CASTER) and Ranged targets, and a Bard\'s role songs, '
+    .. 'reach. Not the Squad menu\'s Squad Role (Auto / Tank / Damage / Healer / Support), which only filters default '
+    .. 'job rules, never a Rule Set, and does not make a mate a Tank target.'
 M.ROLES_AUTO_HELP = 'Auto = by main job. Some jobs count for more than one target: a PLD is Tank and Melee, a RUN is Tank, '
     .. 'Melee and Mage. Tank = PLD or RUN; Melee = WAR MNK THF PLD DRK BST SAM NIN DRG BLU PUP DNC RUN; Mage = WHM BLM RDM '
     .. 'BRD SMN BLU SCH GEO RUN; Ranged = RNG or COR.'

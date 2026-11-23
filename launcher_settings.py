@@ -86,6 +86,9 @@ SECTION_NOTES = {
     "Auction house": "Stocks the auction house and buys what you list.",
     "Conquest": "The other nations and the beastmen act while you are away, so regions can change hands.",
     "Seasonal events": "Harvest Festival, Starlight, Egg Hunt, Horro's Visit, Sunbreeze.",
+    "Battle": "Out of era. 1x and half are the era's values; the lines marked experimental have not been tried much.",
+    "Damage": "Out of era and experimental. 1x is the era. Plain melee hits have no line of their own: to hit harder "
+              "across the board, lower the monster HP under Battle (half the HP is double the damage).",
 }
 
 # ---------------------------------------------------------------- Rules: how fast and how forgiving
@@ -96,10 +99,56 @@ S("main.BOOK_EXP_RATE", "rules", "Experience and fame", RATE, "From FoV/GoV page
   tip="Experience from Fields of Valor and Grounds of Valor pages.")
 S("map.EXP_LOSS_RATE", "rules", "Experience and fame", RATE, "Lost on death", tip="0 = none.")
 S("main.FAME_RATE", "rules", "Experience and fame", RATE, "Fame from quests", tip="1 = retail.")
+S("main.EXP_CHAIN_TIME_MULTIPLIER", "rules", "Experience and fame", RATE, "Experience chain time", step=0.5,
+  tip="How long you have to reach the next monster and keep an experience chain going. 1x = the era: against monsters "
+      "below level 10 that is 50 seconds for the first chain, shrinking to 10 seconds for chain 5; from level 60 it is "
+      "350 seconds down to 70. 2x = twice as long. (Gilder)")
 S("main.NM_LOTTERY_CHANCE", "rules", "Notorious monsters", RATE, "Lottery spawn chance", special={-1: "always"},
   tip="Leaping Lizzy, Valkurm Emperor and the like. 1 = retail. One step below 0 is 'always': the NM always comes next.")
 S("main.NM_LOTTERY_COOLDOWN", "rules", "Notorious monsters", RATE, "Wait after a kill",
   tip="The time after a kill before the NM can be rolled again. 1 = retail, 0 = none.")
+# (2026-11-22, suggestions: Hexblood, Poptart) out of era and not tried much: the section says so
+S("map.SUBJOB_RATIO", "rules", "Battle", RATE, "Support job level (experimental)", step=1,
+  special={1: "half", 2: "two thirds", 3: "equal"},
+  tip="How high your support job goes next to your main job. Half = the era (75/37). Two thirds = 75/50. "
+      "Equal = 75/75. Your squad mates follow it too. Experimental: the game was never balanced for it. (Hexblood)")
+S("map.PLAYER_HP_MULTIPLIER", "rules", "Battle", RATE, "Your HP (experimental)",
+  tip="Your own HP and your squad mates', before gear, food and traits are added. 1x = the era, 0.5x = half, "
+      "up to 3x. Bot players and monsters keep theirs. Experimental. (delukard)")
+S("map.PLAYER_MP_MULTIPLIER", "rules", "Battle", RATE, "Your MP (experimental)",
+  tip="Your own MP and your squad mates', before gear, food and traits are added. 1x = the era, up to 3x. "
+      "A job without MP still has none. Experimental. (delukard)")
+S("map.MOB_HP_MULTIPLIER", "rules", "Battle", RATE, "Monster HP (experimental)",
+  tip="The HP of ordinary monsters. 1x = the era, 0.5x = half, 2x = double (the most the server takes). "
+      "Experimental. (Poptart)")
+S("map.NM_HP_MULTIPLIER", "rules", "Battle", RATE, "Notorious monster HP (experimental)",
+  tip="The HP of notorious monsters. 1x = the era. Experimental.")
+S("map.MOB_MP_MULTIPLIER", "rules", "Battle", RATE, "Monster MP (experimental)",
+  tip="The MP of ordinary monsters. 1x = the era. Experimental.")
+S("map.NM_MP_MULTIPLIER", "rules", "Battle", RATE, "Notorious monster MP (experimental)",
+  tip="The MP of notorious monsters. 1x = the era. Experimental.")
+S("map.PLAYER_TP_MULTIPLIER", "rules", "Battle", RATE, "TP gain: you and your squad",
+  tip="How fast you, your squad mates and pets gain TP. 1x = the era.")
+S("map.MOB_TP_MULTIPLIER", "rules", "Battle", RATE, "TP gain: monsters",
+  tip="How fast monsters gain TP, so how often they use their special attacks. 1x = the era.")
+# (2026-11-22, Poptart; the user: the one "damage taken" rule and the per-type ones as well) Damage: what you take, and
+# what each kind of attack of yours deals. A monster's own spells and special attacks are not touched by the "you deal"
+# lines (server: scripts/globals/spells/damage_spell.lua, calculateSkillTypeMultiplier).
+S("main.PLAYER_DAMAGE_TAKEN_MULTIPLIER", "rules", "Damage", RATE, "Damage you and your squad take",
+  tip="Every hit, spell and breath that lands on you or a squad mate. 1x = the era, 0.5x = half, 2x = double. It sits "
+      "apart from the damage reduction on gear, so gear still counts in full. Bot players and trusts are not changed. (Poptart)")
+S("main.WEAPON_SKILL_POWER", "rules", "Damage", RATE, "You deal: weapon skills",
+  tip="Damage of your and your squad's weapon skills. 1x = the era.")
+S("main.ELEMENTAL_POWER", "rules", "Damage", RATE, "You deal: elemental magic",
+  tip="Damage of elemental magic (Fire, Stone, Thunder and the like) cast by you, your squad, trusts and pets. 1x = the era.")
+S("main.DARK_POWER", "rules", "Damage", RATE, "You deal: dark magic",
+  tip="Damage of dark magic (Bio, Drain and the like) cast by you, your squad, trusts and pets. 1x = the era.")
+S("main.DIVINE_POWER", "rules", "Damage", RATE, "You deal: divine magic",
+  tip="Damage of divine magic (Banish, Holy) cast by you, your squad, trusts and pets. 1x = the era.")
+S("main.NINJUTSU_POWER", "rules", "Damage", RATE, "You deal: ninjutsu",
+  tip="Damage of ninjutsu (Katon, Hyoton and the like) cast by you, your squad and trusts. 1x = the era.")
+S("main.BLUE_POWER", "rules", "Damage", RATE, "You deal: blue magic",
+  tip="Damage of blue magic. 1x = the era.")
 S("main.ENABLE_COP", "rules", "Expansions", FLAG, "Chains of Promathia")
 S("main.ENABLE_TOAU", "rules", "Expansions", FLAG, "Treasures of Aht Urhgan")
 S("main.ENABLE_WOTG", "rules", "Expansions", FLAG, "Wings of the Goddess",
@@ -111,6 +160,13 @@ S("main.ERA_RULES_WOTG", "rules", "Expansions", FLAG, "Keep Aht Urhgan-era balan
 S("map.DROP_RATE_MULTIPLIER", "rules", "Loot and gil", RATE, "Monster item drops")
 S("map.MOB_GIL_MULTIPLIER", "rules", "Loot and gil", RATE, "Gil from monsters")
 S("main.GIL_RATE", "rules", "Loot and gil", RATE, "Gil from quests")
+S("map.ALL_MOBS_GIL_BONUS", "rules", "Loot and gil", NUMBER, "Gil from every monster", step=1,
+  tip="Every monster drops this much gil for each of its levels, on top of what it carries anyway: at 5, a level 30 "
+      "monster drops 150 gil more. 0 = off, the era: only beastmen and a few others carry gil. (VRTRA)")
+S("main.SEAL_DROP_MINUTES", "rules", "Loot and gil", NUMBER, "Wait between seals (minutes)", step=1,
+  tip="After a Beastmen's or Kindred's Seal drops, your party gets no other for this many minutes. 5 = as it has "
+      "been here, 0 = no wait: every monster that can drop one may. Made for worlds without an auction house, "
+      "where seals are the way to spells and gear. (delukard)")
 S("main.AH_PRICE_RATE", "rules", "Loot and gil", RATE, "Auction house prices",
   tip="What things cost on the auction house: the simulator's listings and the bot players' own sales. 1x = the "
       "prices as they are, lower is cheaper, higher is dearer. A change restocks the auction house at your next PLAY.")
@@ -134,8 +190,9 @@ S("map.CRAFT_CHANCE_MULTIPLIER", "rules", "Skills and crafting", RATE, "Crafting
 S("map.CRAFT_HQ_CHANCE_MULTIPLIER", "rules", "Skills and crafting", RATE, "High-quality crafts")
 S("map.FISHING_SKILL_MULTIPLIER", "rules", "Skills and crafting", RATE, "Fishing skill-ups")
 S("map.FISHING_MINIGAME", "rules", "Skills and crafting", FLAG, "Fishing minigame",
-  tip="On = today's fishing, where you fight the fish on screen. Off = era fishing: no fight, the catch is decided as "
-      "soon as the fish bites (your skill still decides lost catches and broken lines or rods).")
+  tip="On = today's fishing, where you fight the fish on screen. Off = era fishing: the bite line tells you what is on "
+      "the hook, then you reel in (confirm) or let it go (cancel). The fishing screen still opens, but there is nothing "
+      "to win in it: your skill decides the catch, lost catches and broken lines or rods.")
 S("all_crafts", "rules", "Skills and crafting", SWITCH, "Every craft can reach 100",
   tip="Off = only one craft can reach 100, like the retail rule.")
 S("full_bags", "rules", "Comforts", SWITCH, "Full bags from the start",
@@ -154,12 +211,24 @@ S("main.NEW_CHARACTER_CUTSCENE", "rules", "Comforts", FLAG, "New-character cutsc
 S("main.CASKET_SHOW_CODE", "rules", "Comforts", FLAG, "Caskets tell you the code",
   tip="A locked treasure casket tells your party its two-digit combination when you touch it; enter it to open. "
       "Off = the era's guessing game.")
+S("main.GUILD_SHOPS_ALWAYS_OPEN", "rules", "Comforts", FLAG, "Guild shops always open",
+  tip="Guild shops have no closing hours and no weekly holiday. On by default. Off = the era: each guild shop keeps "
+      "its opening hours. (Dugahst)")
 S("main.GUILD_SHOPS_ALWAYS_STOCKED", "rules", "Comforts", FLAG, "Guild shops never run out",
   tip="Everything a guild shop stocks is back to its usual amount whenever you shop there, even right after you bought "
       "it out. Prices stay the game's own. Off = the era: stock refills a little each day.")
 S("map.FULL_MERITS", "rules", "Comforts", FLAG, "Full merits",
   tip="Every merit can be raised to its own maximum. Off = the era's group limits (for example only one attribute "
       "to 5/5, and only a few combat skills to 8/8).")
+S("map.AH_ANYWHERE", "rules", "Comforts", FLAG, "Auction house from anywhere",
+  tip="For the ahgo add-on (OPTIONS > Addons): its /ah command opens the auction house wherever you stand, and with "
+      "this on you can bid and sell there from any area. Off = the era: the auction house only answers in areas "
+      "that have one, so /ah works in the cities and nowhere else. (Velderen)")
+S("main.LAND_KINGS_TIMED", "rules", "Comforts", FLAG, "Land kings on a timer",
+  tip="Fafnir, Adamantoise and Behemoth. Off = as it has been here: you call one at its ??? with the item "
+      "(Honey Wine, Blue Pondweed, Beastly Shank). On = the era: the ??? is gone, a king appears by itself 21 to 24 "
+      "hours after the last one fell, and from the fourth kill in a row Nidhogg, Aspidochelone or King Behemoth "
+      "can come in its place. The hours count while the servers are off too. (sparkiie)")
 S("map.MAX_MERIT_POINTS", "rules", "Comforts", NUMBER, "Merit points you can hold", step=5,
   tip="30 = the default here (the earliest era held 10). Up to 99.")
 
@@ -216,7 +285,7 @@ S("main.SPARKS_RATE", "era", "Out-of-era content", RATE, "RoE sparks", dev=True,
 # which sections sit in which column of a page, left to right
 LAYOUT = {
     "world": (("Town crowds", "Field parties"), ("Bot players", "Auction house", "Conquest"), ("AI chat", "Seasonal events")),
-    "rules": (("Experience and fame", "Notorious monsters", "Expansions"), ("Loot and gil", "Travel", "Squad"),
+    "rules": (("Experience and fame", "Notorious monsters", "Battle", "Damage"), ("Loot and gil", "Travel", "Squad", "Expansions"),
               ("Skills and crafting", "Comforts", "Tetra Master")),
     "squad": (("Squad rules",),),
     "era": (("Era",), ("Later expansions",), ("Out-of-era content",)),
@@ -257,9 +326,13 @@ def sections(page, player=False):
     return columns
 
 
-def preset_now(core, rates, names):
-    """Which of the named rate presets the rates match exactly (the first one), or None."""
+def preset_now(core, rates, names, player=False):
+    """Which of the named rate presets the rates match exactly (the first one), or None.
+    player: a player install keeps the hidden options at their era values (core.lock_player_rates), so its rates are
+    compared with the preset after the same lock. (2026-11-22, EyalRA: Relaxed solo and Fast were never shown as
+    SELECTED there, and counted as "your own rates", because both presets set hidden options.)"""
     for name in names:
-        if core.apply_preset(rates, name) == rates:
+        want = core.apply_preset(rates, name)
+        if (core.lock_player_rates(want) if player else want) == rates:
             return name
     return None

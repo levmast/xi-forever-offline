@@ -7,6 +7,10 @@
   3. Chariot Band: its description (+75%, 720 min, 4000), 3 charges and a 15-hour recast (client-patches\\chariot_band.json).
   4. Item stacks: today's stack sizes or the era's, to match the server (the "Modern item stacks" switch; stack_mode.py).
   5. Forever Beta Shirt (item 25725): its look (body model 399) and its item entry in ROM\\286\\73.DAT (forever_beta_shirt.py).
+  6. Spells on squad mates: the party-only spells (Regen, Refresh, Erase, Curaga, Phalanx II, the Etudes, Wild Carrot,
+     Magic Fruit) and job abilities (Cover, Accomplice, Collaborator, Martyr, Devotion, Shikikoyo, Healing Waltz,
+     Healing Ruby) get the "NPC" target, so the game lets you aim them at a squad mate (the game's spell and ability
+     tables in ROM\\118\\114.DAT; client-patches\\spell_targets.json).
 
 Every step checks first and only writes what is missing, so this runs at the end of first-run setup and again on
 every PLAY of a player install (an update or a reinstalled era pack is caught the next time). A step that cannot be
@@ -190,14 +194,143 @@ def forever_beta_shirt(kit, game, log=print):
     return fbs.apply(game, log=log)
 
 
+# ----- 6. Spells you can aim at a squad mate -----
+# (2026-11-22, Yache: Wild Carrot and Magic Fruit cannot be aimed at a squad mate) The server accepts them; the game
+# itself refuses the target. To the game a squad mate is an NPC in your party, like a Trust, and it only offers one as
+# a target for spells whose own target list includes NPCs (Cure, Protect, Haste do; these two are party-only).
+# The spell table is the "mgc_" part of ROM\118\114.DAT: 100 bytes a spell, in spell id order. Each entry is stored
+# with every byte turned by a few bits; how many is worked out from three bytes that are stored as they are.
+SPELL_FILE = ("ROM", "118", "114.DAT")
+SPELL_ENTRY = 100
+SPELL_TARGETS_AT = 6          # the low byte of the entry's target list
+TARGET_NPC = 0x10
+_BITS = [bin(n).count("1") for n in range(256)]
+
+
+def _spell_turn(entry):
+    """How many bits each byte of this entry is turned by (bytes 2, 11 and 12 are stored unturned and decide it)."""
+    return (7, 1, 6, 2, 5)[abs(_BITS[entry[2]] - _BITS[entry[11]] + _BITS[entry[12]]) % 5]
+
+
+def _turn_right(value, bits):
+    return ((value >> bits) | (value << (8 - bits))) & 0xFF
+
+
+def _turn_left(value, bits):
+    return ((value << bits) | (value >> (8 - bits))) & 0xFF
+
+
+# the two tables of that file the launcher changes: (the part's name, bytes an entry, where the low byte of its target
+# list is, what a listed id has to be raised by to get its entry)
+_TARGET_TABLES = {"spells": (b"mgc_", SPELL_ENTRY, SPELL_TARGETS_AT, 0),
+                  "abilities": (b"comm", 48, 10, 512)}        # (2026-11-22) job abilities: the same idea, their own table
+
+
+def _game_table(data, name, entry_size):
+    """(where the first entry starts, how many entries) of one table in the game's file, or None."""
+    at = 0
+    while at + 16 <= len(data):
+        packed = int.from_bytes(data[at + 4:at + 8], "little")
+        size = ((packed >> 7) & 0x7FFFF) * 16
+        if size <= 0 or at + size > len(data):
+            return None
+        if bytes(data[at:at + 4]) == name:
+            return at + 16, (size - 16) // entry_size
+        at += size
+    return None
+
+
+def _table_field(data, start, entry_size, index, offset):
+    """A byte of an entry as the game reads it, after checking the entry really is the one with that number."""
+    at = start + index * entry_size
+    entry = data[at:at + entry_size]
+    turn = _spell_turn(entry)
+    if _turn_right(entry[0], turn) | (_turn_right(entry[1], turn) << 8) != index:
+        raise ValueError("not the expected table")
+    return _turn_right(entry[offset], turn), turn
+
+
+def _spell_table(data):
+    return _game_table(data, b"mgc_", SPELL_ENTRY)
+
+
+def _spell_field(data, start, spell_id, offset):
+    return _table_field(data, start, SPELL_ENTRY, spell_id, offset)
+
+
+def spell_targets(kit, game, log=print):
+    """Adds the NPC target to the listed spells and job abilities. Each one is checked by itself: what is already done
+    is skipped, what does not have the target list we know is left alone."""
+    with open(os.path.join(kit, "client-patches", "spell_targets.json"), encoding="utf-8") as handle:
+        listed = json.load(handle)
+    path = os.path.join(game, *SPELL_FILE)
+    with open(path, "rb") as handle:
+        data = bytearray(handle.read())
+    unexpected = "Spells on squad mates: the game's spell file is not the expected one; it was left as it is."
+    changes, done, odd = [], 0, 0
+    for key, (part, entry_size, targets_at, raise_by) in _TARGET_TABLES.items():
+        wanted = listed.get(key) or []
+        if not wanted:
+            continue
+        table = _game_table(data, part, entry_size)
+        if table is None:
+            if key == "spells":
+                return unexpected
+            odd += len(wanted)
+            continue
+        start, count = table
+        try:
+            _table_field(data, start, entry_size, 1, targets_at)      # (the table reads as one of the game's at all)
+        except (ValueError, IndexError):
+            if key == "spells":
+                return unexpected
+            odd += len(wanted)
+            continue
+        for one in wanted:
+            index = one["id"] + raise_by
+            try:
+                if index >= count:
+                    raise IndexError(index)
+                targets, turn = _table_field(data, start, entry_size, index, targets_at)
+            except (ValueError, IndexError):
+                if key == "spells":
+                    return unexpected
+                odd += 1
+                continue
+            if targets == one["targets"] | TARGET_NPC:
+                done += 1                                              # already done
+            elif targets != one["targets"]:
+                odd += 1                                               # not the target list we know: it stays as it is
+            else:
+                changes.append((start + index * entry_size + targets_at, _turn_left(targets | TARGET_NPC, turn), one["name"]))
+    if not changes:
+        return None if done else unexpected
+    keep = os.path.join(kit, "backups", "spell-targets-dat", "114.DAT.original")
+    if not os.path.exists(keep):
+        os.makedirs(os.path.dirname(keep), exist_ok=True)
+        with open(keep, "wb") as handle:
+            handle.write(data)
+    for at, value, _name in changes:
+        data[at] = value
+    tmp = path + ".st-tmp"
+    with open(tmp, "wb") as handle:
+        handle.write(data)
+    os.replace(tmp, path)
+    names = [name for _at, _value, name in changes]
+    shown = " and ".join(names) if len(names) <= 3 else "%s and %d more" % (", ".join(names[:3]), len(names) - 3)
+    return "Spells on squad mates: %s can now be aimed at a squad mate%s." % (
+        shown, (" (%d left as they were)" % odd) if odd else "")
+
+
 def apply_all(kit, game, server, log=print):
-    """Runs the five steps; returns the messages. Never raises."""
+    """Runs the six steps; returns the messages. Never raises."""
     messages = []
     for name, step in (("Home Points", lambda: homepoints(kit, game, server, log)),
                        ("Crystal Boy", lambda: crystalboy(kit, game, log)),
                        ("Chariot Band", lambda: chariot_band(kit, game, log)),
                        ("Item stacks", lambda: item_stacks(kit, game, server, log)),
-                       ("Forever Beta Shirt", lambda: forever_beta_shirt(kit, game, log))):
+                       ("Forever Beta Shirt", lambda: forever_beta_shirt(kit, game, log)),
+                       ("Spells on squad mates", lambda: spell_targets(kit, game, log))):
         try:
             message = step()
         except PermissionError:

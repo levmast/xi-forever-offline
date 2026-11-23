@@ -36,7 +36,7 @@ $fail = 0
 function Write-Result($name, $code) { if ($code -ne 0) { $script:fail++ }; '{0,-60} {1}' -f $name, $(if ($code -eq 0) { 'OK' } else { "FAIL ($code)" }) }
 
 '== syntax (luac -p, luajit -bl)'
-$files = @('squad.lua', 'gambits_squad.lua', 'squad_rulesets.lua', 'squad_rulesets_store.lua', 'squad_ability_rules.lua', 'squad_ja_jobs_data.lua', 'squad_spell_jobs_data.lua') | ForEach-Object { Join-Path $lua $_ }
+$files = @('squad.lua', 'gambits_squad.lua', 'squad_rulesets.lua', 'squad_rulesets_store.lua', 'squad_ability_rules.lua', 'squad_ja_jobs_data.lua', 'squad_spell_jobs_data.lua', 'squad_jobs.lua') | ForEach-Object { Join-Path $lua $_ }
 $files += Get-ChildItem $add -Filter *.lua | ForEach-Object FullName
 foreach ($f in $files) {
     & $LuacExe -p $f; $a = $LASTEXITCODE
@@ -62,7 +62,8 @@ try {
             @{ n = 'squad.lua integration (test_squad_upstream_integration.lua)'; a = @('test_squad_upstream_integration.lua', $lua, $gl, $ja, $orig, $Work) + $data },
             @{ n = 'WAR/PLD/RDM/WS batch (test_gambits_ws_batch.lua)';  a = @('test_gambits_ws_batch.lua', $lua, $gl, $ja, $add, $Work, $Server) },
             @{ n = 'job expansion (test_gambits_jobexp.lua)';           a = @('test_gambits_jobexp.lua', $lua, $gl, $ja, $add, $Work, $Server) },
-            @{ n = 'UI/UX 0.3.1 (test_gambits_uiux.lua)';               a = @('test_gambits_uiux.lua', $lua, $gl, $ja, $add, $Work, $Server) }
+            @{ n = 'UI/UX 0.3.1 (test_gambits_uiux.lua)';               a = @('test_gambits_uiux.lua', $lua, $gl, $ja, $add, $Work, $Server) },
+            @{ n = 'song tiers + import/export 0.3.3 (test_gambits_bard_io.lua)'; a = @('test_gambits_bard_io.lua', $lua, $gl, $ja, $add, $Work, $Server) }
         )
         foreach ($s in $suites) {
             $out = & $run.exe @pre @($s.a) 2>&1 | ForEach-Object { "$_" }

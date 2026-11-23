@@ -1,0 +1,178 @@
+{
+  "about": "Spells a player can aim at a squad mate. To the game a squad mate is an NPC in your party (like a Trust), and it only lets you pick one as the target of a spell whose own target list includes NPCs. Cure, Protect, Shell, Haste and the -na spells have that; the party-only spells here do not. The launcher adds the NPC target to each spell listed, in the game's spell table (the mgc_ part of ROM/118/114.DAT). 'targets' is what the spell has before the change (1 = yourself, 4 = party member); a spell with any other value is left alone. Yourself and party members stay valid targets: the NPC target is only added. Left out on purpose: Sneak, Invisible, Deodorize and Warp II (no use on a mate), the songs that need Pianissimo, and spells later than the era.",
+  "spells": [
+    {
+      "id": 578,
+      "name": "Wild Carrot",
+      "targets": 5
+    },
+    {
+      "id": 593,
+      "name": "Magic Fruit",
+      "targets": 5
+    },
+    {
+      "id": 108,
+      "name": "Regen",
+      "targets": 5
+    },
+    {
+      "id": 110,
+      "name": "Regen II",
+      "targets": 5
+    },
+    {
+      "id": 111,
+      "name": "Regen III",
+      "targets": 5
+    },
+    {
+      "id": 109,
+      "name": "Refresh",
+      "targets": 5
+    },
+    {
+      "id": 143,
+      "name": "Erase",
+      "targets": 5
+    },
+    {
+      "id": 107,
+      "name": "Phalanx II",
+      "targets": 5
+    },
+    {
+      "id": 7,
+      "name": "Curaga",
+      "targets": 5
+    },
+    {
+      "id": 8,
+      "name": "Curaga II",
+      "targets": 5
+    },
+    {
+      "id": 9,
+      "name": "Curaga III",
+      "targets": 5
+    },
+    {
+      "id": 10,
+      "name": "Curaga IV",
+      "targets": 5
+    },
+    {
+      "id": 424,
+      "name": "Sinewy Etude",
+      "targets": 5
+    },
+    {
+      "id": 425,
+      "name": "Dextrous Etude",
+      "targets": 5
+    },
+    {
+      "id": 426,
+      "name": "Vivacious Etude",
+      "targets": 5
+    },
+    {
+      "id": 427,
+      "name": "Quick Etude",
+      "targets": 5
+    },
+    {
+      "id": 428,
+      "name": "Learned Etude",
+      "targets": 5
+    },
+    {
+      "id": 429,
+      "name": "Spirited Etude",
+      "targets": 5
+    },
+    {
+      "id": 430,
+      "name": "Enchanting Etude",
+      "targets": 5
+    },
+    {
+      "id": 431,
+      "name": "Herculean Etude",
+      "targets": 5
+    },
+    {
+      "id": 432,
+      "name": "Uncanny Etude",
+      "targets": 5
+    },
+    {
+      "id": 433,
+      "name": "Vital Etude",
+      "targets": 5
+    },
+    {
+      "id": 434,
+      "name": "Swift Etude",
+      "targets": 5
+    },
+    {
+      "id": 435,
+      "name": "Sage Etude",
+      "targets": 5
+    },
+    {
+      "id": 436,
+      "name": "Logical Etude",
+      "targets": 5
+    },
+    {
+      "id": 437,
+      "name": "Bewitching Etude",
+      "targets": 5
+    }
+  ],
+  "about_abilities": "Job abilities work the same way, in the comm part of the same file (48 bytes an ability; a job ability's entry is its id + 512). 'targets' as for spells: 4 = party member, 5 = yourself or a party member. Cover, Accomplice and Collaborator also need the server to let a squad mate through (server: modules/custom/late/squad_abilities.lua, and battleutils.cpp for Cover). Curing Waltz already has the NPC target. Left out: Divine Waltz (cast around yourself) and abilities later than the era.",
+  "abilities": [
+    {
+      "id": 79,
+      "name": "Cover",
+      "targets": 5
+    },
+    {
+      "id": 84,
+      "name": "Accomplice",
+      "targets": 5
+    },
+    {
+      "id": 236,
+      "name": "Collaborator",
+      "targets": 5
+    },
+    {
+      "id": 153,
+      "name": "Martyr",
+      "targets": 4
+    },
+    {
+      "id": 154,
+      "name": "Devotion",
+      "targets": 4
+    },
+    {
+      "id": 167,
+      "name": "Shikikoyo",
+      "targets": 4
+    },
+    {
+      "id": 194,
+      "name": "Healing Waltz",
+      "targets": 5
+    },
+    {
+      "id": 512,
+      "name": "Healing Ruby",
+      "targets": 5
+    }
+  ]
+}

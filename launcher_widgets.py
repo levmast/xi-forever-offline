@@ -11,6 +11,11 @@ UI_FONT, MONO_FONT = core.ui_fonts()
 BG, PANEL, PANEL2, FG, DIM = "#0a1118", "#101c28", "#162634", "#e9f1f5", "#8aa0ad"
 BORDER, LINE, OFF = "#1d3445", "#2a4358", "#5c7488"
 GOLD, GOLD_LIT, GOLD_DIM, PARCH = "#e6be64", "#f3d58c", "#6b5a2e", "#efe6d0"
+try:        # a limited-time look (a dated .json in assets\press) stands in for these colours while it is in date: launcher_theme.py
+    import launcher_theme
+    globals().update(launcher_theme.colours(globals()))
+except Exception:
+    pass
 HEAD_FONT = ("Georgia", 20, "bold")      # page titles; head_font() swaps in the nearest serif this PC has
 
 

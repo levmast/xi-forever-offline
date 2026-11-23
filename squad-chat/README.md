@@ -1,6 +1,6 @@
 # Squad chat (local Ollama sidecar)
 
-This folder lets your squad mates answer in party chat, with their own backstories and a memory of the adventure. It runs on this PC only; nothing is sent to the internet.
+This folder lets your squad mates answer in party chat, with their own backstories and a memory of the adventure. It runs on this PC only; nothing is sent to the internet, unless you switch on Wiki answers yourself (see below; off by default).
 
 ## Normal use
 
@@ -15,6 +15,7 @@ In game:
 - While grouped and not fighting, one of them may also say something unprompted every few minutes (see `idle` in `config.json`). Often that line is a memory: the mate brings up something from their own adventure journal, in one sentence, instead of announcing it as a recollection. See `recall` in `config.json`: `chance` is how often an unprompted line is a memory rather than idle filler, `min_seconds` is the gap between memories, and `repeat_after` is how long before the same memory can come up again. No two mates open with the same memory back to back.
 - A mate only remembers what is in their journal. It fills on zone changes, level-ups, job changes, notorious-monster kills, deaths, and `/p !note`, so early on it can be empty; until there are at least `recall.min_events` entries, memories come from a true detail in the mate's own sheet (a hook) instead. `/p !note ...` is the direct way to plant something you want them to bring up later.
 - `!squad chat on` / `!squad chat off` turns replies, crosstalk, and idle chatter on or off.
+- Wiki answers (off by default): `/p !wiki on` lets your mates look a question up on the Phoenix wiki (wiki.phoenix-xi.com, the server this game is built from) and answer from that page only, so "how many necklaces does Nanaa Mihgo want?" gets the real answer instead of a guess. Only questions are looked up, only there, and then the words of your question go to that website. `/p !wiki off` turns it off, `/p !wiki` says which it is. The switch is kept in `config.json` (`wiki.enabled`); `logs/sidecar.log` shows each lookup as a `wiki:` line.
 - `!squad chat test` makes the first mate who is out say one direct line in party chat and reports how many lines the sidecar has written. If that line does not appear, the problem is the game's chat display/filter, not the AI.
 - `/p !note <text>` adds a line to every mate's adventure journal while a mate is out and chat is on. Use it for quest promises, plans, or anything you want them to remember: `/p !note We promised the gate guard we would check the tomb.`
 - Their journal fills in on its own with zones, level-ups, job changes, notorious-monster kills, and deaths. Every 8 new journal entries, the sidecar folds the oldest ones into a short long-term memory, so a long session does not push early events out. See `summary_every` in `config.json`.

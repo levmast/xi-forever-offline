@@ -56,11 +56,26 @@ The launcher, tools, server modules (squad, bots, crowds, caskets, era experienc
 and the Gambits, GambitsV2, Crystal Boy, followme, servermenu and squadpanel addons were written for this project.
 Gambits began as the TitanGambits engine and was brought here by its author.
 
+## Music
+All of the launcher's music was made for XI: Forever Offline by **JØ (jnull)**, our Head of Music.
+- "A Place to Return": the launcher's opening theme (`assets/press/default.mp3`).
+- "Beyond the Veil": the 8-Bit theme's song (`assets/press/beyond_the_veil.mp3`).
+- "No Signal, All Vibes": the Vaporwave theme's song.
+- The Vaporwave theme's opener: a short piece that plays the first time the launcher opens, before "No Signal, All Vibes"
+  takes over.
+
+The songs were made with Suno. `assets/press/music.json` holds the same list for the launcher: OPTIONS > Theme names the
+song that plays and who made it.
+
 ## Contributors
 - **Levi Masterson ([levmast](https://github.com/levmast))**: the game switch fix for installs made with Square Enix's
   official installer (Windows Installer descriptors lifted while the game runs, so the copy's DLLs load).
 - **[wildcabbagepatch](https://github.com/wildcabbagepatch)**: GambitsV2, the in-game Squad Rule Set editor, and its
   server side (squad Rule Sets, job ability rules for squad mates, the `!gsq` command).
+- **JØ (jnull)**, Head of Music: all of the launcher's music (see Music, above).
+- **Records of Vana'diel** (a pack of FINAL FANTASY XI characters drawn as 8 / 16-bit sprites): the characters on the
+  buttons and the title banner of the launcher's 8-Bit theme (`assets/press/8bit-ui`; the sprites used are in
+  `art-src/8bit-sprites`).
 
 ## Tetra Master
 - **[Nalfey](https://github.com/Nalfey/TetraMaster)**: all the card art, character portraits, board graphics, coin,
@@ -69,6 +84,9 @@ Gambits began as the TitanGambits engine and was brought here by its author.
 - Cinzel font: Natanael Gama (SIL Open Font License).
 - Kanit font (the lettering on the XIFO banner): Cadson Demak (SIL Open Font License).
 - Righteous font (the neon sign on the XIFO banner): Astigmatic (SIL Open Font License).
+- DotGothic16 font (the pixel and Japanese lettering on the vaporwave banners): Fontworks (SIL Open Font License).
+- Galmuri11 font (the launcher's lettering in the 8-Bit theme; `assets/press/fonts` holds a Latin-only cut of its Regular
+  and Bold, with the licence): Lee Minseo (quiple) (SIL Open Font License).
 
 ## Crystal Boy mini games
 

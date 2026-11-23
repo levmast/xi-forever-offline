@@ -50,6 +50,11 @@ KIT_REPO_NAME = "Hurami89/xi-forever-offline"
 BG, PANEL, PANEL2, FG, DIM = "#0a1118", "#101c28", "#162634", "#e9f1f5", "#8aa0ad"
 BORDER, GOLD = "#1d3445", "#e6be64"
 GREEN, RED, GREY, ACCENT = "#3ecf6e", "#e5534b", "#44525d", "#35c4e0"
+try:        # a limited-time look (a dated .json in assets\press) stands in for these colours while it is in date: launcher_theme.py
+    import launcher_theme
+    globals().update(launcher_theme.colours(globals()))
+except Exception:
+    pass
 ASSETS = os.path.join(HERE, "assets")
 VERSION = "1.3"
 
@@ -67,6 +72,8 @@ NAV_BUTTONS = (("home", "HOME", ("Play",)), ("squad", "SQUADS", ("Squad",)), ("c
 PRESS_ANCHOR = 0.38      # press pictures are wider than the frame is tall: keep the part 38% of the way down (sky and skyline are above, people below)
 PRESS_NOTE = ""
 ONCE_TAG = "__once"      # a press picture with this in its name (xifo__once.png) is a one-time banner: see load_once
+UNTIL_TAG = "__until-"   # ... and one with __until-2026-12-02 in its name is a limited-time banner: see press_names
+THEME_TAG = "__theme-"   # ... and one with __theme-8bit in its name is a banner of that theme: see press_names
 
 
 def fit_picture(img, width, height, anchor=0.5):
@@ -83,10 +90,75 @@ def fit_picture(img, width, height, anchor=0.5):
 def press_anchor(name):
     """A picture called  castle__top.jpg  keeps its top, castle__bottom.jpg its bottom, castle__center.jpg its middle."""
     stem = os.path.splitext(name)[0].lower().replace(ONCE_TAG, "")
+    cut = stem.find(UNTIL_TAG)
+    if cut >= 0:
+        stem = stem[:cut] + stem[cut + len(UNTIL_TAG) + 10:]
+    cut = stem.find(THEME_TAG)
+    if cut >= 0:
+        end = stem.find("__", cut + len(THEME_TAG))
+        stem = stem[:cut] + (stem[end:] if end >= 0 else "")
     for tag, value in (("__top", 0.0), ("__center", 0.5), ("__middle", 0.5), ("__bottom", 1.0)):
         if stem.endswith(tag):
             return value
     return PRESS_ANCHOR
+
+
+def press_today():
+    """Today on this PC, written 2026-12-02 (a function of its own so the tests can pick the day)."""
+    return time.strftime("%Y-%m-%d")
+
+
+def press_until(name):
+    """The last day a limited-time picture is shown: the date after __until- in its name (party__until-2026-12-02.jpg). "" for a usual
+    picture, "0" (always over) when the date cannot be read."""
+    low = name.lower()
+    cut = low.find(UNTIL_TAG)
+    if cut < 0:
+        return ""
+    day = low[cut + len(UNTIL_TAG):cut + len(UNTIL_TAG) + 10]
+    return day if len(day) == 10 and day[4] == "-" and day[7] == "-" and (day[:4] + day[5:7] + day[8:]).isdigit() else "0"
+
+
+def press_limited_on():
+    """False when a limited-time theme is in date and this PC picked Default or another theme (OPTIONS > Theme): its banners rest too."""
+    try:
+        import launcher_theme
+        return not launcher_theme.switched_off()
+    except Exception:
+        return True
+
+
+def press_theme(name):
+    """The theme a picture belongs to: the word after __theme- in its name (title__theme-8bit.png -> "8bit"); "" for the others."""
+    low = os.path.splitext(name)[0].lower()
+    cut = low.find(THEME_TAG)
+    return low[cut + len(THEME_TAG):].split("__", 1)[0] if cut >= 0 else ""
+
+
+def press_worn():
+    """The theme the launcher wears (OPTIONS > Theme): its short name, "" for the launcher's own look."""
+    try:
+        import launcher_theme
+        return launcher_theme.worn()
+    except Exception:
+        return ""
+
+
+def press_names(names):
+    """Which of the pictures in assets\\press are in the rotation today. Limited-time pictures (__until-DATE in the name) that are still in
+    date take the place of the usual ones: while there is at least one, only they are shown, and the day after the date the usual ones are
+    back by themselves. A limited-time picture that is over is never shown; one-time pictures (__once) are never in the rotation.
+    A theme's own pictures (__theme-KEY in the name) come before all of that: while that theme is worn only they are shown, and they are
+    never shown with any other look."""
+    names = sorted(n for n in names if n.lower().endswith((".png", ".jpg", ".jpeg")) and ONCE_TAG not in n.lower())
+    today = press_today()
+    worn = press_worn()
+    own = [n for n in names if worn and press_theme(n) == worn and (not press_until(n) or press_until(n) >= today)]
+    if own:
+        return own
+    names = [n for n in names if not press_theme(n)]
+    limited = [n for n in names if press_until(n) >= today] if press_limited_on() else []
+    return limited or [n for n in names if not press_until(n)]
 
 
 def load_press():
@@ -95,7 +167,7 @@ def load_press():
     global PRESS_NOTE
     folder = os.path.join(ASSETS, "press")
     try:
-        names = sorted(n for n in os.listdir(folder) if n.lower().endswith((".png", ".jpg", ".jpeg")) and ONCE_TAG not in n.lower())
+        names = press_names(os.listdir(folder))
     except OSError:
         return []
     if not names:
@@ -122,7 +194,8 @@ def load_once(cfg):
     seen = {str(s).lower() for s in (cfg.get("banners_seen") or [])}
     try:
         names = sorted(n for n in os.listdir(folder)
-                       if n.lower().endswith((".png", ".jpg", ".jpeg")) and ONCE_TAG in n.lower() and n.lower() not in seen)
+                       if n.lower().endswith((".png", ".jpg", ".jpeg")) and ONCE_TAG in n.lower() and n.lower() not in seen
+                       and (not press_until(n) or press_until(n) >= press_today()))
     except OSError:
         return None, None
     for name in names:
@@ -361,6 +434,10 @@ class CheckList(tk.Frame):
             if extra:
                 tk.Label(head, text=extra, bg=PANEL, fg=DIM, font=(UI_FONT, 9)).pack(side="left", padx=(8, 0))
             tk.Label(head, text=origin, bg=PANEL, fg=self.TAG_COLORS.get(origin, DIM), font=(UI_FONT, 8, "bold")).pack(side="left", padx=(10, 0))
+            if core.can_remove(self.kind, n, origin):       # (lilibun, 2026-11-22) what you downloaded or added can go again
+                gone = tk.Label(head, text="Remove", bg=PANEL, fg=DIM, font=(UI_FONT, 8, "underline"), cursor="hand2")
+                gone.pack(side="left", padx=(10, 0))
+                gone.bind("<Button-1>", lambda e, n=n, o=origin: self.remove(n, o))
             if info["desc"]:
                 tk.Label(row, text=info["desc"], bg=PANEL, fg=DIM, font=(UI_FONT, 9), wraplength=720, justify="left",
                          anchor="w").grid(row=1, column=1, sticky="w", pady=(0, 4))
@@ -375,6 +452,22 @@ class CheckList(tk.Frame):
             self.scripts.set(self.kind, name, var.get())
         except Exception as e:
             messagebox.showerror("Could not save", str(e))
+        self.reload()
+
+    def remove(self, name, origin):
+        """(lilibun, 2026-11-22) Takes an addon or plugin you downloaded or added out of Ashita again: its folder (or
+        .dll) and its load line in every script. Its settings stay. Ashita's own addons and ours have no Remove."""
+        ashita = self.scripts.ashita
+        size = core.size_text(core.path_size(core.item_path(ashita, self.kind, name)))
+        again = ("You can install it again from this page." if origin == "download"
+                 else "To get it back you need your own copy of it.")
+        if not messagebox.askyesno("Remove " + name, f"Remove the {self.kind} {name} from Ashita ({size})?\n\n"
+                                                     f"Its settings are kept. {again}"):
+            return
+        try:
+            core.remove_item(ashita, HERE, self.kind, name, origin)
+        except Exception as e:
+            messagebox.showerror("Could not remove", str(e))
         self.reload()
 
 
@@ -452,7 +545,8 @@ class ItemPicker(tk.Toplevel):
         if locked_only and not self.rows and not self.search.get():
             self.info.configure(text="No unlocked items for this slot yet. In game, use  !squad give <item>  to add items to your squad's collection.")
         else:
-            self.info.configure(text=f"{len(self.rows)} item(s)" + (" (showing the first 300)" if len(self.rows) >= 300 else ""))
+            self.info.configure(text=f"{len(self.rows)} item(s)" + (" (the highest levels; type part of a name to find others)"
+                                                                 if len(self.rows) >= sq.SEARCH_LIMIT else ""))
         self.preview_item_id = None
         self.stats.configure(text="")
         self.preview_name.configure(text="Select an item to see its icon.", fg=DIM)
@@ -997,16 +1091,11 @@ class SquadTab(tk.Frame):
         self.mode_box = ttk.Combobox(f, values=sq.MODES, state="readonly", width=12)
         self.mode_box.pack(side="left")
         tk.Button(f, text="Apply", command=self.apply_behavior, bg=PANEL, fg=FG, relief="flat", padx=14).pack(side="left", padx=10)
-        tk.Label(page, text=("tank: Provoke, Flash, own buffs; heals only the badly hurt.\n"
-                             "damage: attacks and nukes; heals only the badly hurt.\n"
-                             "healer: cures, status removal and party buffs; no nukes.\n"
-                             "support: buffs, weakening spells and cures; no nukes.\n"
-                             "auto: what the job normally does.\n\n"
-                             "aggressive: heals earlier and holds nothing back.\n"
-                             "conserve: heals later and keeps 40% mana in reserve."),
-                 bg=BG, fg=DIM, justify="left").pack(anchor="w", padx=10, pady=(8, 4))
-        tk.Label(page, text="Applies the next time you call the mate. Change it with the game closed here, or in the game (the Squad panel, /sq).",
-                 bg=BG, fg=DIM, wraplength=470, justify="left").pack(anchor="w", padx=10)
+        tk.Label(page, text=sq.behavior_help_text(),
+                 bg=BG, fg=DIM, wraplength=520, justify="left").pack(anchor="w", padx=10, pady=(8, 4))
+        tk.Label(page, text="Applies the next time you call the mate. Change it with the game closed here, or in the game (the Squad panel, /sq). "
+                            + sq.ROLE_FOOTER,
+                 bg=BG, fg=DIM, wraplength=520, justify="left").pack(anchor="w", padx=10)
         tk.Button(page, text="Edit job rules...", command=self.open_rules, bg=ACCENT, fg="white", relief="flat", padx=14, pady=4).pack(anchor="w", padx=10, pady=(12, 2))
         tk.Label(page, text="Job rules set how every mate of a job behaves by default. To choose your own spells, targets and "
                             "conditions for one mate, use Gambits instead (type /gambits in the game).",
@@ -1320,7 +1409,9 @@ class SquadTab(tk.Frame):
         if sub:
             text += f"  /  {sq.JOBS[sub - 1]} {sub_level}"
         self.summary.configure(text=text)
-        for job in range(1, 16):
+        # (2026-11-22, krazy: "Cor not gaining EXP": his Corsair levelled in game and this tab kept showing 1) the list
+        # stopped at Summoner: Blue Mage, Corsair and Puppetmaster (16-18) never got their level and exp filled in
+        for job in range(1, len(sq.JOBS) + 1):
             level, exp = m["jobs"].get(job, (1, 0))
             locked = job not in self.unlocked and job not in m["jobs"]
             self.level_vars[job].set(level)
@@ -1499,7 +1590,7 @@ class SquadTab(tk.Frame):
         if self.player:
             return
         def go():
-            for job in range(1, 16):
+            for job in range(1, len(sq.JOBS) + 1):      # (was 1-15: the three Aht Urhgan jobs were never saved)
                 if job not in self.unlocked and job not in self.mate["jobs"]:
                     continue
                 level = int(self.level_vars[job].get())
@@ -2515,6 +2606,69 @@ class UpdatesTab(tk.Frame):
         tk.Button(box, text="Change game folder...", command=self.change_game_folder, bg=PANEL2, fg=FG, relief="flat", padx=12, pady=5,
                   activebackground=BORDER, activeforeground=FG).pack(anchor="w", padx=12, pady=(0, 12))
 
+    # (2026-11-22, Sunie: "restart installation") the first-time setup again, on this install: other folders, or
+    # whatever is missing filled in. The world is never touched (launcher_setup.run_setup, again=...).
+    def build_setup_again(self):
+        box = tk.Frame(self, bg=PANEL, highlightbackground=BORDER, highlightthickness=1)
+        box.pack(fill="x", padx=14, pady=(0, 6))
+        tk.Label(box, text="First-time setup", bg=PANEL, fg=FG, font=(UI_FONT, 12, "bold")).pack(anchor="w", padx=12, pady=(10, 2))
+        tk.Label(box, text="Point the launcher at other folders (game, Ashita, server) or let setup fill in what is missing, "
+                           "without starting over. Your world, characters, squad and settings are kept.",
+                 bg=PANEL, fg=DIM, wraplength=880, justify="left", font=(UI_FONT, 9)).pack(anchor="w", padx=12, pady=(2, 4))
+        tk.Button(box, text="Run setup again...", command=self.setup_again, bg=PANEL2, fg=FG, relief="flat", padx=12, pady=5,
+                  activebackground=BORDER, activeforeground=FG).pack(anchor="w", padx=12, pady=(0, 12))
+
+    def build_clear_ah(self):
+        """(delukard, 2026-11-22) An empty auction house for a world that plays without one: switching the simulator
+        off only stops new stock, what it listed before stays."""
+        box = tk.Frame(self, bg=PANEL, highlightbackground=BORDER, highlightthickness=1)
+        box.pack(fill="x", padx=14, pady=(0, 6))
+        tk.Label(box, text="Auction house", bg=PANEL, fg=FG, font=(UI_FONT, 12, "bold")).pack(anchor="w", padx=12, pady=(10, 2))
+        tk.Label(box, text="Take everything the auction house simulator listed off the auction house, for a world that plays "
+                           "without one. What you or a bot player listed stays, and so does the sales history.",
+                 bg=PANEL, fg=DIM, wraplength=880, justify="left", font=(UI_FONT, 9)).pack(anchor="w", padx=12, pady=(2, 4))
+        tk.Button(box, text="Clear the auction house...", command=self.clear_auction_house, bg=PANEL2, fg=FG, relief="flat",
+                  padx=12, pady=5, activebackground=BORDER, activeforeground=FG).pack(anchor="w", padx=12, pady=(0, 12))
+
+    def clear_auction_house(self):
+        title = "Clear the auction house"
+        on = bool(self.app.rates.get("ah_sim", self.app.cfg.get("ah_sim", False)))
+        text = "Take every listing of the auction house simulator off the auction house?\n\nWhat you listed yourself stays."
+        if on:
+            text += ("\n\nThe simulator is switched ON (WORLD > Auction house), so it stocks the auction house again at "
+                     "the next PLAY. Switch it off first if you want it to stay empty.")
+        if not messagebox.askyesno(title, text, parent=self):
+            return
+        try:
+            import ah_sim
+            conn = sq.connect(self.app.cfg)
+            try:
+                count = ah_sim.clear_listings(conn)
+            finally:
+                conn.close()
+            messagebox.showinfo(title, f"{count} listing(s) were taken off the auction house." if count
+                                else "The simulator has nothing listed: the auction house was already clear of it.", parent=self)
+        except Exception as e:
+            messagebox.showerror(title, f"The database could not be reached ({e}).\n\nIf the servers are not running, press "
+                                        "PLAY, wait for the game window, and try again.", parent=self)
+
+    def setup_again(self):
+        if self.app.running:
+            messagebox.showwarning("Close the game first", "The servers are running. Close the game (it stops the servers), "
+                                   "then run setup again.", parent=self)
+            return
+        if not messagebox.askyesno("Run setup again", "The launcher closes and the first-time setup opens with this install's "
+                                   "folders filled in.\n\nYour world, characters, squad and settings are kept. Nothing "
+                                   "changes until you press Install there: closing that window leaves everything as it is."
+                                   "\n\nGo on?", parent=self):
+            return
+        try:
+            extra = {} if IS_WINDOWS else {"start_new_session": True}
+            cmd = [sys.executable] if getattr(sys, "frozen", False) else [sys.executable, os.path.join(HERE, "launcher_gui.pyw")]
+            subprocess.Popen(cmd + ["--setup-again"], cwd=HERE, **extra)
+        finally:
+            self.app.on_close()
+
     def change_game_folder(self):
         chosen = filedialog.askdirectory(parent=self, title="Pick the FINAL FANTASY XI folder",
                                          initialdir=self.app.cfg.get("ffxi_client_dir") or None)
@@ -2561,6 +2715,16 @@ class UpdatesTab(tk.Frame):
         if IS_WINDOWS:
             self.build_game_folder()
         self.player = bool(app.cfg.get("mariadb_dir"))      # a player install (first-run setup); else this is the dev PC
+        if self.player:
+            self.build_setup_again()
+        self.build_clear_ah()
+        try:                                                # (2026-11-22, Sunie) the AI hood: only where its switch file is
+            import launcher_hood
+            if launcher_hood.is_on(HERE):
+                launcher_hood.build_box(self, app, HERE, {"bg": BG, "panel": PANEL, "panel2": PANEL2, "fg": FG, "dim": DIM,
+                                                          "border": BORDER, "gold": GOLD, "font": UI_FONT, "mono": MONO_FONT})
+        except Exception:
+            pass
         self.buttons = []
         if linux is not None:
             self.build_linux()
@@ -3755,6 +3919,10 @@ class App(tk.Tk):
         if linux is not None:     # the Steam Deck's screen is 1280 x 800: never taller (or wider) than the screen
             width = min(width, self.winfo_screenwidth())
             height = min(height, self.winfo_screenheight() - (0 if linux.in_game_mode() else 40))
+            if linux.in_game_mode():
+                # (2026-11-22, Sunie) Game Mode stretches any window over the whole screen, so a window of another
+                # shape was drawn stretched, with parts off the panel. Be exactly the screen's size there.
+                width, height = self.winfo_screenwidth(), self.winfo_screenheight()
         # (2026-11-22, Starfret: a window made bigger by hand snapped back on every page) after the first fit only grow it
         if getattr(self, "_fitted", False):
             try:
@@ -3843,6 +4011,13 @@ class App(tk.Tk):
             if item.get("patch") and installed:
                 tk.Button(self.dl_rows, text="Apply era edits", relief="flat", bg=PANEL, fg=FG, padx=10,
                           command=lambda i=item: self.apply_download_patch(i)).grid(row=row * 2 + 1, column=2, sticky="w")
+            # (lilibun, 2026-11-22) the two big ones can be taken out again: the AI model, and the Ollama this launcher installed
+            if installed and item["source"]["type"] == "ollama_model":
+                tk.Button(self.dl_rows, text="Remove", relief="flat", bg=PANEL, fg=FG, padx=10,
+                          command=lambda i=item: self.remove_ai_model(i)).grid(row=row * 2 + 1, column=2, sticky="w")
+            if installed and item["id"] == "ollama":
+                tk.Button(self.dl_rows, text="Remove", relief="flat", bg=PANEL, fg=FG, padx=10,
+                          command=lambda i=item: self.remove_ollama(i)).grid(row=row * 2 + 1, column=2, sticky="w")
             link = tk.Label(self.dl_rows, text="home page", bg=BG, fg=ACCENT, cursor="hand2")
             link.grid(row=row * 2, column=3, sticky="w", padx=10, pady=(6, 0))
             link.bind("<Button-1>", lambda e, url=item["homepage"]: self.open_url(url))
@@ -3860,6 +4035,53 @@ class App(tk.Tk):
             self.say(f"{item['name']} is now {'on' if on else 'off'} (from the next PLAY).")
         except Exception as e:
             self.say(f"Could not change {item['name']} ({e}).")
+        self.show_downloads()
+
+    def remove_ai_model(self, item):
+        """(lilibun, 2026-11-22) ollama rm: gives back the disk space of the AI model (several GB)."""
+        model = item["source"]["model"]
+        if self.running:
+            messagebox.showinfo("Remove " + item["name"], "Close the game first: the AI chat may be using the model.")
+            return
+        if not messagebox.askyesno("Remove " + item["name"],
+                                   f"Delete the AI model {model} from this PC?\n\nIt frees several GB. Squad and town chat "
+                                   "then use their short built-in lines until a model is installed again."):
+            return
+        self.say(f"Removing the AI model {model}...")
+
+        def work():
+            try:
+                tp.remove_model(model)
+                done = f"The AI model {model} was removed."
+            except Exception as e:
+                done = f"The AI model was not removed: {e}"
+            self.say(done)
+            self.after(0, self.show_downloads)
+            self.after(0, lambda: messagebox.showinfo("Remove " + item["name"], done))
+        threading.Thread(target=work, daemon=True).start()
+
+    def remove_ollama(self, item):
+        """(lilibun, 2026-11-22) Takes out the Ollama this launcher installed: Windows opens Ollama's own uninstaller,
+        Linux deletes the copy in the install folder. The models it downloaded only when you say so."""
+        if self.running:
+            messagebox.showinfo("Remove Ollama", "Close the game first.")
+            return
+        if not messagebox.askyesno("Remove Ollama", "Remove Ollama, the local AI program, from this PC?\n\nSquad and town chat then "
+                                                    "use their short built-in lines. On Windows, Ollama's own uninstaller "
+                                                    "opens and you finish it there."):
+            return
+        size = core.path_size(tp.ollama_models_dir())
+        models = size > 0 and messagebox.askyesno("Remove Ollama", f"Also delete the AI models it downloaded ({core.size_text(size)})?"
+                                                                   "\n\nChoose No if you use Ollama for other things too.")
+        try:
+            self.unload_ollama()
+            ours = getattr(self, "ollama_proc", None)
+            if ours is not None and ours.poll() is None:
+                ours.terminate()
+            self.ollama_proc = None
+            tp.remove_ollama(HERE, models=models, log=self.say)
+        except Exception as e:
+            messagebox.showerror("Remove Ollama", str(e))
         self.show_downloads()
 
     def open_url(self, url):
@@ -4218,7 +4440,7 @@ class App(tk.Tk):
         except Cancelled:
             self.say("Stopped.")
         except Exception as e:
-            self.q.put(("error", str(e)))
+            self.q.put(("error", core.explain_start_error(e)))
             self.say("Failed - see the message.")
         finally:
             self.cleanup()
@@ -4234,6 +4456,18 @@ class App(tk.Tk):
         core.kill_stray_helpers()              # helpers an earlier launcher left running
         time.sleep(2)
         self.check()
+        if linux is None:                      # (2026-11-22) the Visual C++ runtimes: an old or missing one stops the game
+            try:                               # loader, Ashita or the server as it starts, without any message
+                import launcher_thirdparty as tp_runtimes
+                tp_runtimes.ensure_system_runtimes(HERE, cfg.get("ashita_dir"), log=self.say)
+            except Exception as e:
+                self.say(f"Could not check the Microsoft Visual C++ runtimes ({e}) - starting anyway.")
+            self.check()
+        try:                                   # a login key left without its certificate by a start that was cut short
+            if core.clear_half_made_certificate(cfg["server_dir"]):
+                self.say("Removed a half-made login certificate from an interrupted start; the server makes a new one.")
+        except Exception as e:
+            self.say(f"Could not check the login certificate ({e}) - starting anyway.")
         try:                                   # Ashita's target offset to match this game's version (target bar, XIUI)
             import launcher_game as lg_offsets
             got = lg_offsets.match_target_offset(cfg.get("ashita_dir", ""), cfg.get("ffxi_client_dir", ""))
@@ -4292,6 +4526,11 @@ class App(tk.Tk):
                 launcher_setup.ensure_triggers(cfg, cfg["server_dir"], log=self.say)
             except Exception as e:
                 self.say(f"Could not check the database triggers ({e}) - starting anyway.")
+            try:                              # (2026-11-22) squad and guild shop tables a cut-short setup left out
+                if launcher_setup.ensure_module_tables(cfg, cfg["server_dir"], log=self.say):
+                    self.say("Database: the missing tables are in place.")
+            except Exception as e:
+                self.say(f"Could not check the add-on tables ({e}) - starting anyway.")
         else:
             svc = cfg.get("mariadb_service", "MariaDB")
             if not core.ensure_service(svc):
@@ -4411,6 +4650,12 @@ class App(tk.Tk):
             except Exception:
                 pass
         self.apply_gamepad()                   # the visit's boot file is a copy of yours too
+        if self.cfg.get("mariadb_dir"):        # (2026-11-22) a player install: our game-file changes before a visit as well
+            try:                               # (spells you can aim at a squad mate, item entries), in case an update
+                import launcher_client         # came in since the last PLAY in your own world. Never stops the visit.
+                launcher_client.apply_all(HERE, self.cfg.get("ffxi_client_dir", ""), self.cfg.get("server_dir", ""), log=self.say)
+            except Exception:
+                pass
         self.launch_boot = co.write_visit_boot(self.ashita, self.cfg.get("ashita_boot", core.DEFAULT_BOOT), host)
         self.visit_mode = True
         try:
@@ -4470,6 +4715,7 @@ class App(tk.Tk):
         self.logfiles.append(alog)
         boot = getattr(self, "launch_boot", None) or cfg.get("ashita_boot", core.DEFAULT_BOOT)      # the GM game starts with its own boot file
         self.launch_boot = None
+        self.apply_game_lang(boot)
         if cfg.get("game_copy"):     # our own copy of the game: point PlayOnline at it until every game window closes
             import launcher_game as lg
             if lg.start_switch(HERE, cfg, run_elevated, is_running=lambda: core.is_running("xiloader")):
@@ -4486,10 +4732,48 @@ class App(tk.Tk):
                                + core.tail(os.path.join(LOGS, "ashita.log")))
         self.say("Game is running in your friend's world." if getattr(self, "visit_mode", False)
                  else "Game is running. Closing it will stop the servers.")
+        began = time.time()
         while core.is_running("xiloader"):
             self.check()
             time.sleep(2)
         self.say("Game closed.")
+        self.explain_quick_close(began)
+
+    def apply_game_lang(self, boot):
+        """(2026-11-22, Sirloinofbeef) Windows: an EU or JP game is named to the loader and Ashita in the boot file, so
+        leftovers of another language's PlayOnline in the registry can't be picked in its place (launcher_game.py)."""
+        try:
+            import launcher_game as lg
+            lang = lg.install_lang(self.cfg)
+            if lg.apply_boot_lang(os.path.join(self.ashita, "config", "boot", boot), lang):
+                self.say(f"PlayOnline language: {lang}.")
+        except Exception as e:
+            self.say(f"Could not set the PlayOnline language ({e}).")
+
+    def explain_quick_close(self, began, appdata=None):
+        """(2026-11-22) A game that closes within a minute of starting says nothing about why: the loader's own log does.
+        Its lines go into the launcher's log, and a copy of that log into the logs folder for a bug report."""
+        seconds = time.time() - began
+        if seconds > 75 or self.stop_requested:
+            return
+        try:
+            import shutil
+            path, text = core.loader_log_since(began - 90, appdata)
+            for line in core.why_game_closed(seconds, text, windows=linux is None):
+                self.say(line)
+            if path:
+                shutil.copyfile(path, os.path.join(LOGS, "xiloader-last.log"))
+            # (2026-11-22, Sunie, Ziegh, skibbity rizzard) Linux: the game checks its version file (patch.ver) against
+            # the Interface values in the registry. PlayOnline keeps those right on Windows; in our Proton prefix they
+            # are fixed placeholders, so a game updated after Square Enix's 2026-11-18 patch fails the check and closes
+            # right after "Profile loaded." Ashita's Sandbox answers that check itself: switched on once, for good.
+            if linux is not None and core.game_gave_up(text) and not self.cfg.get("linux_sandbox"):
+                self.cfg["linux_sandbox"] = True
+                save_config_value("linux_sandbox", True)
+                self.say("Linux: this game version needs Ashita's Sandbox to pass its own version check. It is "
+                         "switched on now: press PLAY again.")
+        except Exception as e:
+            self.say(f"Could not read the game loader's log ({e}).")
 
     def launch_ashita_linux(self):
         """Linux: Ashita (and through it xiloader and the game) through Proton. Waits until the game has closed."""
@@ -4526,10 +4810,17 @@ class App(tk.Tk):
             time.sleep(1)
         self.say("Game is running in your friend's world." if getattr(self, "visit_mode", False)
                  else "Game is running. Closing it will stop the servers.")
+        began = time.time()
         while linux.game_running(self.game_proc):
             self.check()
             time.sleep(2)
         self.say("Game closed.")
+        try:                                   # the loader's log is inside the game's Windows folder (Proton's prefix)
+            import glob
+            roaming = glob.glob(os.path.join(HERE, "prefix", "drive_c", "users", "*", "AppData", "Roaming"))
+        except Exception:
+            roaming = []
+        self.explain_quick_close(began, roaming[0] if roaming else None)
 
     def launch_plain(self):
         cfg = self.cfg
@@ -4573,6 +4864,7 @@ class App(tk.Tk):
         if linux is not None:
             linux.start_game(HERE, self.cfg, self.ashita, boot, log)
             return
+        self.apply_game_lang(boot)
         subprocess.Popen([cli, boot], cwd=self.ashita, stdout=log, stderr=subprocess.STDOUT, creationflags=core.NO_WINDOW)
 
     def apply_gamepad(self):
@@ -4624,7 +4916,7 @@ class App(tk.Tk):
             return
         try:
             mode = "modern" if self.rates.get("modern_stacks", True) else "era"
-            done = subprocess.run(core.py_cmd(script, "db", mode), cwd=HERE, capture_output=True, text=True, timeout=90,
+            done = subprocess.run(core.py_cmd(script, "db", mode), cwd=HERE, capture_output=True, text=True, errors="replace", timeout=90,
                                   creationflags=core.NO_WINDOW)
             lines = (done.stdout or "").strip().splitlines()
             if done.returncode != 0:
@@ -4634,7 +4926,7 @@ class App(tk.Tk):
                 self.say(lines[-1][:1].upper() + lines[-1][1:])
             # a player install does the game files in launcher_client.apply_all; this PC (no kit MariaDB) does them here
             if not core.load_config(os.path.join(HERE, "config.json")).get("mariadb_dir"):
-                done = subprocess.run(core.py_cmd(script, "dats", mode), cwd=HERE, capture_output=True, text=True, timeout=120,
+                done = subprocess.run(core.py_cmd(script, "dats", mode), cwd=HERE, capture_output=True, text=True, errors="replace", timeout=120,
                                       creationflags=core.NO_WINDOW)
                 lines = (done.stdout or "").strip().splitlines()
                 if done.returncode != 0:
@@ -4653,7 +4945,7 @@ class App(tk.Tk):
             if not cfg.get("char_sync") or not cfg.get("char_sync_dir"):
                 return
             done = subprocess.run(core.py_cmd(os.path.join(HERE, "launcher_passport.py"), mode), cwd=HERE, capture_output=True,
-                                  text=True, timeout=120, creationflags=core.NO_WINDOW)
+                                  text=True, errors="replace", timeout=120, creationflags=core.NO_WINDOW)
             lines = (done.stdout or "").strip().splitlines()
             if done.returncode != 0:
                 errors = (done.stderr or "").strip().splitlines()
@@ -4669,7 +4961,7 @@ class App(tk.Tk):
         if not self.rates.get("conquest_sim", True) or not os.path.exists(script):
             return False
         try:
-            done = subprocess.run(core.py_cmd(script, mode), cwd=HERE, capture_output=True, text=True, timeout=90,
+            done = subprocess.run(core.py_cmd(script, mode), cwd=HERE, capture_output=True, text=True, errors="replace", timeout=90,
                                   creationflags=core.NO_WINDOW)
             if done.returncode != 0:
                 lines = (done.stderr or done.stdout or "").strip().splitlines()
@@ -5029,12 +5321,15 @@ class SetupWizard(tk.Tk):
               ("momentum", "Momentum: EXP and merit tracking (loads switched off)", False),
               ("ffxiport", "FFXIPort: a teleport window, /port (loads switched off)", False), ("vanafish", "VanaFish: fishing bot, /vanafish (loads switched off)", False), ("vanacam", "VanaCam: camera presets and combat distance (loads switched off)", False), ("autobot", "AutoBot: for a second (dualbox) character", False))
 
-    def __init__(self):
+    def __init__(self, again=None):
         super().__init__()
         linux_look(self)
         import launcher_setup
         self.setup = launcher_setup
-        self.title("XI: Forever Offline - first-time setup")
+        # (2026-11-22, Sunie) again: this install's config.json when setup is run again from SYSTEM > Settings. The
+        # folders start as they are now, the world and account pages are left out, and nothing of the world changes.
+        self.again = again if (again and hasattr(launcher_setup, "again_choices")) else None
+        self.title("XI: Forever Offline - setup, again" if self.again else "XI: Forever Offline - first-time setup")
         self.geometry("760x600")
         self.configure(bg=BG)
         icon = load_image(os.path.join("ui", "icon.png"))
@@ -5077,7 +5372,31 @@ class SetupWizard(tk.Tk):
         self.next_btn = tk.Button(nav, text="Next", command=self.next, bg=ACCENT, fg="white", relief="flat", padx=18)
         self.next_btn.pack(side="right")
         self.pages = [self.page_folders, self.page_world, self.page_account, self.page_install]
+        if self.again:
+            self.start_again()
+            self.pages = [self.page_folders, self.page_world, self.page_install]
         self.show(0)
+
+    def start_again(self):
+        """Setup run again: the pages start from what this install has now."""
+        start = self.setup.again_choices(HERE, self.again)
+        self.ffxi.set(start["ffxi_dir"])
+        self.game.set("existing")                 # the game where it is; a new copy only when the player picks it
+        self.ashita.set(start["ashita_dir"])
+        self.server.set(start["server_dir"])
+        self.world.set(start["world"])
+        self.login.set(start["login"])
+        self.password.set(start["password"])
+        self.mariadb_dir = start["mariadb_dir"]
+        try:                                      # tick what this install has, so nothing is added or asked twice
+            import launcher_thirdparty as tp
+            items = {item["id"]: item for item in tp.load_manifest(HERE)}
+            have = lambda iid: bool(iid in items and tp.status(items[iid], HERE, start["ashita_dir"])[0])
+            for key, var in self.extras.items():
+                var.set(have(key))
+            self.interface.set("xiuiplus" if have("xiuiplus") else "xiui" if have("xiui") else "none")
+        except Exception:
+            pass
 
     def fit(self):
         """Make the window tall enough for the page it shows (never taller than the screen)."""
@@ -5097,6 +5416,11 @@ class SetupWizard(tk.Tk):
         for widget in self.body.winfo_children():
             widget.destroy()
         self.step_title.configure(text=title)
+        if getattr(self, "again", None) and title.startswith("1."):
+            tk.Label(self.body, text="Setup again: your world, characters, squad and settings stay as they are. Choose the "
+                                     "folders to use from now on. What is already in them is kept; what is missing is "
+                                     "downloaded and set up. The old folders are not deleted.",
+                     bg=BG, fg=GOLD, wraplength=720, justify="left").pack(anchor="w", pady=(0, 6))
 
     def text(self, words, fg=None):
         tk.Label(self.body, text=words, bg=BG, fg=fg or DIM, wraplength=720, justify="left").pack(anchor="w", pady=(0, 6))
@@ -5164,16 +5488,20 @@ class SetupWizard(tk.Tk):
         self.text(f"The database is kept in {self.mariadb_dir}.")
 
     def page_world(self):
-        self.clear("2. Your world")
+        self.clear("2. Interface and add-ons" if self.again else "2. Your world")
         import launcher_core as lc
-        for key, (label, about) in lc.WORLDS.items():
+        if self.again:
+            self.text("Your world and its rules stay as they are (change them on the launcher's WORLD and RULES pages). "
+                      "These are for the Ashita folder you chose: what it already has is ticked.")
+        for key, (label, about) in ({} if self.again else lc.WORLDS).items():
             tk.Radiobutton(self.body, text=label, value=key, variable=self.world, bg=BG, fg=FG, selectcolor=PANEL,
                            activebackground=BG, activeforeground=FG, font=(UI_FONT, 10, "bold")).pack(anchor="w")
             tk.Label(self.body, text=about, bg=BG, fg=DIM, font=(UI_FONT, 9), wraplength=700, justify="left").pack(anchor="w", padx=(26, 0))
         row = tk.Frame(self.body, bg=BG)
         row.pack(anchor="w", pady=(10, 2))
-        tk.Label(row, text="Population:", bg=BG, fg=FG).pack(side="left")
-        for key, (label, crowd, _roster, online) in lc.POPULATIONS.items():
+        if not self.again:
+            tk.Label(row, text="Population:", bg=BG, fg=FG).pack(side="left")
+        for key, (label, crowd, _roster, online) in ({} if self.again else lc.POPULATIONS).items():
             tk.Radiobutton(row, text=f"{label} ({crowd}/town, {online} bots)", value=key, variable=self.population,
                            bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG).pack(side="left", padx=4)
         row = tk.Frame(self.body, bg=BG)
@@ -5201,7 +5529,7 @@ class SetupWizard(tk.Tk):
         self.text("Login: 3-16 letters and numbers. You make your character in the game after the first login.")
 
     def page_install(self):
-        self.clear("4. Install")
+        self.clear("3. Set up" if self.again else "4. Install")
         self.log_box = tk.Text(self.body, height=20, bg=PANEL, fg=FG, relief="flat", font=(MONO_FONT, 9), wrap="word")
         self.log_box.pack(fill="both", expand=True)
         self.log_box.insert("end", "Press Install to start.\n")
@@ -5232,6 +5560,8 @@ class SetupWizard(tk.Tk):
         if self.page == 0:
             if self.game.get() != "official" and not self.setup.valid_ffxi(self.ffxi.get()):
                 return "Choose the FINAL FANTASY XI folder (the one with FFXiMain.dll in it), or pick the Square Enix download."
+        if self.again:                           # no account page: the account stays as it is
+            return None
         if self.page == 2 and not self.setup.valid_login(self.login.get()):
             return "The login must be 3-16 letters and numbers."
         if self.page == 2 and len(self.password.get()) < 6:
@@ -5251,7 +5581,8 @@ class SetupWizard(tk.Tk):
         def work():
             try:
                 import launcher_thirdparty
-                cfg = self.setup.run_setup(HERE, choices, launcher_thirdparty, log=lambda m: self.q.put(("log", m)))
+                cfg = self.setup.run_setup(HERE, choices, launcher_thirdparty, log=lambda m: self.q.put(("log", m)),
+                                           **({"again": self.again} if self.again else {}))
                 if self.deck:
                     try:
                         boot = os.path.join(cfg["ashita_dir"], "config", "boot", cfg.get("ashita_boot", core.DEFAULT_BOOT))
@@ -5373,8 +5704,21 @@ def main():
             wizard.mainloop()
             if not wizard.done or not os.path.exists(os.path.join(HERE, "config.json")):
                 return
+        elif "--setup-again" in sys.argv[1:]:      # SYSTEM > Settings > "Run setup again..." (the launcher restarted itself)
+            try:
+                wizard = SetupWizard(again=core.load_config(os.path.join(HERE, "config.json")))
+                wizard.mainloop()
+            except Exception:                      # whatever happens there, the launcher still opens
+                os.makedirs(LOGS, exist_ok=True)
+                with open(os.path.join(LOGS, "setup-again-error.log"), "w") as f:
+                    f.write(traceback.format_exc())
         app = App()
         bring_to_front(app)
+        try:                                      # the opening theme of a limited-time look, while one is in date
+            import launcher_theme
+            launcher_theme.start(app)
+        except Exception:
+            pass
         app.mainloop()
     except Exception:
         os.makedirs(LOGS, exist_ok=True)

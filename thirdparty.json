@@ -73,10 +73,10 @@
       "homepage": "https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist",
       "required": true,
       "into": "kit",
-      "note": "The server programs need it. Installs quietly; already there on most PCs.",
+      "note": "The server programs and the database need it (version 14.40 or newer). Installs quietly; already there on most PCs.",
       "source": {
         "type": "installer",
-        "url": "https://aka.ms/vs/17/release/vc_redist.x64.exe",
+        "url": "https://aka.ms/vc14/vc_redist.x64.exe",
         "args": [
           "/install",
           "/passive",
@@ -84,7 +84,33 @@
         ],
         "wait": true
       },
-      "check_system": "%SystemRoot%\\System32\\msvcp140_atomic_wait.dll",
+      "check_system": "%SystemRoot%\\System32\\msvcp140.dll",
+      "min_version": "14.40",
+      "platforms": [
+        "windows"
+      ]
+    },
+    {
+      "id": "vcredist86",
+      "name": "Microsoft Visual C++ runtime (x86)",
+      "author": "Microsoft",
+      "license": "Microsoft software license",
+      "homepage": "https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist",
+      "required": true,
+      "into": "kit",
+      "note": "The game loader (xiloader) and Ashita need it (version 14.40 or newer). Installs quietly.",
+      "source": {
+        "type": "installer",
+        "url": "https://aka.ms/vc14/vc_redist.x86.exe",
+        "args": [
+          "/install",
+          "/passive",
+          "/norestart"
+        ],
+        "wait": true
+      },
+      "check_system": "%SystemRoot%\\SysWOW64\\msvcp140.dll",
+      "min_version": "14.40",
       "platforms": [
         "windows"
       ]

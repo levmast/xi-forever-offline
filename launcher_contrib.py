@@ -51,14 +51,14 @@ def github_token(run=subprocess.run):
     GitHub CLI's."""
     try:
         result = run(["git", "credential", "fill"], input="protocol=https\nhost=github.com\n\n", capture_output=True,
-                     text=True, creationflags=NO_WINDOW, timeout=180)
+                     text=True, errors="replace", creationflags=NO_WINDOW, timeout=180)
         found = dict(line.split("=", 1) for line in (result.stdout or "").splitlines() if "=" in line)
         if result.returncode == 0 and found.get("password"):
             return found["password"]
     except (OSError, subprocess.SubprocessError):
         pass
     try:
-        result = run(["gh", "auth", "token"], capture_output=True, text=True, creationflags=NO_WINDOW, timeout=30)
+        result = run(["gh", "auth", "token"], capture_output=True, text=True, errors="replace", creationflags=NO_WINDOW, timeout=30)
         if result.returncode == 0 and (result.stdout or "").strip():
             return result.stdout.strip()
     except (OSError, subprocess.SubprocessError):

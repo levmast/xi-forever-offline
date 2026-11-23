@@ -86,7 +86,7 @@ def preflight(kit, server, server_running=False):
 
 def github_token(run=subprocess.run):
     """The GitHub sign-in Git keeps on this PC (git credential fill), so nothing new needs setting up."""
-    result = run(["git", "credential", "fill"], input="protocol=https\nhost=github.com\n\n", capture_output=True, text=True,
+    result = run(["git", "credential", "fill"], input="protocol=https\nhost=github.com\n\n", capture_output=True, text=True, errors="replace",
                  creationflags=NO_WINDOW if os.name == "nt" else 0, timeout=120)
     found = dict(line.split("=", 1) for line in (result.stdout or "").splitlines() if "=" in line)
     if result.returncode != 0 or not found.get("password"):

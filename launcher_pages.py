@@ -19,7 +19,7 @@ from launcher_widgets import LINE as LINE_COLOUR
 # the page buttons along the bottom: (picture in assets\ui, name, the pages it opens)
 NAV_BUTTONS = (("home", "HOME", ("Play",)), ("world", "WORLD", ("World",)), ("rules", "RULES", ("Rules",)),
                ("squad", "SQUADS", ("Squad",)),
-               ("options", "OPTIONS", ("Graphics", "Shaders", "Controller", "Addons", "Plugins", "Other")),
+               ("options", "OPTIONS", ("Graphics", "Shaders", "Controller", "Addons", "Plugins", "Other", "Theme")),
                ("coop", "CO-OP", ("Co-op",)), ("system", "SYSTEM", ("Settings", "Patch notes", "Characters", "Era", "About")))
 WINDOW = (1100, 810)            # one size for every page
 BANNER = (800, 320)             # the Play page's picture (the classic page: 920 x 368)
@@ -384,7 +384,7 @@ class RulesPage(SettingsPage):
 
     def pick_preset(self, name):
         rates = self.tab.collect()
-        now = st.preset_now(core, rates, self.names())
+        now = st.preset_now(core, rates, self.names(), player_install(self.app))
         if now == name:
             return
         if now is None and not messagebox.askyesno("Rules", f"Replace the rates you set yourself with {name}?\n\n"
@@ -395,7 +395,7 @@ class RulesPage(SettingsPage):
 
     def refresh(self):
         rates = self.tab.collect()
-        now = st.preset_now(core, rates, self.names())
+        now = st.preset_now(core, rates, self.names(), player_install(self.app))
         for name, card in self.preset_cards.items():
             card.set_selected(name == now)
         self.custom_mark.configure(text="" if now else "YOUR OWN RATES")
@@ -692,7 +692,7 @@ class PlayPage:
         if core.needs_ai(rates) and hasattr(tab, "ai_model"):
             words.append(tab.ai_model.get())
         self.show("World", core.WORLDS[world][0] if world in core.WORLDS else "Your own mix", "  \u00b7  ".join(words))
-        preset = st.preset_now(core, rates, [name for name, _words in PRESET_CARDS])
+        preset = st.preset_now(core, rates, [name for name, _words in PRESET_CARDS], player_install(app))
         self.show("Rules", preset or "Your own rates",
                   f"Experience {w.number_text(rates['map.EXP_RATE'])}x  \u00b7  drops {w.number_text(rates['map.DROP_RATE_MULTIPLIER'])}x")
         squad = app.squad_tab
@@ -1480,6 +1480,11 @@ def build(app, tabs):
         style_older_pages(app)
     except Exception:
         log_problem("The older pages could not be restyled")
+    try:                                # OPTIONS > Theme: the switches of a limited-time look, only while one is in date (launcher_theme.py)
+        import launcher_theme
+        launcher_theme.add_page(app, tabs)
+    except Exception:
+        log_problem("The Theme page could not be made")
     app.build_nav = lambda: build_nav(app)
     app.show_subnav = lambda group, index: show_subnav(app, group, index)
     app.fit_window = lambda: fit_window(app)

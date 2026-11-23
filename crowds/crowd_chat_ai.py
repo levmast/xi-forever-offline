@@ -244,6 +244,30 @@ def parse(category, content):
     return out
 
 
+def hood(source, model, messages, reply, seconds):
+    """(Sunie, 2026-11-22) "Peek under the AI hood". While the switch file ai-hood.on is in the kit folder, every
+    prompt goes to logs/ai-hood.log in full, with the model's reply. No such file (everyone else): nothing happens."""
+    try:
+        import os
+        kit = KIT
+        if not os.path.exists(os.path.join(kit, "ai-hood.on")):
+            return
+        path = os.path.join(kit, "logs", "ai-hood.log")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if os.path.exists(path) and os.path.getsize(path) > 4_000_000:      # one older file is kept
+            os.replace(path, path + ".1")
+        parts = [f"===== {time.strftime('%H:%M:%S')}  {source}  |  model {model}  |  {seconds:.1f}s ====="]
+        for message in messages:
+            parts.append(f"--- {message.get('role', '?')} ---")
+            parts.append(str(message.get("content", "")).rstrip())
+        parts.append("--- reply ---")
+        parts.append(str(reply if reply is not None else "(no reply)").rstrip())
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write("\n".join(parts) + "\n\n")
+    except Exception:
+        pass
+
+
 def ask_model(cfg, category, avoid):
     shape = ('{"lines": [{"a": "...", "b": "..."}, ...]}' if category == "pairs" else '{"lines": ["...", "..."]}')
     sample = "; ".join(random.sample(avoid, min(5, len(avoid)))) if avoid else ""
@@ -265,6 +289,7 @@ def ask_model(cfg, category, avoid):
         body = json.loads(resp.read().decode("utf-8"))
     content = body.get("message", {}).get("content")
     log(f"ollama {category}: {time.time() - started:.1f}s")
+    hood(f"town crowd lines ({category})", cfg["model"], payload["messages"], content, time.time() - started)
     return content
 
 

@@ -15,6 +15,8 @@ One menu for XI: Forever Offline, opened from a small Squads button on the scree
   /menu              open or close the menu (also /smenu)
   /menu button       show the button again after hiding it      /menu resetbutton   put it back in its first place
   /menu scale <n>    size of our windows (0.75-3, 1 = normal; for 4K screens)
+  /menu opacity <10-100>        how see-through the Squads button is (also on its right-click menu; solid under the mouse)
+  /menu opacity menu <10-100>   how see-through the menu's background is
   /sq                open the menu on the Squad tab              /sq refresh         ask the server again
   /sq sheet [slot]   open a mate's profile window (also the Profile button on their row)
   /menu gambits      open the menu on Dualbox with its Gambits section showing
@@ -35,7 +37,7 @@ Settings (button place, last tab): config/addons/servermenu/settings.cfg
 
 addon.name    = 'servermenu';
 addon.author  = 'XI: Forever Offline';
-addon.version = '1.26d';
+addon.version = '1.26j';   -- (1.26j) Attack my target / Stop; (1.26i) the menu opens again (opacity helper stood below the menu); (1.26h) a click right after a refresh is no longer dropped by the game; (1.26g) opacity, one gear button
 addon.desc    = 'The XI: Forever Offline menu: squad mates, and the dualbox character with his gambits.';
 addon.link    = '';
 
@@ -93,18 +95,72 @@ local function hasBit(mask, bit)
 end
 local TABS  = { 'Squad', 'Dualbox', 'Auto' };
 
+-- (role clarity) what a squad mate's Role really does, from the server's squad.lua behaviorFilter / ROLE_KEEPS /
+-- EMERGENCY_HP (tank 40, damage 30) and MODE_HEAL_SHIFT (+15 / -15, kept between 15 and 90). Text only: the server
+-- decides. One table (ROLE_INFO) to keep this file's count of locals down.
 local ROLE_HELP = {
-    auto    = 'the job\'s normal behaviour',
-    tank    = 'Provoke, Flash, own buffs; heals only the badly hurt',
-    damage  = 'attacks and nukes; heals only the badly hurt',
-    healer  = 'cures, status removal, party buffs',
-    support = 'buffs, weakening spells, cures',
+    auto    = 'Auto: the job\'s default rules, nothing filtered.',
+    tank    = 'Tank: keeps Provoke, Sentinel, Flash and other debuffs, its own buffs and other job abilities.\n'
+        .. 'Cures only targets below 40% HP (Aggressive 55%, Conserve 25%). No status removal (-na, Erase), '
+        .. 'no buffs on others, no nukes or ranged attacks.',
+    damage  = 'Damage: keeps attacks, nukes, ranged attacks, debuffs, its own buffs and job abilities other than '
+        .. 'tank ones.\nCures only targets below 30% HP (Aggressive 45%, Conserve 15%). No status removal (-na, Erase), '
+        .. 'no buffs on others, no Provoke or Sentinel.',
+    healer  = 'Healer: keeps cures, status removal and buffs for the party.\n'
+        .. 'No debuffs (Flash, Dia, Paralyze...), nukes, ranged attacks or job abilities (Convert and Chakra stay).',
+    support = 'Support: keeps buffs for the party, debuffs, status removal, normal cures and ranged attacks.\n'
+        .. 'No nukes and no job abilities (Convert and Chakra stay).',
 };
 local MODE_HELP = {
-    balanced   = 'the normal pace',
-    aggressive = 'heals earlier and holds nothing back',
-    conserve   = 'heals later and keeps 40% MP in reserve',
+    balanced   = 'Balanced: the normal pace, nothing changed.',
+    aggressive = 'Aggressive: cures at 15% more HP (at most 90%), also on top of a Tank or Damage limit; '
+        .. 'holds no MP back.',
+    conserve   = 'Conserve: cures at 15% less HP (at least 15%) and keeps 40% MP before buffs, debuffs, nukes and '
+        .. 'status removal.',
 };
+local ROLE_INFO = {
+    FOOTER = 'The Squad Role changes only the mate\'s default job rules, from its next call (Apply now). '
+        .. 'A Gambits Rule Set replaces those rules and is not filtered by the Role. '
+        .. 'Not the same as the Gambits party roles (Tank / Melee / Mage / Ranged).',
+    TIPS = {},
+    -- the Dualbox tab's profile buttons are the second character's gambit profiles (followme), not a squad Role
+    DUO = {
+        auto    = 'the job\'s normal behaviour',
+        tank    = 'Provoke, Flash, own buffs; heals only the badly hurt',
+        damage  = 'attacks and nukes; heals only the badly hurt',
+        healer  = 'cures, status removal, party buffs',
+        support = 'buffs, weakening spells, cures',
+    },
+    -- jobs whose default rules heal or support others, and what a Tank / Damage Role takes from them: WHM cures, status
+    -- removal and party buffs; RDM cures and buffs on you and the party; PLD its Cure
+    CARE = { WHM = { cleanse = true, buffs = true }, RDM = { buffs = true }, PLD = {} },
+    CAP = { tank = 40, damage = 30 },
+    SHIFT = { aggressive = 15, conserve = -15 },
+};
+for role, text in pairs(ROLE_HELP) do ROLE_INFO.TIPS[role] = text .. '\n\n' .. ROLE_INFO.FOOTER; end
+
+-- (role clarity) the small gold note on a mate's row: only when a Tank or Damage Role takes healing or support away
+-- from a job (main or sub) whose default rules have it. A PLD tank without a WHM/RDM sub job is the usual set-up: no
+-- note. The menu does not know whether a Gambits Rule Set is assigned, so it speaks only of the default job rules.
+-- Returns the tooltip, the Role's name and the job it is about, or nil.
+function ROLE_INFO.note(mate)
+    local role = mate and mate.role;
+    local cap = ROLE_INFO.CAP[role or ''];
+    if cap == nil then return nil; end
+    local main, sub = ROLE_INFO.CARE[mate.main or ''], ROLE_INFO.CARE[mate.sub or ''];
+    if main == nil and sub == nil then return nil; end
+    if role == 'tank' and mate.main == 'PLD' and sub == nil then return nil; end
+    local limit = math.max(15, math.min(90, cap + (ROLE_INFO.SHIFT[mate.mode or ''] or 0)));
+    local parts = { string.format('cures only below %d%% HP', limit) };
+    if (main and main.cleanse) or (sub and sub.cleanse) then parts[#parts + 1] = 'no status removal'; end
+    if (main and main.buffs) or (sub and sub.buffs) then parts[#parts + 1] = 'no buffs on party members'; end
+    local job = main and mate.main or mate.sub;
+    local roleName = role:sub(1, 1):upper() .. role:sub(2);
+    return string.format('Default healing is heavily restricted: Role %s %s.\n'
+        .. 'This is a valid choice for an offensive %s; Auto gives the job\'s normal healing.\n'
+        .. 'It applies only to the default job rules: a Gambits Rule Set replaces them and is not restricted.',
+        roleName, table.concat(parts, ', '), job), roleName, job;
+end
 
 local LAYERS = {
     emergency_survival     = { 'Survival',    { 0.90, 0.45, 0.40, 1 } },
@@ -152,7 +208,8 @@ local S = {
     -- diagnostics
     spell = { 'Dia' },
     -- the button
-    cfg = { button_x = '18', button_y = '240', button_locked = 'false', button_hidden = 'false', button_wide = 'false', tab = 'Squad', spell = 'Dia', scale = '1' },
+    cfg = { button_x = '18', button_y = '240', button_locked = 'false', button_hidden = 'false', button_wide = 'false', tab = 'Squad', spell = 'Dia', scale = '1',
+            button_opacity = '100', menu_opacity = '100' },   -- (1.26g, K-Andy) percent; /menu opacity
     cfgDirty = false, cfgSavedAt = -1000, buttonPos = nil, dragging = false, dragFrom = nil, dragMoved = false,
 };
 
@@ -240,9 +297,9 @@ local function typing(chat)
     return ok and (open == true or (type(open) == 'number' and open ~= 0));
 end
 
--- (1.26d) the panel and sheet asks are refreshes; anything else is something you clicked
+-- (1.26h) the menu's own refreshes (the mate list, a mate's sheet, the Actions check): nobody waits for these
 local function isRefresh(command)
-    return command:find('^/say !squad panel') ~= nil or command:find('^/say !squad sheet') ~= nil;
+    return command:find('^/say !squad panel') ~= nil or command:find('^/say !squad sheet') ~= nil or command == '/say !actions';
 end
 
 -- who: (1.26c) the character a command is meant for; it is dropped if someone else is logged in when it is due
@@ -298,9 +355,11 @@ local function actionsWatchdog(t)
     if S.want and next(S.want) ~= nil and S.wantAt and t - S.wantAt > 40 then S.want = {}; S.tries = {}; end
 end
 
+local SAY_GAP = 2.2;   -- seconds the game needs between two chat lines, or it drops the second and shows it as ">> /say ..."
+
 local function pump(t)
     actionsWatchdog(t);
-    if t - S.lastSend < (S.sendGap or 0.6) then return; end
+    if t - S.lastSend < 0.6 then return; end
     -- Actions clicks: one `!actions` check after the last click settles (the server also checks every 2 s on its own)
     if S.actKick and t >= S.actKick then
         local pending = false;
@@ -310,17 +369,23 @@ local function pump(t)
             S.queue[#S.queue + 1] = { at = t, command = '/say !actions' };
         end
     end
-    local pick = nil;                                   -- the first command that is due (a later "ask again" does not hold up a click)
-    for i, item in ipairs(S.queue) do if item.at <= t and not isRefresh(item.command) then pick = i; break; end end   -- (1.26d) a click goes before a due refresh
-    if not pick then for i, item in ipairs(S.queue) do if item.at <= t then pick = i; break; end end end
+    -- the first command that is due; a click goes before any of the menu's own refreshes
+    local pick, refresh = nil, nil;
+    for i, item in ipairs(S.queue) do
+        if item.at <= t then
+            if not isRefresh(item.command) then pick = i; break; end
+            refresh = refresh or i;
+        end
+    end
+    pick = pick or refresh;
     if not pick then return; end
+    -- (1.26h, Dugahst: "all the buttons randomly do it": the click showed up as ">> /say !squad camp start" and nothing
+    -- happened) The game drops a chat line that follows another too closely, whatever the first one was. A click used
+    -- to wait only after another click, so one that came right after a refresh of the menu was lost. Now every line
+    -- the menu says waits its turn after the last one it said, refreshes included.
+    if S.queue[pick].command:find('^/say ') and t - (S.lastSay or -1000) < SAY_GAP then return; end
     local chat = chatManager();
     if chat == nil or typing(chat) then return; end
-    -- the game drops chat lines sent close together: every Squads action (call, dismiss, switches, options, the sheet) goes out 2.2 seconds after the one before, however fast you click
-    -- (1.26c) that holds after a "!squad panel" ask too: only panel after panel may go 0.6 s apart. An action or the sheet used to go
-    -- 0.6 s after a panel ask, and the game answered "A command error occurred" (seen on !squad sheet)
-    local function isAction(command) return command:find('^/say !') ~= nil and not command:find('^/say !squad panel'); end
-    if isAction(S.queue[pick].command) and t - S.lastSend < 2.2 then return; end
     local first = table.remove(S.queue, pick);
     if first.who then   -- (1.26c) meant for one character: not for whoever is logged in now, if that is someone else
         local ok, name = pcall(function() return AshitaCore:GetMemoryManager():GetParty():GetMemberName(0); end);
@@ -328,7 +393,9 @@ local function pump(t)
         if (name:gsub('[^%w_]', '_')) ~= first.who then return; end
     end
     S.lastSend = t;
-    S.sendGap = isAction(first.command) and 2.2 or 0.6;
+    if first.command:find('^/say ') then S.lastSay = t; end
+    -- the game drops chat lines sent close together: every Squads action (call, dismiss, switches, options) goes out 2.2 seconds after the one before, however fast you click
+    -- (1.26h: that wait is SAY_GAP above, and it counts from any line the menu said)
     S.hideUntil = t + 6;   -- (1.25: was 2.5 s; a busy server answers later than that)
     -- (1.26c) every /autobox line this menu sends is counted, so the command event can tell ours from the player's
     -- even when the game runs a queued command later than the next one is sent
@@ -830,6 +897,28 @@ local function tooltip(text)
     if has('IsItemHovered') and imgui.IsItemHovered() and has('SetTooltip') then imgui.SetTooltip(text); end
 end
 
+-- (role clarity) the Role / Mode / note tooltips: wrapped at about 27 characters' width of the current font (~350 px at
+-- 13 px), as the Gambits editor's tooltips and Ashita's imgui.ShowHelp do, so they stay next to the mouse instead of
+-- running across the screen. Drawn with TextUnformatted: Ashita hands SetTooltip's text to ImGui as a printf format,
+-- and these texts contain '%' ("below 30% HP"). Without BeginTooltip / TextUnformatted: SetTooltip with '%' doubled.
+ROLE_INFO.WRAP_EM = 27;
+function ROLE_INFO.tip(text)
+    if not (has('IsItemHovered') and imgui.IsItemHovered()) or text == nil then return; end
+    if has('BeginTooltip') and has('EndTooltip') and has('TextUnformatted') then
+        if imgui.BeginTooltip() ~= false then
+            local size = has('GetFontSize') and imgui.GetFontSize() or nil;
+            local wrap = (type(size) == 'number' and size > 0) and size * ROLE_INFO.WRAP_EM or px(350);
+            local wrapOk = has('PushTextWrapPos') and has('PopTextWrapPos');
+            if wrapOk then imgui.PushTextWrapPos(wrap); end
+            imgui.TextUnformatted(tostring(text));
+            if wrapOk then imgui.PopTextWrapPos(); end
+            imgui.EndTooltip();
+        end
+    elseif has('SetTooltip') then
+        imgui.SetTooltip((tostring(text):gsub('%%', '%%%%')));
+    end
+end
+
 local function pushColors(list)
     local n = 0;
     for _, pair in ipairs(list) do
@@ -860,19 +949,20 @@ local function button(label, id, w, h, look)
 end
 
 -- a drop-down list; falls back to a row of buttons when this ImGui has no combo boxes
-local function combo(id, current, items, width, help)
+local function combo(id, current, items, width, help, tip)
     local chosen = nil;
+    tip = tip or tooltip;   -- (role clarity) the Role and Mode lists pass ROLE_INFO.tip (wrapped)
     if has('BeginCombo') and has('Selectable') and has('EndCombo') then
         if has('PushItemWidth') then imgui.PushItemWidth(px(width)); end
         if imgui.BeginCombo('##' .. id, current or '?') then
             for _, item in ipairs(items) do
                 if imgui.Selectable(item .. '##' .. id .. item, item == current) then chosen = item; end
-                if help and help[item] then tooltip(help[item]); end
+                if help and help[item] then tip(help[item]); end
             end
             imgui.EndCombo();
         end
         if has('PopItemWidth') then imgui.PopItemWidth(); end
-        if help and help[current] then tooltip(help[current]); end
+        if help and help[current] then tip(help[current]); end
     else
         for i, item in ipairs(items) do
             if i > 1 then imgui.SameLine(0, 3); end
@@ -1196,8 +1286,9 @@ local function squadTab()
             S.autoEquip = not on;
             ask(1.5);
         end
-        tooltip(on and 'Your mates wear the best gear you gave the squad, picked again each time they are called (click: choose by hand)'
-            or 'Click: every mate puts on the best gear you gave the squad for its job and level. Turn it off again to fine-tune by hand.');
+        -- (1.26g, FalconX51; the user: one button, lit while it is on) best gear once = on, then off again
+        tooltip(on and 'Lit: your mates wear the best gear you gave the squad and pick again each time they are called.\nClick to switch it off: they keep what they wear now, and you can change any piece by hand.'
+            or 'Click: every mate puts on the best gear you gave the squad for its job and level, and the button lights up.\nFor best gear just once, click it again: the gear stays and the choice is yours again.');
     end
     if S.adv then
         imgui.SameLine(0, 6);
@@ -1230,6 +1321,16 @@ local function squadTab()
         if button('Apply now', 'apply', 96, 0, 'selected') then applyNow(); end
         tooltip('Dismisses the squad and calls everyone again');
     end
+    -- (1.26j, Hasuko: "I'm a WHM. I shouldn't have to pull my weapon"; Yenkei) send the squad at your target while
+    -- you stay out of the fight. The server reads your target itself, so nothing is drawn and nothing stands you up.
+    gap(2);
+    if button('Attack my target', 'sqattack', 148, 26) then enqueue('/say !squad attack'); end
+    tooltip('Your squad attacks the monster you have targeted. You do not draw your weapon:\nstay back, sit and rest, heal. Bot players in your party go in too.\nIn a macro:  /say !squad attack');
+    imgui.SameLine(0, 6);
+    if button('Stop', 'sqstop', 64, 26) then enqueue('/say !squad stop'); end
+    tooltip('Calls your squad back from that fight.  In a macro:  /say !squad stop');
+    imgui.SameLine(0, 10);
+    dimText('they fight, you stay out of it');
     campRow();
     gap(4);
 
@@ -1306,15 +1407,26 @@ local function squadTab()
                 imgui.SameLine(0, 6);
                 if button('Profile', 'sheet' .. mate.slot, 64, 0) then openSheet(mate.slot); end
                 tooltip('Opens his profile window: stats, HP/MP/TP, haste, jobs and equipment');
+                -- (1.26f, the user) the food menu: the game's own menu opens, as for !squad food <slot>
+                imgui.SameLine(0, 6);
+                if button('Food', 'food' .. mate.slot, 52, 0) then enqueue('/say !squad food ' .. mate.slot); end
+                tooltip('Choose what this mate eats. The game opens a menu: "As it comes" (its own pick by job and level) or a food of your choice. A food is unlocked once for about what it costs on the auction house, then it is free for every mate.');
 
                 gap(2);
                 dimText('Role'); imgui.SameLine(0, 8);
-                local role = combo('role' .. mate.slot, mate.role, ROLES, 120, ROLE_HELP);
+                local role = combo('role' .. mate.slot, mate.role, ROLES, 120, ROLE_INFO.TIPS, ROLE_INFO.tip);
                 if role then changeMate(mate, 'role', role); end
                 imgui.SameLine(0, 18);
                 dimText('Mode'); imgui.SameLine(0, 8);
-                local mode = combo('mode' .. mate.slot, mate.mode, MODES, 120, MODE_HELP);
+                local mode = combo('mode' .. mate.slot, mate.mode, MODES, 120, MODE_HELP, ROLE_INFO.tip);
                 if mode then changeMate(mate, 'mode', mode); end
+                -- (role clarity) a quiet gold note when the Role restricts this job's default healing (ROLE_INFO.note)
+                local note, noteRole, noteJob = ROLE_INFO.note(mate);
+                if note then
+                    imgui.SameLine(0, 12);
+                    colorText(C.gold, '(i) ' .. noteJob .. ' - Role: ' .. noteRole);
+                    ROLE_INFO.tip(note);
+                end
                 if opt then
                     gap(2);
                     styleRow(mate, opt);
@@ -1405,7 +1517,7 @@ local function dualboxTab()
             queueDuo({ profile = role });
             duo.profile = role;
         end
-        tooltip(ROLE_HELP[role]);
+        tooltip(ROLE_INFO.DUO[role]);
     end
     if has('EndGroup') then imgui.EndGroup(); end
     gap(8);
@@ -1881,6 +1993,14 @@ local function setOpen(open)
     if open then ask(); end
 end
 
+-- (1.26g, K-Andy) how see-through the Squads button and the menu's background are: 10-100 percent.
+-- (1.26i) It has to stand ABOVE menuWindow: it stood below it, so the menu called a function that did not exist
+-- yet and the Squads menu never opened (Hasuko: a red 'Missing PopStyleColor' box after the v0.3.0 patch).
+local function opacityOf(key)
+    local v = tonumber(S.cfg[key] or '100') or 100;
+    return math.max(10, math.min(100, v)) / 100;
+end
+
 local function menuWindow()
     if not S.open[1] then return; end
     imgui.SetNextWindowSize({ px(620), px(560) }, G('ImGuiCond_FirstUseEver') or 4);
@@ -1895,6 +2015,7 @@ local function menuWindow()
                                 { 'ImGuiCol_HeaderHovered', { 0.26, 0.29, 0.38, 1 } }, { 'ImGuiCol_Separator', { 0.32, 0.34, 0.42, 0.55 } },
                                 { 'ImGuiCol_Text', C.text } });
     local flags = (G('ImGuiWindowFlags_NoTitleBar') or 0) + (G('ImGuiWindowFlags_NoCollapse') or 0);
+    if has('SetNextWindowBgAlpha') and opacityOf('menu_opacity') < 1 then imgui.SetNextWindowBgAlpha(opacityOf('menu_opacity')); end
     if imgui.Begin('XI: Forever Offline##servermenu', S.open, flags) then
         scaleWindow();
         colorText(C.gold, 'SQUADS');
@@ -1935,7 +2056,10 @@ local function buttonWindow()
     local x, y = tonumber(S.cfg.button_x) or 18, tonumber(S.cfg.button_y) or 240;
     imgui.SetNextWindowPos({ x, y }, S.dragging and (G('ImGuiCond_Always') or 1) or (S.placeButton and (G('ImGuiCond_Always') or 1)) or (G('ImGuiCond_FirstUseEver') or 4));
     S.placeButton = false;
-    local vars = pushVars({ { 'ImGuiStyleVar_WindowRounding', 7 }, { 'ImGuiStyleVar_WindowPadding', { 3, 3 } }, { 'ImGuiStyleVar_FrameRounding', 6 } });
+    -- the whole button fades to its opacity; under the mouse (or while dragged) it is solid, so it is easy to find
+    local fade = (S.buttonHot or S.dragging) and 1 or opacityOf('button_opacity');
+    local vars = pushVars({ { 'ImGuiStyleVar_WindowRounding', 7 }, { 'ImGuiStyleVar_WindowPadding', { 3, 3 } }, { 'ImGuiStyleVar_FrameRounding', 6 },
+                            { 'ImGuiStyleVar_Alpha', fade } });
     local colors = pushColors({ { 'ImGuiCol_WindowBg', { 0.05, 0.06, 0.09, 0.70 } }, { 'ImGuiCol_Border', { 0.89, 0.74, 0.40, 0.55 } },
                                 { 'ImGuiCol_Button', { 0.13, 0.16, 0.26, 0.95 } }, { 'ImGuiCol_ButtonHovered', { 0.22, 0.27, 0.42, 1 } },
                                 { 'ImGuiCol_ButtonActive', { 0.30, 0.36, 0.55, 1 } }, { 'ImGuiCol_Text', C.gold } });
@@ -1948,6 +2072,7 @@ local function buttonWindow()
     if imgui.Begin('##servermenu_button', { true }, flags) then
         scaleWindow();
         local clicked = imgui.Button('Squads##sm_open', { px(76), px(30) });
+        S.buttonHot = has('IsItemHovered') and imgui.IsItemHovered() or false;
         -- dragging the button moves it (unless locked); a drag is not a click
         if S.cfg.button_locked ~= 'true' and has('IsItemActive') and has('IsMouseDragging') and has('GetMouseDragDelta') then
             if imgui.IsItemActive() and imgui.IsMouseDragging(0, 3) then
@@ -1972,6 +2097,11 @@ local function buttonWindow()
             if has('MenuItem') then
                 if imgui.MenuItem(S.cfg.button_locked == 'true' and 'Unlock position' or 'Lock position') then
                     setCfg('button_locked', S.cfg.button_locked == 'true' and 'false' or 'true');
+                end
+                for _, pct in ipairs({ 100, 75, 50, 25 }) do
+                    if imgui.MenuItem(string.format('Opacity %d%%%s', pct, tonumber(S.cfg.button_opacity or '100') == pct and '   (now)' or '')) then
+                        setCfg('button_opacity', pct);
+                    end
                 end
                 if imgui.MenuItem('Hide button  (/menu button brings it back)') then
                     setCfg('button_hidden', 'true');
@@ -2716,6 +2846,19 @@ ashita.events.register('command', 'servermenu_command', function (e)
         setCfg('button_x', 18); setCfg('button_y', 240); setCfg('button_hidden', 'false'); setCfg('button_locked', 'false');
         S.placeButton = true;
         say('the FFXI button is back in its first place.');
+    elseif sub == 'opacity' then
+        -- /menu opacity <10-100>: the Squads button.  /menu opacity menu <10-100>: the menu's background.
+        local what, v = 'button_opacity', tonumber(args[3] or '');
+        if string.lower(tostring(args[3] or '')) == 'menu' then what, v = 'menu_opacity', tonumber(args[4] or ''); end
+        if string.lower(tostring(args[3] or '')) == 'button' then v = tonumber(args[4] or ''); end
+        if v then
+            v = math.floor(math.max(10, math.min(100, v)));
+            setCfg(what, v);
+            say(string.format('%s opacity is now %d%%.', what == 'menu_opacity' and 'menu background' or 'Squads button', v));
+        else
+            say(string.format('/menu opacity <10-100>   the Squads button (solid under the mouse). Now: %d%%   |   /menu opacity menu <10-100>   the menu\'s background. Now: %d%%',
+                math.floor(opacityOf('button_opacity') * 100 + 0.5), math.floor(opacityOf('menu_opacity') * 100 + 0.5)));
+        end
     elseif sub == 'scale' then
         local v = tonumber(args[3] or '');
         if v then
@@ -2733,7 +2876,7 @@ ashita.events.register('command', 'servermenu_command', function (e)
         setTab(sub:sub(1, 1):upper() .. sub:sub(2));
         setOpen(true);
     elseif sub == 'help' then
-        say('/menu  open or close  |  /menu squad|dualbox  |  /menu gambits (dualbox)  |  /menu button  |  /menu resetbutton  |  /menu scale <0.75-3>  |  /sq');
+        say('/menu  open or close  |  /menu squad|dualbox  |  /menu gambits (dualbox)  |  /menu button  |  /menu resetbutton  |  /menu scale <0.75-3>  |  /menu opacity <10-100>  |  /sq');
     else
         setOpen(not S.open[1]);
     end

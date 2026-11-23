@@ -99,7 +99,7 @@ def ollama_models(run=None):
     if not exe:
         return []
     try:
-        out = (run or subprocess.run)([exe, "list"], capture_output=True, text=True, timeout=20, creationflags=NO_WINDOW)
+        out = (run or subprocess.run)([exe, "list"], capture_output=True, text=True, errors="replace", timeout=20, creationflags=NO_WINDOW)
     except Exception:
         return []
     return [line.split()[0] for line in (out.stdout or "").splitlines()[1:] if line.strip()]
@@ -112,8 +112,8 @@ def status(item, kit, ashita, state=None, server=None):
         have = any(name == model or name == model + ":latest" for name in ollama_models())
         return have, model if have else ""
     if item.get("check_system"):             # something Windows itself keeps (the Visual C++ runtime)
-        present = os.path.exists(os.path.expandvars(item["check_system"]))
-        return present, "installed" if present else ""
+        present, version, _why = system_file_status(item)
+        return present, version if present else ""
     state = load_state(kit) if state is None else state
     record = state.get(item["id"])
     root = target_root(item, kit, ashita, server)
@@ -133,8 +133,185 @@ def status(item, kit, ashita, state=None, server=None):
     return False, ""
 
 
+# ----- taking things out again (lilibun, 2026-11-22) -----
+def forget(kit, item_id):
+    """The launcher no longer counts this download as installed."""
+    state = load_state(kit)
+    if item_id in state:
+        del state[item_id]
+        _save_state(kit, state)
+        return True
+    return False
+
+
+def place(item):
+    """("addon", "cadence"), ("plugin", "nameplate"), or None: which list row a download is, from the file the launcher
+    looks for (addons/<name>/<name>.lua or plugins/<name>.dll)."""
+    parts = str(item.get("check") or "").replace("\\", "/").split("/")
+    if item.get("into", "ashita") != "ashita":
+        return None
+    if len(parts) == 3 and parts[0] == "addons" and parts[2].lower().endswith(".lua"):
+        return "addon", parts[1].lower()
+    if len(parts) == 2 and parts[0] == "plugins" and parts[1].lower().endswith(".dll"):
+        return "plugin", parts[1][:-4].lower()
+    return None
+
+
+def forget_place(kit, kind, name):
+    """After an addon or plugin was removed: the download it came from shows as "not installed" again."""
+    try:
+        items = load_manifest(kit)
+    except Exception:
+        return False
+    done = False
+    for item in items:
+        if place(item) == (kind, name.lower()):
+            done = forget(kit, item["id"]) or done
+    return done
+
+
+def ollama_models_dir():
+    """Where Ollama keeps the models it downloaded."""
+    return os.environ.get("OLLAMA_MODELS") or os.path.join(os.path.expanduser("~"), ".ollama", "models")
+
+
+def ollama_uninstaller():
+    """Ollama's own uninstaller on Windows (next to ollama.exe), or None."""
+    if PLATFORM != "windows":
+        return None
+    exe = find_ollama()
+    folders = ([os.path.dirname(exe)] if exe else []) + [os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Ollama")]
+    for folder in folders:
+        guess = os.path.join(folder, "unins000.exe")
+        if os.path.isfile(guess):
+            return guess
+    return None
+
+
+def remove_model(model, run=None, start=None, wait=5):
+    """ollama rm <model>: gives back the disk space of one AI model. Ollama has to be running for it, so it is started
+    when it is not. Raises with Ollama's own words when it says no."""
+    import subprocess
+    exe = find_ollama()
+    if not exe:
+        raise RuntimeError("Ollama is not installed, so there is no model to remove.")
+    run = run or subprocess.run
+    if run([exe, "list"], capture_output=True, text=True, errors="replace", timeout=20, creationflags=NO_WINDOW).returncode != 0:
+        if start is None:
+            subprocess.Popen([exe, "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=NO_WINDOW,
+                             **({} if os.name == "nt" else {"start_new_session": True}))
+        else:
+            start()
+        time.sleep(wait)
+    out = run([exe, "rm", model], capture_output=True, text=True, errors="replace", timeout=120, creationflags=NO_WINDOW)
+    if out.returncode != 0:
+        said = [l.strip() for l in ((out.stderr or "") + "\n" + (out.stdout or "")).splitlines() if l.strip()]
+        raise RuntimeError(f"ollama rm {model} did not work." + (f"\n\nOllama said: {said[-1][:300]}" if said else ""))
+    return model
+
+
+def remove_ollama(kit, models=False, run=None, log=print):
+    """Takes Ollama out: on Windows its own uninstaller is started (you finish it in its window); on Linux the copy in
+    the install folder is deleted. models=True also deletes every model Ollama downloaded. Returns what was done."""
+    import subprocess
+    done = []
+    if PLATFORM == "windows":
+        uninstaller = ollama_uninstaller()
+        if uninstaller:
+            (run or subprocess.Popen)([uninstaller])
+            done.append("uninstaller")
+            log("Ollama's own uninstaller is open: finish it there.")
+        else:
+            log("Ollama's uninstaller was not found: remove Ollama under Windows Settings > Apps > Installed apps.")
+    else:
+        folder = os.path.join(kit, "ollama")
+        if os.path.isdir(folder) and not os.path.islink(folder):
+            shutil.rmtree(folder)
+            done.append("folder")
+            log("Ollama was removed from the install folder.")
+    if models:
+        folder = ollama_models_dir()
+        if os.path.isdir(folder) and not os.path.islink(folder) and os.path.basename(folder.rstrip("/\\")).lower() == "models":
+            shutil.rmtree(folder, ignore_errors=True)
+            done.append("models")
+            log("The downloaded AI models were deleted.")
+    forget(kit, "ollama")
+    return done
+
+
 # ----- finding the download -----
 _SSL_CONTEXT = None
+
+
+def file_version(path):
+    """(major, minor, build, revision) of a Windows program or DLL, from its version resource, or None. Read straight
+    from the file (the fixed version block starts with 0xFEEF04BD), so it needs none of Windows' own functions."""
+    import struct
+    try:
+        with open(path, "rb") as handle:
+            data = handle.read()
+    except OSError:
+        return None
+    at = data.find(b"\xbd\x04\xef\xfe")
+    if at < 0 or at + 16 > len(data):
+        return None
+    _signature, _struct_version, high, low = struct.unpack_from("<IIII", data, at)
+    return (high >> 16, high & 0xFFFF, low >> 16, low & 0xFFFF)
+
+
+def _version_numbers(text):
+    return tuple(int(n) for n in re.findall(r"\d+", text or "")[:4])
+
+
+def system_file_status(item):
+    """(ok, version text, why) for an item Windows itself keeps ("check_system": a file that is there once it is
+    installed). With "min_version" the file also has to be at least that version; why is '' / 'missing' / 'old'.
+    A file whose version can't be read counts as fine (better than asking for an installer again and again)."""
+    path = os.path.expandvars(item["check_system"])
+    if not os.path.exists(path):
+        return False, "", "missing"
+    need = _version_numbers(item.get("min_version"))
+    have = file_version(path) if need else None
+    if have is None:
+        return True, "installed", ""
+    text = ".".join(str(n) for n in have[:3])
+    if have[:len(need)] < need:
+        return False, text, "old"
+    return True, text, ""
+
+
+def ensure_system_runtimes(kit, ashita, fetch=None, log=print, run=None, items=None):
+    """(Windows) The Microsoft Visual C++ runtimes: the game loader and Ashita use the 32-bit one, the server and the
+    database the 64-bit one. (2026-11-22, Leyna Crosse: xiloader.exe stopped inside MSVCP140.dll 14.29 without a word;
+    installing the current runtime fixed it. Programs built with Visual Studio 2022 17.10 or newer stop like that on
+    a runtime older than 14.40. The launcher used to check only that the 64-bit one existed and never installed the
+    32-bit one.) Installs each runtime that is missing or older than its "min_version".
+    Returns [(id, 'installed' | 'failed', text)]; nothing is raised, PLAY goes on either way."""
+    out = []
+    for item in (load_manifest(kit) if items is None else items):
+        source = item.get("source", {})
+        if not item.get("check_system") or source.get("type") != "installer":
+            continue
+        ok, have, why = system_file_status(item)
+        if ok:
+            continue
+        log(f"{item['name']}: " + ("not installed" if why == "missing" else
+                                   f"version {have} is too old (needs {item.get('min_version')} or newer)")
+            + ". Installing it now; Windows may ask for permission...")
+        try:
+            install(item, kit, ashita, fetch=fetch or _get, log=log, run=run)
+            ok, have, why = system_file_status(item)
+            problem = "" if ok else "its installer finished but the runtime is still " + ("missing" if why == "missing" else "the old one")
+        except Exception as e:
+            ok, problem = False, str(e)
+        if ok:
+            log(f"{item['name']}: installed ({have}).")
+            out.append((item["id"], "installed", have))
+        else:
+            log(f"{item['name']} could not be installed ({problem}). Without it the game or the server can stop as "
+                f"soon as it starts. Install it yourself from {source.get('url')} and press PLAY again.")
+            out.append((item["id"], "failed", problem))
+    return out
 
 
 def ssl_context():
@@ -287,7 +464,8 @@ def plan(item, names):
 # Squad chat and the crowd/bot chat both read "model" from squad-chat/config.json, so that is the one place to set it.
 SUGGESTED_MODELS = [
     ("gemma4:12b", "default: good chat, about 8 GB of video memory"),
-    ("gemma4:4b", "lighter: about 3 GB, for smaller graphics cards"),
+    # (2026-11-22, Yumainai: "ollama pull gemma4:4b failed") there is no gemma4:4b; the small ones are e2b and e4b
+    ("gemma4:e2b", "lighter: about 5 GB, for smaller graphics cards"),
     ("qwen3:8b", "about 5 GB"),
     ("qwen3:14b", "about 9 GB, needs a strong graphics card"),
     ("mistral-nemo:latest", "about 7 GB"),
@@ -347,7 +525,7 @@ def import_gguf(gguf_path, name=None, log=print, run=None):
     with open(modelfile, "w", encoding="utf-8") as f:
         f.write(f'FROM "{os.path.abspath(gguf_path)}"\n')
     log(f"Importing {os.path.basename(gguf_path)} into Ollama as {name} (this can take a few minutes)...")
-    out = (run or subprocess.run)([exe, "create", name, "-f", modelfile], capture_output=True, text=True,
+    out = (run or subprocess.run)([exe, "create", name, "-f", modelfile], capture_output=True, text=True, errors="replace",
                                   creationflags=NO_WINDOW)
     if out.returncode != 0:
         raise RuntimeError(((out.stderr or out.stdout or "").strip()[-300:]) or "ollama create failed")
@@ -380,7 +558,11 @@ def pull_model(model, log=print, popen=None):
                 log(f"AI model {model}: {lines[-1][:90]}")
             last = time.time()
     if proc.wait() != 0:
-        raise RuntimeError(f"ollama pull {model} failed (code {proc.returncode}).")
+        # what Ollama itself said last (a name that doesn't exist, an Ollama that is too old for the model, no room)
+        said = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", buffer.decode("utf-8", "replace")).replace("\r", "\n")
+        said = [l.strip() for l in said.splitlines() if l.strip()]
+        raise RuntimeError(f"ollama pull {model} failed (code {proc.returncode})."
+                           + (f"\n\nOllama said: {said[-1][:300]}" if said else ""))
     log(f"AI model {model} is ready.")
 
 
@@ -460,13 +642,13 @@ def extract_tree(archive_path, dest):
 def _extract_with_system_tar(archive_path, dest):
     """A .tar.zst with a Python that can't read zstd: the system's tar does it (SteamOS and most distros have zstd)."""
     import subprocess
-    listing = subprocess.run(["tar", "--zstd", "-tf", archive_path], capture_output=True, text=True)
+    listing = subprocess.run(["tar", "--zstd", "-tf", archive_path], capture_output=True, text=True, errors="replace")
     if listing.returncode != 0:
         raise RuntimeError("This system can't unpack .tar.zst files (install zstd).")
     for name in listing.stdout.splitlines():
         if name.startswith("/") or ".." in name.split("/"):
             raise RuntimeError(f"refusing a path outside the folder: {name}")
-    done = subprocess.run(["tar", "--zstd", "--no-same-owner", "-xf", archive_path, "-C", dest], capture_output=True, text=True)
+    done = subprocess.run(["tar", "--zstd", "--no-same-owner", "-xf", archive_path, "-C", dest], capture_output=True, text=True, errors="replace")
     if done.returncode != 0:
         raise RuntimeError("Unpacking failed: " + (done.stderr or "")[-300:])
 

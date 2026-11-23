@@ -1,0 +1,14 @@
+{
+  "name": "Vaporwave",
+  "about": "A limited-time look for the launcher (see launcher_theme.py and README.txt in this folder). Used up to and including the date in the file name. Its buttons are the pictures in the vaporwave-ui folder, made by art-src\\scripts\\vice_buttons.py.",
+  "colours": {
+    "BG": "#120a24", "PANEL": "#1c1036", "PANEL2": "#2a174e",
+    "FG": "#f7ecff", "DIM": "#a994cf",
+    "BORDER": "#43217a", "LINE": "#5b3098", "OFF": "#8069a8",
+    "GOLD": "#ff5ccb", "GOLD_LIT": "#ff9ee3", "GOLD_DIM": "#7a2a6e", "PARCH": "#f3e3ff",
+    "ACCENT": "#3fe8e0", "GREEN": "#3df2b4", "RED": "#ff4f7b", "GREY": "#54446e"
+  },
+  "art": {
+    "folder": "vaporwave-ui"
+  }
+}

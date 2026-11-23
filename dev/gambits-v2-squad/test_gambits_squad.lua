@@ -263,7 +263,7 @@ end
 local o = run('ping 5 77')
 check(#o == 1 and o[1]:match('^GSQ|5|pong|77|%d+$'), 'ping answers with its id and the client value: ' .. tostring(o[1]))
 o = run('hello 6')
-check(o[1] == 'GSQ|6|hello|7|32|120|64', 'hello: version 7 (party roles), 32 rules, 120 bytes, 64 chunks: ' .. tostring(o[1]))
+check(o[1] == 'GSQ|6|hello|9|32|120|64', 'hello: version 9 (Bard role targeting), 32 rules, 120 bytes, 64 chunks: ' .. tostring(o[1]))
 o = run('nonsense 7')
 check(o[1]:match('^GSQ|7|err|badreq'), 'an unknown request is answered with an error')
 o = run(string.rep('x', 200))

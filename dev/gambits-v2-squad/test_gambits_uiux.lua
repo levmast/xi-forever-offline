@@ -1241,8 +1241,8 @@ do
     M.roles_section()
     check(S.rolesOpen == true and prefs.roles_open == true, 'K8 clicking the header opens it and remembers roles_open')
     local gs = readAll(ADDON_DIR .. '/Gambits.lua')
-    check(gs:find('roles_open = true }', 1, true) and gs:find("s.roles_open = s.roles_open == true", 1, true) and gs:find("addon.version = '0.3.2'", 1, true),
-          'K8 Gambits.lua: roles_open whitelisted and cleaned; version 0.3.2')
+    check(gs:find('roles_open = true }', 1, true) and gs:find("s.roles_open = s.roles_open == true", 1, true) and gs:find("addon.version = '0.3.3'", 1, true),
+          'K8 Gambits.lua: roles_open whitelisted and cleaned; version 0.3.3')
     serve()
     -- K9: themes and sizes, open with every dropdown and tooltip, narrow window: balanced, no format calls
     for _, case in ipairs({ { 'classic', 1, { 1000, 560 } }, { 'squad', 0.7, { 700, 400 } }, { 'crimson', 2, { 1060, 580 } } }) do

@@ -23,6 +23,31 @@ BOT_ACCOUNT_BASE = 21000000
 ROLES = ["auto", "tank", "damage", "healer", "support"]
 MODES = ["balanced", "aggressive", "conserve"]
 
+# (role clarity) what each role and mode really does, from the server's squad.lua behaviorFilter / ROLE_KEEPS /
+# EMERGENCY_HP (tank 40, damage 30) and MODE_HEAL_SHIFT (+15 / -15, kept between 15 and 90). The same words as the
+# in-game Squad menu and Squad panel. Text only: the server decides.
+ROLE_HELP = {
+    "tank": "Provoke, Sentinel, debuffs, own buffs; cures only below 40% HP, no status removal, no buffs on others; no nukes",
+    "damage": "attacks, nukes, debuffs, own buffs; cures only below 30% HP, no status removal, no buffs on others",
+    "healer": "cures, status removal, party buffs; no debuffs, nukes or job abilities",
+    "support": "party buffs, debuffs, status removal, cures; no nukes or job abilities",
+    "auto": "the job's default rules, nothing filtered",
+}
+MODE_HELP = {
+    "aggressive": "cures 15% HP earlier (also on top of a Tank or Damage limit); holds no MP back",
+    "conserve": "cures 15% HP later and keeps 40% MP before buffs, debuffs, nukes and status removal",
+}
+ROLE_FOOTER = ("The role changes only the mate's default job rules. A Gambits Rule Set replaces those rules and is not "
+               "filtered by the role. It is not the Gambits party role (Tank / Melee / Mage / Ranged).")
+
+
+def behavior_help_text():
+    """The Behavior page's legend: one line per role, then the modes."""
+    lines = [f"{role}: {ROLE_HELP[role]}." for role in ("tank", "damage", "healer", "support", "auto")]
+    lines.append("")
+    lines += [f"{mode}: {MODE_HELP[mode]}." for mode in ("aggressive", "conserve")]
+    return "\n".join(lines)
+
 # WAR MNK WHM BLM RDM THF are available from the start; the other jobs are "advanced" and must be unlocked
 # on the character first (the game keeps that as a bit per job id in char_jobs.unlocked).
 STARTER_JOBS = {1, 2, 3, 4, 5, 6}
@@ -187,6 +212,18 @@ def list_characters(conn):
     return [(int(r[0]), r[1]) for r in rows if int(r[0]) not in guests and int(r[0]) not in away]
 
 
+def owner_has_support_jobs(conn, charid):
+    """True when this character has support jobs (the quest done, or main level 18): squad.lua levelsFor then gives
+    every mate its sub job from level 1 (FalconX51, 2026-11-22: the launcher only showed the sub from level 18)."""
+    try:
+        rows = _all(conn, "SELECT unlocked FROM char_jobs WHERE charid = ?", (charid,))
+        if rows and int(rows[0][0] or 0) & 1:
+            return True
+        return char_level(conn, charid) >= SUB_UNLOCK_LEVEL
+    except Exception:
+        return False
+
+
 def get_squad(conn, charid):
     mates = {}
     for r in _all(conn, "SELECT id, slot, name, race, face, mjob, sjob FROM squad_mate WHERE charid = ? ORDER BY slot", (charid,)):
@@ -194,6 +231,9 @@ def get_squad(conn, charid):
                             "mjob": int(r[5]), "sjob": int(r[6]), "jobs": {}, "equip": {}}
     if not mates:
         return []
+    owner_sub = owner_has_support_jobs(conn, charid)
+    for mate in mates.values():
+        mate["owner_sub"] = owner_sub
     for r in _all(conn, "SELECT squad_id, job, level, exp FROM squad_job WHERE squad_id IN (SELECT id FROM squad_mate WHERE charid = ?)", (charid,)):
         if int(r[0]) in mates:
             mates[int(r[0])]["jobs"][int(r[1])] = (int(r[2]), int(r[3]))
@@ -225,13 +265,21 @@ def read_subjob_ratio(server_dir):
     return SUBJOB_RATIO
 
 
+SUB_UNLOCK_LEVEL = 18       # squad.lua SUB_UNLOCK_LEVEL
+
+
 def effective_levels(mate):
-    """Main level, sub job and sub level, using the same rules as the game side."""
+    """Main level, sub job and sub level, using the same rules as the game side (squad.lua levelsFor)."""
     main = job_level(mate, mate["mjob"])
     sub, sub_level = 0, 0
     ratio = SUBJOB_RATIO
     cap = main if ratio == 3 else main * 2 // 3 if ratio == 2 else 0 if ratio == 0 else main // 2
-    if mate["sjob"] and mate["sjob"] != mate["mjob"] and main >= 18 and cap > 0:
+    if ratio != 0 and cap < 1:
+        cap = 1         # a level 1 main job has a level 1 support job
+    # the sub works once the mate's main job, or any of its jobs, is 18, or once its owner has support jobs
+    unlocked = (main >= SUB_UNLOCK_LEVEL or bool(mate.get("owner_sub"))
+                or any(level >= SUB_UNLOCK_LEVEL for level, _exp in mate.get("jobs", {}).values()))
+    if mate["sjob"] and mate["sjob"] != mate["mjob"] and unlocked and cap > 0:
         sub = mate["sjob"]
         sub_level = max(1, min(job_level(mate, sub), cap))
     return main, sub, sub_level
@@ -400,8 +448,14 @@ def item_stats(conn, item_id, server_dir=""):
     return lines
 
 
-def search_items(conn, slot, job, max_level, text, charid=None, require_unlock=False, limit=300):
-    """Equipment that fits `slot`. job/max_level filter to what that job can wear at that level (pass 0 to skip)."""
+SEARCH_LIMIT = 600
+
+
+def search_items(conn, slot, job, max_level, text, charid=None, require_unlock=False, limit=SEARCH_LIMIT):
+    """Equipment that fits `slot`. job/max_level filter to what that job can wear at that level (pass 0 to skip).
+    Highest level first. (2026-11-22, Gilder: a level 21 Warrior's Main list stopped at level 12. The list was the
+    first 300 from level 1 up, and a Warrior can hold so many kinds of weapon that 300 ran out at level 12; a Monk's
+    shorter list reached further.) The cut now falls on the low levels, which matter least."""
     sql = "SELECT i.itemId, i.name, i.level FROM item_equipment i WHERE (i.slot & ?) <> 0"
     params = [1 << slot]
     if job:
@@ -416,7 +470,7 @@ def search_items(conn, slot, job, max_level, text, charid=None, require_unlock=F
     if require_unlock:
         sql += " AND i.itemId IN (SELECT itemid FROM squad_unlock WHERE charid = ?)"
         params.append(charid)
-    sql += " ORDER BY i.level, i.name LIMIT ?"
+    sql += " ORDER BY i.level DESC, i.name LIMIT ?"
     params.append(limit)
     return [(int(r[0]), r[1], int(r[2])) for r in _all(conn, sql, tuple(params))]
 

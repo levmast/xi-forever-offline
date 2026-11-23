@@ -18,7 +18,15 @@ import os
 import re
 import shutil
 
-SLOTS = 27
+# (2026-11-22, Frost) today's game keeps 32 button slots in padsin000, not 27: FFXI's own gamepad tool added Shutdown,
+# Target Nearby NPC, Button Combination, Jump and Map after the classic 27. Frost's registry, with Target Nearby NPC on
+# RB (id 11), reads ...,6,7,5,4,-1,-1,-1,11,-1,-1,-1: slot 28. With 27 values the launcher's setup left the five out.
+# The other four slots are worked out, not seen in a registry yet: FFXiPadConfig.exe's settings dialog made its five
+# newer boxes in the order Shutdown, Target Nearby NPC, Button Combination, Jump, Map (control ids 1042, 1043, 1044,
+# 1045, 1054), and slot 28 for the second of them fits slots handed out in that order: 27, 28, 29, 30, 31.
+# Button Combination (a button held with another one; its pairs live in padexsin000) is not offered: always "nothing".
+SLOTS = 32
+SHUTDOWN, TARGET_NPC, COMBINATION, JUMP, MAP = 27, 28, 29, 30, 31
 NONE = -1
 REGISTRY = "ffxi.registry"
 INPUT = "ashita.input"
@@ -33,7 +41,9 @@ ACTIONS = ((7, "Confirm / open the action menu"), (5, "Cancel"), (6, "Main menu"
            (0, "Auto-run"), (1, "Ctrl macro bar"), (3, "Alt macro bar"), (4, "Heal / lock target"),
            (2, "First / third person camera"), (9, "Show or hide windows"), (12, "Log out window"),
            (25, "Screenshot (windows hidden)"), (10, "Hold: left stick moves in menus"),
-           (11, "Hold: left stick moves the camera"), (26, "Switch movement / menu / camera"))
+           (11, "Hold: left stick moves the camera"), (26, "Switch movement / menu / camera"),
+           (TARGET_NPC, "Target the nearest NPC"), (MAP, "Map (/map)"), (JUMP, "Jump (/jump)"),
+           (SHUTDOWN, "Shut the game down"))
 ACTION_SLOTS = {slot for slot, _ in ACTIONS}
 
 # XInput ids: B 0, X 1, Y 2, A 3, D-pad R/L/U/D 4-7, LB 8, LT 9, L3 10, RB 11, RT 12, R3 13, Start 14, Back 15
@@ -75,11 +85,15 @@ def buttons(values):
 
 
 def default_buttons(values):
-    """What each action gets before any change: the controller's usual layout."""
+    """What each action gets before any change: retail's "Alternate Setup E", with two changes gamepad players make
+    first (2026-11-22, Frost, FalconX51; the user: pick what is best): R1 targets the nearest NPC instead of taking a
+    screenshot, and Select opens the map instead of hiding the windows. Screenshot, hiding the windows, Jump and
+    shutting down start on no button (a PlayStation pad read directly has one to spare: its touchpad jumps)."""
     lay = layout(values)
     confirm, cancel = (lay["right"], lay["bottom"]) if values["confirm_right"] else (lay["bottom"], lay["right"])
     return {7: confirm, 5: cancel, 6: lay["left"], 8: lay["top"], 0: lay["l1"], 1: lay["l2"], 3: lay["r2"],
-            4: lay["l3"], 2: lay["r3"], 9: lay["select"], 12: lay["start"], 25: lay["r1"], 10: NONE, 11: NONE, 26: NONE}
+            4: lay["l3"], 2: lay["r3"], 12: lay["start"], TARGET_NPC: lay["r1"], MAP: lay["select"],
+            JUMP: NONE if uses_xinput(values) else 13, 9: NONE, 25: NONE, 10: NONE, 11: NONE, 26: NONE, SHUTDOWN: NONE}
 
 
 def clean(values):

@@ -14,12 +14,13 @@ Milestone 2: the Squad Rule Set editor (Target -> Conditions -> Action) for your
 Independent of the old Gambits addon: its own window, settings (config/addons/GambitsV2/), draft file and command.
 Run only one Squad Rule Set editor at a time: the old Gambits' SQUAD tab (if a development build has it) would also take
 the server's GSQ answers.
-Files: Gambits.lua (this shell), transport.lua (chat transport), squad_editor.lua (the editor).
+Files: Gambits.lua (this shell), transport.lua (chat transport), squad_editor.lua (the editor), share_code.lua (Rule Set
+share codes).
 ]]
 
 addon.name    = 'Gambits'
 addon.author  = 'XI: Forever Offline'
-addon.version = '0.3.2'
+addon.version = '0.3.3'
 addon.desc    = 'Gambits: Rule Sets for your squad mates (Target -> Conditions -> Action).'
 addon.link    = ''
 

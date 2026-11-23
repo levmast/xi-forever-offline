@@ -1,0 +1,11 @@
+{
+  "about": "Who made the launcher's music (see launcher_theme.py and README.txt in this folder). OPTIONS > Theme names the song that plays and its maker from \"songs\", and shows \"credit\" under it. \"songs\": a song's file name in this folder, then its title (\"\" when it has none), or {\"title\": ..., \"by\": ...} for a song by someone else; \"by\" is who made every song that does not say otherwise. A new song needs a line here, in CREDITS.md and in the patch notes: dev\\launcher-tests\\test_limited_look.py fails while a song in this folder has no line.",
+  "by": "JØ",
+  "credit": "All of the launcher's music was made for XI: Forever Offline by JØ, our Head of Music.",
+  "songs": {
+    "default.mp3": "A Place to Return",
+    "beyond_the_veil.mp3": "Beyond the Veil",
+    "no_signal_all_vibes__until-2026-12-02.mp3": "No Signal, All Vibes",
+    "xifo_theme__plays-1__until-2026-12-02.mp3": ""
+  }
+}

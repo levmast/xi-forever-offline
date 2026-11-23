@@ -174,7 +174,7 @@ check(has(CPP, 'SquadOwnerMerit') and has(CPP, 'squadMateMayUse'), 'squad.cpp ha
 check(has(CPP, 'skillType == xi::SkillType::Archery || skillType == xi::SkillType::Marksmanship || skillType == xi::SkillType::Throwing'),
       'squad.cpp copies the ranged weapon of real shooting or throwing weapons only')
 local GSQ = readAll(LUA .. '/gambits_squad.lua')
-check(GSQ:match('local VERSION%s*=%s*7%s') ~= nil, 'gambits_squad.lua is protocol v7 (party roles)')
+check(GSQ:match('local VERSION%s*=%s*9%s') ~= nil, 'gambits_squad.lua is protocol v9 (Bard role targeting)')
 
 -- ================================================================= 2. default behaviour without a Rule Set = v0.1.48
 section('default job behaviour without a Rule Set (v0.1.48 bard songs by party)')
@@ -363,6 +363,22 @@ local jc = H.ruleCondition({ 'JA_ON_COOLDOWN', 'PROVOKE' }, false)
 check(jc and jc[1] == ai.c.JA_ON_COOLDOWN and jc[2] == xi.ja.PROVOKE, 'JA_ON_COOLDOWN PROVOKE becomes the engine\'s { 37, Provoke id }')
 check(H.ruleCondition({ 'JA_ON_COOLDOWN', 'NOT_AN_ABILITY' }, false) == nil, 'an unknown job ability: the rule is skipped (logged), never a 0 id')
 check(H.ruleCondition({ 'HAS_MP_MPP_LT', 50 }, false)[1] == ai.c.HAS_MP_MPP_LT, 'HAS_MP_MPP_LT 50 is passed as it is')
+-- (0.3.3, Bard song tiers) STATUS / NOT_STATUS { effect, tier } -> effect id + tier * 65536, only with the tier map server
+do
+    rawset(xi.effect, 'REQUIEM', 192); rawset(xi.effect, 'MARCH', 214); rawset(xi.effect, 'NOCTURNE', 223); rawset(xi.effect, 'HASTE', 33)
+    SquadStatusTierEngine = function() return 1 end
+    local tc = H.ruleCondition({ 'NOT_STATUS', { effect = 'MARCH', tier = 2 } }, false)
+    check(tc and tc[1] == ai.c.NOT_STATUS and tc[2] == 214 + 2 * 65536, 'NOT_STATUS { MARCH, 2 } -> { 10, 214 + 2 * 65536 } (Victory March)')
+    local sc = H.ruleCondition({ 'STATUS', { effect = 'MARCH', tier = 1 } }, false)
+    check(sc and sc[1] == ai.c.STATUS and sc[2] == 214 + 65536, 'STATUS { MARCH, 1 } -> Advancing March')
+    local pc2 = H.ruleCondition({ 'NOT_STATUS', 'MARCH' }, false)
+    check(pc2 and pc2[2] == 214, 'a plain NOT_STATUS MARCH: the effect id alone, as before (any March)')
+    check(H.ruleCondition({ 'NOT_STATUS', { effect = 'HASTE', tier = 1 } }, false) == nil, 'a tier on Haste: the rule is skipped (logged)')
+    SquadStatusTierEngine = nil
+    local skipped = H.ruleCondition({ 'NOT_STATUS', { effect = 'MARCH', tier = 2 } }, false)
+    check(skipped == nil, 'without the tier map server: skipped, never sent as "any March"')
+    check(logHas('NOT_STATUS with a song tier needs a song effect'), 'and logged: ' .. tostring(LOG[#LOG]))
+end
 check(has(SQ, 'wsSettings.spawnWs(player, mate)') and has(SQ, 'pcall(wsSettings.onSpawn, player, trust, mate)') and has(SQ, 'wsSettings.legacyNote'),
       'squad.lua: the call uses the weapon skill settings; !squad ws adds the note')
 

@@ -268,6 +268,30 @@ def mood_of(bot):
     return MOODS[sum(ord(c) for c in bot + day) % len(MOODS)]
 
 
+def hood(source, model, messages, reply, seconds):
+    """(Sunie, 2026-11-22) "Peek under the AI hood". While the switch file ai-hood.on is in the kit folder, every
+    prompt goes to logs/ai-hood.log in full, with the model's reply. No such file (everyone else): nothing happens."""
+    try:
+        import os
+        kit = KIT
+        if not os.path.exists(os.path.join(kit, "ai-hood.on")):
+            return
+        path = os.path.join(kit, "logs", "ai-hood.log")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if os.path.exists(path) and os.path.getsize(path) > 4_000_000:      # one older file is kept
+            os.replace(path, path + ".1")
+        parts = [f"===== {time.strftime('%H:%M:%S')}  {source}  |  model {model}  |  {seconds:.1f}s ====="]
+        for message in messages:
+            parts.append(f"--- {message.get('role', '?')} ---")
+            parts.append(str(message.get("content", "")).rstrip())
+        parts.append("--- reply ---")
+        parts.append(str(reply if reply is not None else "(no reply)").rstrip())
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write("\n".join(parts) + "\n\n")
+    except Exception:
+        pass
+
+
 def ollama_chat(cfg, messages, options, timeout=40, fmt=None):
     payload = {"model": cfg["model"], "stream": False, "keep_alive": "30m", "messages": messages,
                "options": model_options(cfg["model"], options)}
@@ -276,8 +300,11 @@ def ollama_chat(cfg, messages, options, timeout=40, fmt=None):
         payload["format"] = fmt
     http = urllib.request.Request(cfg["ollama_url"].rstrip("/") + "/api/chat", data=json.dumps(payload).encode("utf-8"),
                                   headers={"Content-Type": "application/json"}, method="POST")
+    started = time.time()
     with urllib.request.urlopen(http, timeout=timeout) as resp:
-        return json.loads(resp.read().decode("utf-8")).get("message", {}).get("content") or ""
+        content = json.loads(resp.read().decode("utf-8")).get("message", {}).get("content") or ""
+    hood("bot players", cfg["model"], messages, content, time.time() - started)
+    return content
 
 
 def sum_up(cfg, bot, to, mem):

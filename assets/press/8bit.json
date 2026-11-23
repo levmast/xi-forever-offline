@@ -1,0 +1,13 @@
+{
+  "name": "8-Bit",
+  "about": "A theme that is always there to pick on the Theme page (see launcher_theme.py and README.txt in this folder): the launcher as an 8 / 16-bit console menu. Its buttons are the pictures in the 8bit-ui folder (art-src\\scripts\\bit_buttons.py draws them, with the sprites in art-src\\8bit-sprites); its lettering is Galmuri11 (fonts folder, SIL Open Font License).",
+  "colours": {
+    "BG": "#06081c", "PANEL": "#141c8c", "PANEL2": "#2434b4", "FG": "#fcfcfc", "DIM": "#a4b0ec",
+    "BORDER": "#d8dcfc", "LINE": "#6470e0", "OFF": "#6c78c8",
+    "GOLD": "#fcd040", "GOLD_LIT": "#fcec90", "GOLD_DIM": "#8c7420", "PARCH": "#fcf0d0",
+    "ACCENT": "#5cd8fc", "GREEN": "#58f89c", "RED": "#fc5c5c", "GREY": "#4c549c"
+  },
+  "art": {"folder": "8bit-ui"},
+  "sound": "beyond_the_veil.mp3",
+  "font": {"family": "Galmuri11", "files": ["fonts/Galmuri11-Regular.ttf", "fonts/Galmuri11-Bold.ttf"]}
+}

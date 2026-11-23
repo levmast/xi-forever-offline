@@ -36,6 +36,7 @@ SquadOwnerMerit = function() return 0 end
 -- the job expansion's map server (squad.cpp registers these); engineOff() is a v0.1.55 / batch xi_map
 local function engine2On() SquadJobExpansionEngine = function() return 1 end end
 local function engine2Off() SquadJobExpansionEngine = nil end
+SquadRoleFilterEngine = function() return 1 end -- (0.3.3) the map server of this batch also reads role filters (the Basic Bard starter uses them)
 SquadApplyWeaponSkills = function() return true end
 GetSquadWeaponSkillIds = function() return {} end
 engine2On()
@@ -186,7 +187,7 @@ end
 section('catalog v6: Check Self -> Act on Enemy, catm "jm", content switched off')
 do
     local o = run('hello 1')
-    check(o[1] == 'GSQ|1|hello|7|32|120|64', 'hello: version 7 (party roles) - ' .. tostring(o[1]))
+    check(o[1] == 'GSQ|1|hello|9|32|120|64', 'hello: version 9 (Bard role targeting) - ' .. tostring(o[1]))
     local t = catEntries(run('catm 2 9 jm'), 't')
     check(has(t, 'TRIGGER_SELF_ACTION_TARGET') and t[#t] == 'TRIGGER_SELF_ACTION_TARGET', 'the target TRIGGER_SELF_ACTION_TARGET is offered (last)')
     local cJM = catEntries(run('catm 3 9 jm'), 'c')

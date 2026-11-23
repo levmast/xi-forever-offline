@@ -128,6 +128,96 @@ class SetupTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):                      # never over an existing install
             ls.write_config(self.kit, {})
 
+    def test_setup_again_keeps_the_world_and_moves_the_folders(self):
+        """(Sunie, 2026-11-22) SYSTEM > Settings > Run setup again: other folders, the same world, account and settings."""
+        quiet = lambda *a, **k: b""
+        ls.start_mariadb = lambda d, p, popen=None, wait=30: None
+        cfg = ls.run_setup(self.kit, {"ffxi_dir": self.ffxi, "ashita_dir": self.ashita, "server_dir": self.server,
+                                      "mariadb_dir": self.mdb, "world": "quiet", "population": "small",
+                                      "interface": "xiuiplus", "extras": [], "login": "player1", "password": "pw123456"},
+                           tp, log=lambda m: None, fetch=quiet, run=FakeMaria().run)
+        config = os.path.join(self.kit, "config.json")
+        mine = json.load(open(config))
+        mine["contributor_mode"] = True                        # things changed since the first setup
+        json.dump(mine, open(config, "w"), indent=2)
+        before = open(config).read()
+        rates_file = os.path.join(self.kit, "rates.json")
+        rates = json.load(open(rates_file)); rates["exp_rate"] = 7.5
+        json.dump(rates, open(rates_file, "w"))
+        rates_before = open(rates_file).read()
+        boot = os.path.join(self.ashita, "config", "boot", "xiforever.ini")
+        open(boot, "a").write("; my own line\n")
+        boot_before = open(boot).read()
+        network_before = open(os.path.join(self.server, "settings", "network.lua")).read()
+
+        ashita2 = os.path.join(self.tmp, "Ashita two")         # another Ashita folder (ready-made: no downloads)
+        os.makedirs(os.path.join(ashita2, "config", "boot")); os.makedirs(os.path.join(ashita2, "scripts"))
+        open(os.path.join(ashita2, "config", "boot", "example-privateserver.ini"), "w").write(EXAMPLE_INI)
+        for f in ("Ashita-cli.exe", "bootloader/xiloader.exe"):
+            os.makedirs(os.path.dirname(os.path.join(ashita2, f)), exist_ok=True)
+            open(os.path.join(ashita2, f), "w").write("x")
+        ffxi2 = os.path.join(self.tmp, "D", "SquareEnix", "FINAL FANTASY XI")     # the game, moved to another drive
+        viewer2 = os.path.join(self.tmp, "D", "SquareEnix", "PlayOnlineViewer")
+        os.makedirs(ffxi2); os.makedirs(viewer2)
+        open(os.path.join(ffxi2, "FFXiMain.dll"), "w").write("x")
+
+        class Installed(FakeMaria):                             # the database of an install: tables and account exist
+            def run(self, cmd, **kw):
+                self.calls.append(cmd)
+                last = cmd[-1] if cmd else ""
+                return Done("accounts" if "SHOW TABLES" in last else "1000" if "SELECT id FROM accounts" in last else "")
+        fake, logs = Installed(), []
+        cfg2 = ls.run_setup(self.kit, {"ffxi_dir": ffxi2, "game": "existing", "ashita_dir": ashita2, "server_dir": self.server,
+                                       "mariadb_dir": os.path.join(self.tmp, "elsewhere"), "world": "living_ai",
+                                       "population": "large", "interface": "none", "extras": [],
+                                       "login": "someoneelse", "password": "otherpw99"},
+                            tp, log=logs.append, fetch=quiet, run=fake.run, again=json.loads(before))
+        saved = json.load(open(config))
+        self.assertEqual(saved, cfg2)
+        self.assertEqual((saved["ashita_dir"], saved["ffxi_client_dir"], saved["pol_dir"], saved["game_copy"]),
+                         (ashita2, ffxi2, viewer2, True))
+        # the account, the database, the world and what the player set since are as they were
+        for key in ("game_user", "game_pass", "world", "mariadb_dir", "db_pass", "db_port", "db_name", "contributor_mode"):
+            self.assertEqual(saved[key], mine[key], key)
+        self.assertEqual(saved["mariadb_dir"], self.mdb, "the database never moves")
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "elsewhere")))
+        self.assertFalse(any("SOURCE" in c[-1] for c in fake.calls), "the tables are not imported again")
+        self.assertFalse(any("INSERT INTO accounts" in c[-1] for c in fake.calls), "no second account")
+        self.assertFalse(any("DROP" in c[-1].upper() for c in fake.calls))
+        self.assertIn("The tables are already there.", logs)
+        self.assertEqual(open(rates_file).read(), rates_before, "the Rules are kept")
+        self.assertEqual(open(boot).read(), boot_before, "the old Ashita folder is left alone")
+        self.assertEqual(open(os.path.join(self.server, "settings", "network.lua")).read(), network_before)
+        self.assertEqual(open(config + ".before-setup-again").read(), before, "the config from before is kept")
+        new_boot = open(os.path.join(ashita2, "config", "boot", "xiforever.ini")).read()
+        self.assertIn("--user player1 --pass pw123456", new_boot, "the new Ashita folder logs in with the same account")
+        self.assertTrue(os.path.exists(os.path.join(ashita2, "addons", "Gambits", "Gambits.lua")))
+
+        # once more with the folders as they are now, and "make a copy" ticked: nothing about the game changes
+        fake3 = Installed()
+        cfg3 = ls.run_setup(self.kit, {"ffxi_dir": ffxi2, "game": "copy", "ashita_dir": ashita2, "server_dir": self.server,
+                                       "mariadb_dir": self.mdb, "world": "quiet", "population": "small",
+                                       "interface": "none", "extras": [], "login": "player1", "password": "pw123456"},
+                            tp, log=lambda m: None, fetch=quiet, run=fake3.run, again=dict(cfg2))
+        self.assertEqual(cfg3, cfg2)
+        self.assertFalse(os.path.exists(os.path.join(self.kit, "Game")), "no copy of the folder already in use")
+
+        # a game folder with no PlayOnlineViewer next to it: used through PlayOnline's own settings, the old pol_dir goes
+        ffxi3 = os.path.join(self.tmp, "E", "FINAL FANTASY XI"); os.makedirs(ffxi3)
+        open(os.path.join(ffxi3, "FFXiMain.dll"), "w").write("x")
+        import launcher_game
+        real = launcher_game.find_viewer
+        launcher_game.find_viewer = lambda *a, **k: None
+        try:
+            cfg4 = ls.run_setup(self.kit, {"ffxi_dir": ffxi3, "game": "existing", "ashita_dir": ashita2, "server_dir": self.server,
+                                           "mariadb_dir": self.mdb, "world": "quiet", "population": "small",
+                                           "interface": "none", "extras": [], "login": "player1", "password": "pw123456"},
+                                tp, log=lambda m: None, fetch=quiet, run=Installed().run, again=dict(cfg3))
+        finally:
+            launcher_game.find_viewer = real
+        self.assertEqual((cfg4["ffxi_client_dir"], cfg4["game_copy"], "pol_dir" in cfg4), (ffxi3, False, False))
+        self.assertEqual(cfg4["game_user"], "player1")
+
     def test_server_is_downloaded_when_missing(self):
         """A new server folder: the setup downloads the release zip (checked against SHA256SUMS.txt)."""
         import hashlib

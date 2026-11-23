@@ -26,7 +26,7 @@ def ui_fonts():
         return "Segoe UI", "Consolas"
     families = set()
     try:
-        out = subprocess.run(["fc-list", ":", "family"], capture_output=True, text=True, timeout=5).stdout
+        out = subprocess.run(["fc-list", ":", "family"], capture_output=True, text=True, errors="replace", timeout=5).stdout
         for line in out.splitlines():
             families.update(part.strip() for part in line.split(","))
     except (OSError, subprocess.SubprocessError):
@@ -82,13 +82,16 @@ def load_config(path):
 
 # ---------- processes (Windows; Linux through launcher_linux, which reads /proc) ----------
 def _run(cmd):
-    return subprocess.run(cmd, capture_output=True, text=True, creationflags=NO_WINDOW)
+    # errors="replace": (2026-11-22, R1PFake) on a Windows in another language, tasklist's "no tasks" line can have a letter the default
+    # decoding refuses; the output then came back as None and the helper that points PlayOnline at the game copy
+    # stopped at PLAY ("NoneType object has no attribute lower"). Only plain names are looked for in the output.
+    return subprocess.run(cmd, capture_output=True, text=True, errors="replace", creationflags=NO_WINDOW)
 
 def is_running(image_name):
     if not IS_WINDOWS:
         import launcher_linux
         return bool(launcher_linux.pids_named(image_name))
-    out = _run(["tasklist", "/FI", f"IMAGENAME eq {image_name}.exe", "/NH"]).stdout.lower()
+    out = (_run(["tasklist", "/FI", f"IMAGENAME eq {image_name}.exe", "/NH"]).stdout or "").lower()
     return f"{image_name.lower()}.exe" in out
 
 def count_running(image_name):
@@ -96,7 +99,7 @@ def count_running(image_name):
     if not IS_WINDOWS:
         import launcher_linux
         return len(launcher_linux.pids_named(image_name))
-    out = _run(["tasklist", "/FI", f"IMAGENAME eq {image_name}.exe", "/NH"]).stdout.lower()
+    out = (_run(["tasklist", "/FI", f"IMAGENAME eq {image_name}.exe", "/NH"]).stdout or "").lower()
     return out.count(f"{image_name.lower()}.exe")
 
 def kill(image_name):
@@ -162,13 +165,13 @@ def kill_squad_chat():
 def ensure_service(name):
     if not IS_WINDOWS:          # Linux installs always use the kit's own MariaDB (config.json mariadb_dir)
         return False
-    out = _run(["sc", "query", name]).stdout
+    out = _run(["sc", "query", name]).stdout or ""
     if "RUNNING" in out:
         return True
     if "does not exist" in out or "1060" in out:
         return False
     _run(["net", "start", name])
-    return "RUNNING" in _run(["sc", "query", name]).stdout
+    return "RUNNING" in (_run(["sc", "query", name]).stdout or "")
 
 
 # ---------- servers ----------
@@ -183,6 +186,124 @@ def start_server(cfg, name, logs_dir):
                          stdout=log, stderr=subprocess.STDOUT, creationflags=NO_WINDOW,
                          **({} if IS_WINDOWS else {"start_new_session": True}))
     return p, log
+
+def clear_half_made_certificate(server_dir):
+    """(2026-11-22, Helix, ManTears) The login server makes login.key and then login.cert on its first start. Stopped
+    in between (Windows blocked another server program and the launcher stopped them all), it left login.key alone,
+    and every start after that waited 30 seconds for a certificate nobody was making and stopped with "Cannot load
+    login.cert and login.key". Called while no server runs: a key without its certificate is removed, so the pair is
+    made again. The other way round too (Lion: the key renamed by hand, the certificate left): either file alone is
+    useless and stops every server that needs the pair. True when one was removed."""
+    key, cert = os.path.join(server_dir, "login.key"), os.path.join(server_dir, "login.cert")
+    if os.path.exists(key) == os.path.exists(cert):
+        return False                               # a complete pair, or a first start
+    alone = key if os.path.exists(key) else cert
+    for path in (alone, cert + ".tmp"):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+    return not os.path.exists(alone)
+
+
+BLOCKED_BY_WINDOWS = 4551          # ERROR_SYSTEM_INTEGRITY_POLICY_VIOLATION: Smart App Control / an App Control policy
+
+
+def explain_start_error(problem):
+    """The text for the launcher's error box. Windows' own words for a blocked program say nothing about what to do."""
+    text = str(problem)
+    if getattr(problem, "winerror", None) == BLOCKED_BY_WINDOWS or "WinError 4551" in text:
+        return ("Windows blocked one of the game's programs (\"An Application Control policy has blocked this file\").\n\n"
+                "On a home PC that is Smart App Control: it stops programs that are not signed by a known publisher, "
+                "and the server programs are built by this project, not signed.\n\n"
+                "To play, turn it off: Windows Security > App & browser control > Smart App Control settings > Off, "
+                "then press PLAY again. On some versions of Windows it can only be turned on again by resetting the "
+                "PC, so that is yours to decide. On a work or school PC the block can come from its administrator "
+                "instead.")
+    if "forbidden by its access permissions" in text:
+        # (2026-11-22, Tetazos: xi_profile "bind: An attempt was made to access a socket in a way forbidden by its
+        # access permissions") Windows hands blocks of ports to Hyper-V, WSL and Docker, and one of them covers a port
+        # the server listens on. Restarting the service that holds them (winnat) gives them back.
+        return (text + "\n\nWhat this means: Windows has set aside the network port this server needs (Hyper-V, WSL "
+                "or Docker do that). To free it, open PowerShell as administrator and run these two lines, then press "
+                "PLAY again:\n\n    net stop winnat\n    net start winnat")
+    if "Injection failed" in text or "Failed to install Ashita into the remote process" in text:
+        # (2026-11-22, Telunian: "[E] Failed to install Ashita into the remote process! [E] Injection failed!") Ashita
+        # starts the game loader and then puts itself into it. When that second step is refused, it is nearly always
+        # security software stopping one program from reaching into another.
+        return (text + "\n\nWhat this means: Ashita started the game loader but was stopped from attaching to it. "
+                "That is nearly always security software. Add this folder and the Ashita folder to your antivirus' "
+                "exclusions (Windows Security > Virus & threat protection > Manage settings > Exclusions; other "
+                "antivirus programs have the same under their settings), or pause its real-time protection once to "
+                "see whether that is it, then press PLAY again. Windows' Smart App Control (Windows Security > App & "
+                "browser control) blocks it the same way.")
+    if "Only one usage of each socket address" in text:
+        return (text + "\n\nWhat this means: another program is already using the network port this server needs, "
+                "usually another FFXI server or a second copy of this one. Close it (or restart the PC) and press PLAY "
+                "again.")
+    return text
+
+
+def loader_log_since(since, appdata=None):
+    """(path, text) of the newest log xiloader wrote at or after `since` (xiloader 3 keeps one per start in
+    %APPDATA%\\xiloader\\logs), or ('', '')."""
+    folder = os.path.join(appdata or os.environ.get("APPDATA", ""), "xiloader", "logs")
+    try:
+        names = [n for n in os.listdir(folder) if n.lower().startswith("xiloader-") and n.lower().endswith(".log")]
+    except OSError:
+        return "", ""
+    best, best_time = "", since - 5
+    for name in names:
+        path = os.path.join(folder, name)
+        try:
+            written = os.path.getmtime(path)
+        except OSError:
+            continue
+        if written >= best_time:
+            best, best_time = path, written
+    if not best:
+        return "", ""
+    try:
+        with open(best, encoding="utf-8", errors="replace") as handle:
+            return best, handle.read()
+    except OSError:
+        return "", ""
+
+
+LOADER_TROUBLE = ("fail", "error", "unsupported", "not found", "cannot", "could not", "refused", "rejected", "expired")
+
+
+def game_gave_up(loader_log):
+    """True when the loader did its whole job (logged in, profile loaded, no complaint) and the game then closed by
+    itself: FINAL FANTASY XI's own start refused something."""
+    said = [row.strip().lower() for row in loader_log.splitlines() if row.strip()]
+    return (any("profile loaded" in row for row in said)
+            and not any(mark in row for row in said for mark in LOADER_TROUBLE))
+
+
+def why_game_closed(seconds, loader_log, windows=True):
+    """Lines for the launcher's log when the game closed soon after it started. Nothing on screen says why: the
+    loader's window closes with it, and FINAL FANTASY XI itself gives up without a message. loader_log: xiloader's own
+    log of this start ('' when it wrote none)."""
+    lines = [f"The game closed {int(seconds)} seconds after it started."]
+    rows = [row.strip() for row in loader_log.splitlines() if row.strip()]
+    said = [re.sub(r"^\[[^\]]*\]\s*", "", row) for row in rows]
+    trouble = [row for row in said if any(mark in row.lower() for mark in LOADER_TROUBLE)]
+    if not rows:
+        lines.append("The game loader (xiloader) wrote no log of this start, so it stopped before it could do anything."
+                     + (" The usual cause is an old or missing Microsoft Visual C++ runtime (x86): install "
+                        "https://aka.ms/vc14/vc_redist.x86.exe and press PLAY again. An antivirus that removed or "
+                        "blocked xiloader.exe does the same." if windows else ""))
+    elif trouble:
+        lines.append("The game loader said: " + " | ".join(trouble[-3:]))
+    elif any("profile loaded" in row.lower() for row in said):
+        lines.append("The loader logged in and handed over to FINAL FANTASY XI, and the game itself closed before its "
+                     "window opened. That points at the game files or how they are registered, not at the server. "
+                     "If it keeps happening, please report it with the logs folder.")
+    else:
+        lines.append("The game loader's last line: " + said[-1])
+    return lines
+
 
 def map_ready(logs_dir):
     try:
@@ -309,6 +430,112 @@ def remember_added(kit_dir, names):
     have = added_items(kit_dir) | set(names)
     with open(os.path.join(kit_dir, "added-addons.json"), "w", encoding="utf-8") as handle:
         json.dump(sorted(have), handle, indent=1)
+
+
+def forget_added(kit_dir, name):
+    have = {n for n in added_items(kit_dir) if n.lower() != name.lower()}
+    if have != added_items(kit_dir):
+        with open(os.path.join(kit_dir, "added-addons.json"), "w", encoding="utf-8") as handle:
+            json.dump(sorted(have), handle, indent=1)
+
+
+# ---------- taking an addon or plugin out again (lilibun, 2026-11-22) ----------
+def can_remove(kind, name, origin):
+    """Only what the player got himself: a download from the list, or one he added. Ashita's own and ours stay."""
+    return origin in ("download", "added by you") and not (kind == "addon" and name.lower() in OWN_ADDONS)
+
+
+def item_path(ashita_dir, kind, name):
+    """The addon's folder or the plugin's .dll as it is spelled on disk, or None. Never a path outside addons / plugins."""
+    if not ashita_dir or not name or name in (".", "..") or any(c in name for c in "/\\:"):
+        return None
+    folder = os.path.join(ashita_dir, "addons" if kind == "addon" else "plugins")
+    wanted = name.lower() if kind == "addon" else name.lower() + ".dll"
+    try:
+        for entry in os.listdir(folder):
+            if entry.lower() == wanted:
+                path = os.path.join(folder, entry)
+                if os.path.islink(path):
+                    return None
+                return path if (os.path.isdir(path) if kind == "addon" else os.path.isfile(path)) else None
+    except OSError:
+        pass
+    return None
+
+
+def path_size(path):
+    """Bytes in a file or in everything under a folder (0 when it is not there)."""
+    if not path or not os.path.exists(path):
+        return 0
+    if os.path.isfile(path):
+        return os.path.getsize(path)
+    total = 0
+    for folder, _dirs, files in os.walk(path):
+        for name in files:
+            try:
+                total += os.path.getsize(os.path.join(folder, name))
+            except OSError:
+                pass
+    return total
+
+
+def size_text(size):
+    for unit, step in (("GB", 1 << 30), ("MB", 1 << 20), ("KB", 1 << 10)):
+        if size >= step:
+            return f"{size / step:.1f} {unit}"
+    return f"{size} bytes"
+
+
+def forget_load_lines(ashita_dir, kind, name):
+    """Takes the "/addon load x" or "/load x" line for it out of every script in Ashita's scripts folder, so no game
+    window tries to load something that is gone. Returns the scripts it changed."""
+    rx = ADDON_RE if kind == "addon" else PLUGIN_RE
+    folder = os.path.join(ashita_dir, "scripts")
+    changed = []
+    try:
+        scripts = sorted(f for f in os.listdir(folder) if f.lower().endswith(".txt"))
+    except OSError:
+        return changed
+    for script in scripts:
+        path = os.path.join(folder, script)
+        try:
+            with open(path, "r", encoding="utf-8-sig") as handle:
+                lines = handle.read().splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+        kept = [line for line in lines
+                if not (rx.match(line) and not line.lstrip().startswith("#") and rx.match(line).group(1).lower() == name.lower())]
+        if len(kept) != len(lines):
+            with open(path, "w", encoding="utf-8", newline="\r\n") as handle:
+                handle.write("\n".join(kept).rstrip("\n") + "\n")
+            changed.append(script)
+    return changed
+
+
+def remove_item(ashita_dir, kit_dir, kind, name, origin):
+    """Removes an addon (its folder) or a plugin (its .dll) the player downloaded or added, and its load lines. Its
+    settings (config/addons/<name>) stay, so installing it again brings them back. Returns the bytes freed."""
+    if not can_remove(kind, name, origin):
+        raise RuntimeError(f"{name} belongs to {origin}: it stays. Switch it off instead.")
+    path = item_path(ashita_dir, kind, name)
+    if path is None:
+        raise RuntimeError(f"{name} was not found in Ashita's {'addons' if kind == 'addon' else 'plugins'} folder.")
+    freed = path_size(path)
+    try:
+        if kind == "addon":
+            shutil.rmtree(path)
+        else:
+            os.remove(path)
+    except OSError as error:
+        raise RuntimeError(f"{name} could not be removed ({error}). If the game is running, close it and try again.")
+    forget_load_lines(ashita_dir, kind, name)
+    forget_added(kit_dir, name)
+    try:
+        import launcher_thirdparty
+        launcher_thirdparty.forget_place(kit_dir, kind, name)
+    except Exception:
+        pass
+    return freed
 
 
 def _backup(path, backups, name):
@@ -538,6 +765,38 @@ RATE_FIELDS = [
     ("main.GUILD_SHOPS_ALWAYS_STOCKED", "main.lua", "GUILD_SHOPS_ALWAYS_STOCKED",  "Guild shops never run out (1 = on)",  0,   0,   1,     "int"),
     ("map.FULL_MERITS",                 "map.lua",  "FULL_MERITS",                 "Every merit to its maximum (1 = on)", 0,   0,   1,     "int"),
     ("map.MAX_MERIT_POINTS",            "map.lua",  "MAX_MERIT_POINTS",            "Merit points you can hold",          30,  10,  99,    "int"),
+    # (2026-11-22, Velderen; the user: yes, off by default) the auction house answers in every area, for the ahgo add-on
+    ("map.AH_ANYWHERE",                 "map.lua",  "AH_ANYWHERE",                 "Auction house from anywhere (1 = on)", 0,  0,   1,     "int"),
+    # (2026-11-22, sparkiie; the user: a comfort switch, off = as it is today) Fafnir, Adamantoise and Behemoth by timer
+    ("main.LAND_KINGS_TIMED",           "main.lua", "LAND_KINGS_TIMED",            "Land kings on a timer (1 = on, 0 = called at the ???)", 0, 0, 1, "int"),
+    # (2026-11-22, suggestions: Dugahst; the user: on by default) server: custom/late/comforts.lua
+    ("main.GUILD_SHOPS_ALWAYS_OPEN",    "main.lua", "GUILD_SHOPS_ALWAYS_OPEN",     "Guild shops always open (1 = on, 0 = era hours)", 1, 0, 1, "int"),
+    # (2026-11-22, suggestions: Hexblood, VRTRA, Poptart, Gilder) out of era, so the era's value by default. All but the
+    # chain time are the server's own settings (LandSandBoat), which had no line here; the chain time is ours
+    # (scripts/globals/experience_points.lua). The server reads the HP and MP multipliers from 0.1 to 2.
+    ("main.EXP_CHAIN_TIME_MULTIPLIER",  "main.lua", "EXP_CHAIN_TIME_MULTIPLIER",   "Experience chain time",              1.0, 1.0, 5.0,   "float"),
+    ("map.ALL_MOBS_GIL_BONUS",          "map.lua",  "ALL_MOBS_GIL_BONUS",          "Gil every monster drops, per level (0 = off)", 0, 0, 50, "int"),
+    # (2026-11-22, delukard) minutes a party waits between two seals (server: mob_entity.cpp specialDropCooldown)
+    ("main.SEAL_DROP_MINUTES",          "main.lua", "SEAL_DROP_MINUTES",           "Wait between seals, minutes (5 = as it was, 0 = none)", 5, 0, 5, "int"),
+    ("map.SUBJOB_RATIO",                "map.lua",  "SUBJOB_RATIO",                "Support job level (1 = half, 2 = two thirds, 3 = equal)", 1, 1, 3, "int"),
+    # (2026-11-22, delukard) your own HP and MP; squad mates follow (charutils.cpp, trustutils.cpp)
+    ("map.PLAYER_HP_MULTIPLIER",        "map.lua",  "PLAYER_HP_MULTIPLIER",        "Your HP: you and your squad",        1.0, 0.5, 3.0,   "float"),
+    ("map.PLAYER_MP_MULTIPLIER",        "map.lua",  "PLAYER_MP_MULTIPLIER",        "Your MP: you and your squad",        1.0, 0.5, 3.0,   "float"),
+    ("map.MOB_HP_MULTIPLIER",           "map.lua",  "MOB_HP_MULTIPLIER",           "Monster HP",                         1.0, 0.1, 2.0,   "float"),
+    ("map.NM_HP_MULTIPLIER",            "map.lua",  "NM_HP_MULTIPLIER",            "Notorious monster HP",               1.0, 0.1, 2.0,   "float"),
+    ("map.MOB_MP_MULTIPLIER",           "map.lua",  "MOB_MP_MULTIPLIER",           "Monster MP",                         1.0, 0.1, 2.0,   "float"),
+    ("map.NM_MP_MULTIPLIER",            "map.lua",  "NM_MP_MULTIPLIER",            "Notorious monster MP",               1.0, 0.1, 2.0,   "float"),
+    ("map.PLAYER_TP_MULTIPLIER",        "map.lua",  "PLAYER_TP_MULTIPLIER",        "TP gain: you, your squad and pets",  1.0, 0.25, 3.0,  "float"),
+    ("map.MOB_TP_MULTIPLIER",           "map.lua",  "MOB_TP_MULTIPLIER",           "TP gain: monsters",                  1.0, 0.25, 3.0,  "float"),
+    # (2026-11-22, Poptart; the user: the one "damage taken" rule and the per-type ones as well) The damage taken rule
+    # is ours (server: custom/late/comforts.lua); the five powers are the server's own settings.
+    ("main.PLAYER_DAMAGE_TAKEN_MULTIPLIER", "main.lua", "PLAYER_DAMAGE_TAKEN_MULTIPLIER", "Damage you and your squad take", 1.0, 0.5, 2.0, "float"),
+    ("main.WEAPON_SKILL_POWER",         "main.lua", "WEAPON_SKILL_POWER",          "Weapon skill damage",                1.0, 0.25, 3.0,  "float"),
+    ("main.ELEMENTAL_POWER",            "main.lua", "ELEMENTAL_POWER",             "Elemental magic damage",             1.0, 0.25, 3.0,  "float"),
+    ("main.DIVINE_POWER",               "main.lua", "DIVINE_POWER",                "Divine magic damage",                1.0, 0.25, 3.0,  "float"),
+    ("main.NINJUTSU_POWER",             "main.lua", "NINJUTSU_POWER",              "Ninjutsu damage",                    1.0, 0.25, 3.0,  "float"),
+    ("main.BLUE_POWER",                 "main.lua", "BLUE_POWER",                  "Blue magic damage",                  1.0, 0.25, 3.0,  "float"),
+    ("main.DARK_POWER",                 "main.lua", "DARK_POWER",                  "Dark magic damage",                  1.0, 0.25, 3.0,  "float"),
     ("main.HOMEPOINT_TELEPORT",         "main.lua", "HOMEPOINT_TELEPORT",          "Home Point teleports (1 = on, 0 = classic)", 1, 0, 1, "int"),
     ("main.ENABLE_SURVIVAL_GUIDE",      "main.lua", "ENABLE_SURVIVAL_GUIDE",       "Survival Guide teleports (1 = on, 0 = classic)", 1, 0, 1, "int"),
     ("map.BASE_SPEED",                  "map.lua",  "BASE_SPEED",                  "Run speed (50 = retail)",               50,  40,  120,   "int"),
@@ -1155,6 +1414,14 @@ def apply_rates(server_dir, rates):
         _skill = 1.0
     wanted["map.lua"].append(("SKILLUP_AMOUNT_MULTIPLIER", max(1, int(_skill // 5)), "int"))
     wanted["map.lua"].append(("FISHING_ENABLE", True, "bool"))
+    # (2026-11-22, Poptart) "TP gain: you, your squad and pets" is one rule: squad mates (the server's trusts), pets and
+    # an adventuring fellow follow your own multiplier
+    try:
+        _tp = float(rates.get("map.PLAYER_TP_MULTIPLIER", 1.0))
+    except (TypeError, ValueError):
+        _tp = 1.0
+    for _key in ("TRUST_TP_MULTIPLIER", "PET_TP_MULTIPLIER", "FELLOW_TP_MULTIPLIER"):
+        wanted["map.lua"].append((_key, _tp, "float"))
     # (2026-11-20, the user: "there is no reason for a limit here") no daily limits on your own world: fishing (200
     # catches a day and the fatigue meter; needs the server from this release on, older ones skip the key) and
     # chocobo digging (100 finds a day)
