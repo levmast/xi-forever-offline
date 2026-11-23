@@ -106,7 +106,32 @@ def load_settings(path=None):
         with open(path, "w", encoding="utf-8") as f:
             json.dump(DEFAULTS, f, indent=2)
     with open(path, "r", encoding="utf-8-sig") as f:
-        return merge(DEFAULTS, json.load(f))
+        settings = merge(DEFAULTS, json.load(f))
+    apply_wotg(settings)
+    return settings
+
+
+def wotg_enabled(here=HERE):
+    """(2026-11-22, levi) true when the launcher's Wings of the Goddess switch is on (rates.json main.ENABLE_WOTG)."""
+    try:
+        with open(os.path.join(here, "rates.json"), "r", encoding="utf-8-sig") as f:
+            return int(json.load(f).get("main.ENABLE_WOTG", 0) or 0) == 1
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def apply_wotg(settings, here=HERE):
+    """With Wings of the Goddess on, its spells (Scholar schemas, Dancer-era scrolls) and the jobs DNC/SCH (ids 19, 20)
+    are part of the era, so their scrolls are stocked and no longer hidden. ah_sim.json itself is not changed."""
+    if not wotg_enabled(here):
+        return settings
+    era = settings["era"]
+    tags = list(era.get("spell_tags", ["", "ROTZ", "COP", "TOAU"]))
+    if "WOTG" not in tags:
+        tags.append("WOTG")
+    era["spell_tags"] = tags
+    era["spell_max_job"] = max(int(era.get("spell_max_job", 18)), 20)
+    return settings
 
 
 def connect():
@@ -582,11 +607,28 @@ def remove_ineligible_listings(conn, items):
     return len(gone)
 
 
+def restore_now_in_era(conn, rows):
+    """Items hidden earlier that the era now includes (e.g. Wings of the Goddess scrolls after it is turned on) are put
+    back in the auction house menus."""
+    keep = {itemid for itemid, _ah in rows}
+    back = [(int(i), int(ah)) for i, ah in query(conn, "SELECT itemid, ah FROM ah_sim_hidden") if int(i) not in keep]
+    if not back:
+        return 0
+    cur = conn.cursor()
+    for itemid, ah in back:
+        cur.execute("UPDATE item_basic SET aH = ? WHERE itemid = ? AND aH = 0", (ah, itemid))
+        cur.execute("DELETE FROM ah_sim_hidden WHERE itemid = ?", (itemid,))
+    conn.commit()
+    cur.close()
+    return len(back)
+
+
 def hide_above_level(conn, settings):
     if not settings["browse"]["hide_above_level"]:
         return 0
     ensure_hidden_table(conn)
     rows = items_to_hide(conn, settings)
+    restore_now_in_era(conn, rows)
     if not rows:
         return 0
     cur = conn.cursor()
@@ -715,6 +757,9 @@ def main():
         return
 
     price_data = load_price_file(settings)
+    if args.mode in ("run", "seed") and settings["browse"]["hide_above_level"]:
+        ensure_hidden_table(conn)
+        restore_now_in_era(conn, items_to_hide(conn, settings))   # (WotG) put back scrolls the era now includes
     items = eligible_items(conn, settings, price_data)
     if args.mode == "report":
         text = report(items, settings)
