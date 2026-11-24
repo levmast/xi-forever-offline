@@ -941,6 +941,7 @@ class SquadTab(tk.Frame):
         except Exception:
             pass
         self.level_vars, self.gear_vars, self.level_spins = {}, {}, {}
+        self.raise_buttons = {}
         self.gear_icons, self.gear_items = {}, {}
         self.icon_loader = itemicons.ItemIcons(self, ASSETS) if itemicons else None
         self.unlocked, self.choices = set(), []
@@ -1041,7 +1042,7 @@ class SquadTab(tk.Frame):
         grid = tk.Frame(page, bg=BG)
         grid.pack(padx=10, pady=8, anchor="w")
         for i, job in enumerate(sq.JOBS):
-            col, r = (i // 8) * 3, i % 8
+            col, r = (i // 8) * 4, i % 8
             tk.Label(grid, text=job, bg=BG, fg=FG, width=5, anchor="w").grid(row=r, column=col, pady=2)
             var = tk.IntVar(value=1)
             self.level_vars[i + 1] = var
@@ -1049,14 +1050,20 @@ class SquadTab(tk.Frame):
                               state="disabled" if self.player else "normal")     # players: levels are earned (and set when a mate is made)
             spin.grid(row=r, column=col + 1, padx=4)
             self.level_spins[i + 1] = spin
-            exp = tk.Label(grid, text="", bg=BG, fg=DIM, width=10, anchor="w")
+            exp = tk.Label(grid, text="", bg=BG, fg=DIM, width=9, anchor="w")
             exp.grid(row=r, column=col + 2)
             self.level_vars[("exp", i + 1)] = exp
+            # (2026-11-24, levi) a quick start for an unlocked job: raise it to 12 (shown only while it is below 12)
+            raise_btn = tk.Button(grid, text=f"To {sq.RAISE_LEVEL}", command=lambda j=i + 1: self.raise_job(j),
+                                  bg=PANEL, fg=FG, relief="flat", padx=4, pady=0, font=(UI_FONT, 8))
+            raise_btn.grid(row=r, column=col + 3, padx=(0, 12))
+            self.raise_buttons[i + 1] = raise_btn
         if not self.player:
             tk.Button(page, text="Save levels", command=self.apply_levels, bg=ACCENT, fg="white", relief="flat", padx=14).pack(pady=8)
         tk.Label(page, text="Each job levels on its own in game. Exp is shown next to each level." if not self.player else
                  "Squad mates start at level 1 and level up by fighting with you, one job at a time.\n"
-                 "Exp is shown next to each level.", bg=BG, fg=DIM, justify="left").pack(anchor="w", padx=10, pady=8)
+                 f"Exp is shown next to each level. \"To {sq.RAISE_LEVEL}\" raises an unlocked job below {sq.RAISE_LEVEL} "
+                 f"straight to {sq.RAISE_LEVEL}.", bg=BG, fg=DIM, justify="left").pack(anchor="w", padx=10, pady=8)
 
     def build_gear_page(self, pages):
         page = tk.Frame(pages, bg=BG)
@@ -1426,6 +1433,10 @@ class SquadTab(tk.Frame):
             self.level_vars[job].set(level)
             self.level_spins[job].configure(state="disabled" if (locked or self.player) else "normal")
             self.level_vars[("exp", job)].configure(text="locked" if locked else (f"{exp} exp" if exp else ""))
+            if locked or level >= sq.RAISE_LEVEL:
+                self.raise_buttons[job].grid_remove()
+            else:
+                self.raise_buttons[job].grid()
         self.refresh_gear()
         self.show_behavior()
         self.show_greetings()
@@ -1609,6 +1620,29 @@ class SquadTab(tk.Frame):
             self.reload()
         if self.mate:
             self.guard(go)
+
+    def raise_job(self, job):
+        """(2026-11-24, levi) the Job levels page's "Raise to 12": one unlocked job straight to level 12, exp from 0."""
+        m = self.mate
+        if m is None:
+            return
+        name, target = sq.JOBS[job - 1], sq.RAISE_LEVEL
+        if job not in self.unlocked and job not in m["jobs"]:
+            messagebox.showinfo("Squad", f"{name} has not been unlocked on this character yet.")
+            return
+        level = m["jobs"].get(job, (1, 0))[0]
+        if level >= target:
+            return
+        if not messagebox.askyesno("Raise job", f"Raise {m['name']}'s {name} from level {level} to {target}?\n\n"
+                                   f"Their {name} exp starts over at {target}. If {m['name']} is out in the game now, "
+                                   "dismiss and call them again to use the new level."):
+            return
+
+        def go():
+            sq.raise_job_level(self.conn, m["id"], job, target)
+            self.reload()
+            self.say(f"{m['name']}'s {name} is now level {target}.")
+        self.guard(go)
 
     def pick_item(self, slot, label):
         if self.mate is None:

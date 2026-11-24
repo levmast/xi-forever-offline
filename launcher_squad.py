@@ -375,6 +375,21 @@ def set_job_level(conn, mate_id, job, level, exp=0):
     _run(conn, "REPLACE INTO squad_job (squad_id, job, level, exp) VALUES (?, ?, ?, ?)", (mate_id, job, level, exp))
 
 
+RAISE_LEVEL = 12      # (2026-11-24, levi) the Job levels page's "Raise to 12" button: a quick start for a new job
+
+
+def raise_job_level(conn, mate_id, job, target=RAISE_LEVEL):
+    """Raise one of a mate's jobs to `target` (its exp starts over at that level). Never lowers a job.
+    Safe while the servers run: the server reads squad_job from the database each time a mate gains exp or is
+    called, so the new level shows the next time the mate is called."""
+    rows = _all(conn, "SELECT level FROM squad_job WHERE squad_id = ? AND job = ?", (mate_id, job))
+    current = int(rows[0][0]) if rows else 1
+    if current >= target:
+        return current
+    set_job_level(conn, mate_id, job, target, 0)
+    return target
+
+
 def set_equip(conn, mate_id, job, slot, item_id):
     if not item_id:
         _run(conn, "DELETE FROM squad_equip WHERE squad_id = ? AND job = ? AND slot = ?", (mate_id, job, slot))
