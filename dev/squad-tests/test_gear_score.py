@@ -67,7 +67,10 @@ def runtime(with_mods=True):
                 'ITEMS = {}; UNLOCKS = {}; SET = {}; ASKED = 0\n'
                 'function GetSquadUnlocks() return UNLOCKS end\n'
                 'function GetSquadItemInfo(id) ASKED = ASKED + 1 return ITEMS[id] or { valid = false } end\n'
-                'function SetSquadEquip(mateId, job, slot, item) SET[slot] = item end\n' + squad[start:squad.index('\nend\n', start) + 5])
+                'function SetSquadEquip(mateId, job, slot, item) SET[slot] = item end\n'
+                # (2026-11-22) auto-equip also asks whether "Squad gets all gear" is on: off here, as it was for these
+                # cases (test_all_gear_autoequip.py has it on)
+                'function squadAllGear() return false end\n' + squad[start:squad.index('\nend\n', start) + 5])
     items = lua.globals().ITEMS
     for item_id, e in EQ.items():
         w = WP.get(item_id, {})

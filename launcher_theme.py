@@ -52,6 +52,19 @@ from tkinter import messagebox
 
 HERE = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))  # the kit folder
 PRESS = os.path.join(HERE, "assets", "press")
+
+
+def note(text):
+    """(2026-11-23, the user: players may not hear the launcher's music) one line in logs\\theme-music.log, so a song that
+    does not play says why."""
+    try:
+        import time
+        folder = os.path.join(HERE, "logs")
+        os.makedirs(folder, exist_ok=True)
+        with open(os.path.join(folder, "theme-music.log"), "a", encoding="utf-8") as handle:
+            handle.write(time.strftime("%Y-%m-%d %H:%M:%S ") + text + "\n")
+    except Exception:
+        pass
 UNTIL_TAG = "__until-"
 FROM_TAG = "__from-"             # ... and a song with __from-2026-11-24 in its name is not used before that day
 PLAYS_TAG = "__plays-"           # ... and a song with __plays-3 in its name opens the launcher three times on a PC, then never again
@@ -463,24 +476,41 @@ class Player:
 
     def __init__(self):
         self.proc, self.open = None, False
+        self.why = ""                                  # why the last play() did not start, for logs\theme-music.log
 
     def _mci(self, command):
         answer = ctypes.create_unicode_buffer(128)
         return ctypes.windll.winmm.mciSendStringW(command, answer, 127, 0), answer.value
 
+    def _mci_error(self, code):
+        text = ctypes.create_unicode_buffer(256)
+        try:
+            ctypes.windll.winmm.mciGetErrorStringW(code, text, 255)
+        except Exception:
+            pass
+        return f"MCI error {code}: {text.value}"
+
     def play(self, path, volume=VOLUME):
         self.stop()
+        self.why = ""
+        if not os.path.isfile(path) or os.path.getsize(path) < 1024:
+            self.why = f"the song file is missing or empty: {path}"
+            return False
         try:
             if os.name == "nt":
                 short = ctypes.create_unicode_buffer(600)          # the short 8.3 path: the old player trips over long or unusual ones
                 if ctypes.windll.kernel32.GetShortPathNameW(path, short, 600):
                     path = short.value
                 kind = "waveaudio" if path.lower().endswith(".wav") else "mpegvideo"
-                if self._mci(f'open "{path}" type {kind} alias {self.ALIAS}')[0]:
+                code = self._mci(f'open "{path}" type {kind} alias {self.ALIAS}')[0]
+                if code:
+                    self.why = "Windows could not open the song (" + self._mci_error(code) + ")"
                     return False
                 self.open = True
                 self._mci(f"setaudio {self.ALIAS} volume to {int(max(0.0, min(1.0, volume)) * 1000)}")
-                if self._mci(f"play {self.ALIAS}")[0]:
+                code = self._mci(f"play {self.ALIAS}")[0]
+                if code:
+                    self.why = "Windows could not play the song (" + self._mci_error(code) + ")"
                     self.stop()
                     return False
                 return True
@@ -490,7 +520,9 @@ class Player:
                 if shutil.which(command[0]):
                     self.proc = subprocess.Popen(command + [path], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     return True
-        except Exception:
+            self.why = "no sound player found (install ffplay, mpv, mpg123 or vlc)"
+        except Exception as e:
+            self.why = f"{type(e).__name__}: {e}"
             self.stop()
         return False
 
@@ -712,10 +744,17 @@ class Controls:
     def play(self, asked=False, opening=False):
         """The opening theme: by itself only when the music is on and the theme is the one worn; `asked` is the page's own Play button.
         `opening` is the one play when the launcher opens: the only one a song with __plays- in its name counts."""
-        if not self.sound or getattr(self.app, "running", False):
+        if not self.sound:
+            note("no song: no .mp3 / .wav for this look in assets\\press")
+            return False
+        if getattr(self.app, "running", False):
             return False
         if not asked and not (self.music_on and self.pick == self.worn):
+            if opening:
+                note("not played: the music is switched off" if not self.music_on else "not played: another theme is picked")
             return False
+        if volume_now() <= 0.0:
+            note("playing at volume 0 (the slider is all the way down)")
         if PLAYER.play(self.sound, volume_now()):
             if opening:
                 try:
@@ -723,7 +762,10 @@ class Controls:
                 except Exception:
                     pass                              # not counted this time: it simply gets one more opening
             self.app.after(500, self.watch)
+            if opening:
+                note("playing " + os.path.basename(self.sound))
             return True
+        note("could not play " + os.path.basename(self.sound) + ": " + (PLAYER.why or "unknown reason"))
         return False
 
     def stop(self):

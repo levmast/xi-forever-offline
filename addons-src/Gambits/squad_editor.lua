@@ -3935,8 +3935,16 @@ end
 M.PLAN_LEVEL = 75
 M.CUSTOM_EFFECT = '__custom__'
 
+-- (performance) the lists below are kept until what they are made from changes: see cached_view further down
+local VIEW_CACHE = {}
+
+function M.clear_view_cache()
+    VIEW_CACHE = {}
+end
+
 -- gambits_data.lua: spells[NAME] = { FAMILY or false, e = effect, q = 'x'/'b' }, effects[NAME] = id, jaEffects[NAME]
 function M.set_data(d)
+    M.clear_view_cache()
     M.DATA = type(d) == 'table' and type(d.spells) == 'table' and type(d.effects) == 'table' and d or nil
     M.FAMILY_SPELLS = {}
     for name, row in pairs(M.DATA and M.DATA.spells or {}) do
@@ -4426,6 +4434,76 @@ function M.effect_choices(cat, mate, plan)
 
     return job, common
 end
+
+-- (performance) The editor draws every frame, and the lists above were made again each time: for a rule with a spell
+-- and two status conditions that was about 2 ms and 700 KB of garbage per frame. They are now made once and kept until
+-- something they are made from changes. A list is the same as long as these are the same:
+--   the catalog and the planning list (new tables whenever the server sends them again; their lengths are compared too,
+--   in case one is changed in place), the mate's job, sub job and both levels, Show all, the addon data (M.DATA), the
+--   Trust spell list (M.TRUSTS) and M.PLAN_LEVEL.
+-- One result is kept per list and Show all setting, so another mate, Rule Set job or catalog simply replaces it. The
+-- lists are shared between frames: callers read them and never change them. Nothing a rule holds is cached here.
+local function list_len(t)
+    return type(t) == 'table' and #t or -1
+end
+
+local VIEW_FIELDS = 15
+
+local function view_key(k, cat, mate, plan)
+    k[1], k[2], k[3], k[4], k[5] = cat or false, plan or false, M.DATA or false, M.TRUSTS or false, M.PLAN_LEVEL or false
+    k[6], k[7] = mate and mate.job or false, mate and mate.sub or false
+    k[8], k[9] = mate and mate.level or false, mate and mate.subLevel or false
+    k[10], k[11], k[12] = list_len(cat and cat.spells), list_len(cat and cat.jas), list_len(cat and cat.families)
+    k[13], k[14], k[15] = list_len(cat and cat.unconfirmed), list_len(plan and plan.spells), list_len(plan and plan.jas)
+    return k
+end
+
+local VIEW_PROBE = {}
+
+-- build(cat, mate, showAll, plan) -> up to two results; kind: a name of its own for each list
+local function cached_view(kind, build)
+    local slotAll, slotFit = kind .. '+', kind .. '-'
+    return function(cat, mate, showAll, plan)
+        plan = plan or M.plan_for(cat, mate)
+        showAll = showAll and true or false
+        local slot = showAll and slotAll or slotFit
+        local probe = view_key(VIEW_PROBE, cat, mate, plan)
+        local c = VIEW_CACHE[slot]
+        if c then
+            local same = true
+            for i = 1, VIEW_FIELDS do
+                if c.key[i] ~= probe[i] then
+                    same = false
+                    break
+                end
+            end
+
+            if same then
+                return c.a, c.b
+            end
+        end
+
+        local a, b = build(cat, mate, showAll, plan)
+        VIEW_CACHE[slot] = { key = view_key({}, cat, mate, plan), a = a, b = b }
+        return a, b
+    end
+end
+
+M.spell_choices = (function(build)
+    local view = cached_view('spell_choices', function(cat, mate) return build(cat, mate) end)
+    return function(cat, mate) return view(cat, mate) end
+end)(M.spell_choices)
+M.ja_choices = (function(build)
+    local view = cached_view('ja_choices', function(cat, mate) return build(cat, mate) end)
+    return function(cat, mate) return view(cat, mate) end
+end)(M.ja_choices)
+M.spell_view = cached_view('spell_view', M.spell_view)
+M.family_view = cached_view('family_view', M.family_view)
+M.ja_view = cached_view('ja_view', M.ja_view)
+M.effect_choices = (function(build)
+    local view = cached_view('effect_choices', function(cat, mate, _, plan) return build(cat, mate, plan) end)
+    return function(cat, mate, plan) return view(cat, mate, false, plan) end
+end)(M.effect_choices)
 
 -- tooltips for the entries above (plain text: drawn with tooltip(), never as a format)
 function M.entry_tip(kind, e, mate)

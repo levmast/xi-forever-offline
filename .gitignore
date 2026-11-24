@@ -24,20 +24,38 @@
 !/launcher_gamepad.py
 !/launcher_theme.py
 !/launcher_hood.py
+!/launcher_hd.py
+!/launcher_hd_gui.py
+# Stinkshell, the online chat room (off by default; its relay is dev/stinkshell/stinkshell_relay.py)
+!/launcher_stinkshell.py
+!/launcher_revamped.py
 !/launcher_thirdparty.py
 !/launcher_setup.py
+!/REVAMPED-SHELLS.md
 !/launcher_update.py
 !/launcher_publish.py
 # contributor mode: team members send updates for review; who may is in contributors.json (main branch on GitHub)
 !/launcher_contrib.py
 !/contributors.json
 !/launcher_game.py
+!/launcher_gamefiles.py
 !/launcher_client.py
 !/stack_mode.py
 # co-op (experimental): the CO-OP page, the service two launchers talk through, and character passports
 !/launcher_coop_gui.py
 !/launcher_coop.py
 !/launcher_passport.py
+# open worlds (2026-11-23): a world that runs without the launcher's window (the hub, a rented server): start and
+# watch, first setup, nightly backups and its own updates; and the one command that installs it on a Linux server.
+# install-world.sh has to keep Unix line ends, which .gitattributes says.
+!/launcher_world.py
+!/launcher_world_setup.py
+!/launcher_world_keep.py
+!/install-world.sh
+!/.gitattributes
+# the open worlds a launcher lists without being given a link (The Hub first). The kit ships this copy; launchers
+# read the current one from https://xiforever.com/worlds.json, so that is the copy to change when the hub moves
+!/worlds.json
 # (2026-11-21) used by the launcher but never shipped before: item stacks (Egon's report), character transfer, patch notes page
 !/stack_mode.py
 !/char_import.py
@@ -119,7 +137,11 @@
 !/addons-src/servermenu/
 !/addons-src/squadpanel/
 !/addons-src/GambitsV2/
+!/addons-src/GambitsRevamped/
+!/addons-src/SquadsRevamped/
 !/addons-src/journal-era/
+!/addons-src/stinkshell/
+!/addons-src/autora/
 
 # ---- server modules (copies kept with the kit) ----
 !/squad-behavior/
@@ -156,6 +178,10 @@
 !/assets/item-icons/
 !/assets/promo/
 !/assets/faces/
+# the banners on the CO-OP page's world cards (The Hub's; the 1920 one stays on the dev PC)
+!/assets/worlds/
+/assets/worlds/*
+!/assets/worlds/hub_banner.jpg
 
 # ---- tests ----
 !/dev/
@@ -200,3 +226,4 @@ Thumbs.db
 # face reference pictures downloaded from FFXIclopedia (not shipped)
 /art-src/faces/
 /dev/incoming/
+drawdistance.json

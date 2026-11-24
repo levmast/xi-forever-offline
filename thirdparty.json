@@ -77,6 +77,7 @@
       "source": {
         "type": "installer",
         "url": "https://aka.ms/vc14/vc_redist.x64.exe",
+        "signer": "Microsoft Corporation",
         "args": [
           "/install",
           "/passive",
@@ -102,6 +103,7 @@
       "source": {
         "type": "installer",
         "url": "https://aka.ms/vc14/vc_redist.x86.exe",
+        "signer": "Microsoft Corporation",
         "args": [
           "/install",
           "/passive",
@@ -362,6 +364,46 @@
       "check": "addons/chains/chains.lua"
     },
     {
+      "id": "xispeaks",
+      "name": "XISpeaks (NPC voices, beta)",
+      "author": "lord-daeloth",
+      "license": "GPL-3.0 (program); each voice has its own terms, see VOICE-LICENSES.md (some are noncommercial)",
+      "homepage": "https://github.com/lord-daeloth/XISpeaks",
+      "into": "ashita",
+      "platforms": [
+        "windows"
+      ],
+      "note": "Reads NPC dialogue aloud with local voices; everything runs on your PC. BIG: about 2.9 GB to download (three files) and about 3.6 GB on disk, so it is never downloaded unless you press Install. Installed switched off: tick XISpeaks in the Addons list, and the launcher starts its voice program while your world runs. In game: /xis test, /xis voices, /xis stop. Suggested by delukard.",
+      "confirm": "XISpeaks is about 2.9 GB to download (three files from its author's GitHub page) and takes about 3.6 GB of disk space once unpacked (about 6 GB free is needed while it installs). Download it now?",
+      "source": {
+        "type": "github_release",
+        "repo": "lord-daeloth/XISpeaks",
+        "tag": "v1.0.0-beta.4",
+        "assets": [
+          "-windows-x64-app\\.zip$",
+          "-windows-x64-voices-1\\.zip$",
+          "-windows-x64-voices-2\\.zip$"
+        ],
+        "sha256sums": "SHA256SUMS.txt"
+      },
+      "unpack": "zips",
+      "unpacked_factor": 1.4,
+      "unpack_to": "addons",
+      "keep": [
+        "XISpeaks/companion/pocket-runtime/"
+      ],
+      "companion": "addons/XISpeaks/companion/XISpeaks-Companion.exe",
+      "check": "addons/XISpeaks/XISpeaks.lua",
+      "fixups": [
+        [
+          "addons/XISpeaks/voice_ui.lua",
+          "imgui.BeginChild('npc_list', {0, 160}, true)",
+          "imgui.BeginChild('npc_list', {0, 160}, rawget(_G, 'ImGuiChildFlags_Borders') or 1)",
+          "/xis voices stopped with an error on this Ashita"
+        ]
+      ]
+    },
+    {
       "id": "tcrossbar",
       "name": "tCrossBar",
       "author": "ThornyFFXI",
@@ -434,7 +476,7 @@
         ]
       ],
       "polplugin": "pivot",
-      "note": "Loads DAT mods (UI, textures, music) from Ashita/polplugins/DATs without changing your game files. Off until you turn it on here; the change applies at the next PLAY.",
+      "note": "Loads DAT mods (UI, textures, music) from Ashita/polplugins/DATs without changing your game files. Off until you turn it on here; the change applies at the next PLAY. For HD texture packs press \"HD packs and music...\": it installs a pack you downloaded from Nexus Mods, and downloads the LoFi FFXI music for you (off until you turn it on).",
       "check": "polplugins/pivot.dll"
     },
     {

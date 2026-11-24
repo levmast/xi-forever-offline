@@ -1,0 +1,96 @@
+# XI: Forever Offline: a world on a clean Linux server, installed with the one command and run as a service.
+# (Belongs in .github/workflows/ once install-world.sh and launcher_world*.py are in the kit. Written 2026-11-23.)
+#
+# After each Linux release (the workflow "Linux release" has put the Linux launcher on the tag's GitHub release), this
+# takes a fresh Ubuntu machine and does what the owner of a rented server does: runs install-world.sh, waits for the
+# world to be up, looks at its status, saves its database by hand, stops it, starts it again. It fails if any of that
+# does not work, and prints the world's own log.
+# Run it by hand for an existing tag: Actions > World install > Run workflow.
+
+name: World install
+
+on:
+  workflow_run:
+    workflows: ["Linux release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag whose Linux launcher to install (e.g. v0.4.0)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    env:
+      TAG: ${{ github.event.inputs.tag || github.event.workflow_run.head_branch }}
+      GH_TOKEN: ${{ github.token }}
+      WORLD: /opt/xifo-world
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.event.workflow_run.head_branch }}
+
+      - name: The Linux launcher of this release
+        run: |
+          mkdir -p dist
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "xi-forever-offline-$TAG-linux-x64.tar.gz" --dir dist
+          ls -l dist
+
+      - name: Install the world (one command, no questions)
+        run: |
+          sudo bash install-world.sh --kit-file "dist/xi-forever-offline-$TAG-linux-x64.tar.gz" \
+            --yes --name "CI world" --address 203.0.113.10 --max-guests 4 --world quiet
+
+      - name: It is up, as a service, as its own user
+        run: |
+          sudo systemctl is-active xifo-world
+          sudo -u xifo "$WORLD/XI-Forever-Offline" --run "$WORLD/launcher_world.py" status | tee status.txt
+          grep -q "^State: running" status.txt
+          grep -q "^World link: XIFO2-" status.txt
+          test "$(ps -o user= -C xi_map | head -n1 | tr -d ' ')" = "xifo"
+          sudo grep -q "The world is ready" "$WORLD/logs/world.log"
+
+      - name: A copy of the database by hand, while it runs
+        run: |
+          sudo -u xifo "$WORLD/XI-Forever-Offline" --run "$WORLD/launcher_world.py" backup
+          sudo -u xifo "$WORLD/XI-Forever-Offline" --run "$WORLD/launcher_world.py" backups | tee backups.txt
+          grep -q "db-by-hand-" backups.txt
+
+      - name: Stopping ends everything, in order
+        run: |
+          sudo systemctl stop xifo-world
+          if pgrep -u xifo . > /dev/null; then echo "still running:"; ps -u xifo; exit 1; fi
+          sudo tail -n 3 "$WORLD/logs/world.log" | grep -q "Stopped."
+          sudo grep -q "Shutdown complete" "$WORLD"/mariadb/data/mariadb.err
+
+      - name: It starts again, and running the install again keeps the world
+        run: |
+          sudo systemctl start xifo-world
+          for i in $(seq 1 60); do
+            sleep 5
+            sudo grep -q '"state": "running"' "$WORLD/logs/world-status.json" 2>/dev/null && break
+          done
+          sudo grep -q '"state": "running"' "$WORLD/logs/world-status.json"
+          sudo bash install-world.sh --yes --max-guests 6 --address 203.0.113.10
+          sudo -u xifo "$WORLD/XI-Forever-Offline" --run "$WORLD/launcher_world.py" status | tee status2.txt
+          grep -q "^State: running" status2.txt
+          grep -q "of 6 visitors" status2.txt
+          test "$(sed -n 's/^World link: //p' status.txt)" = "$(sed -n 's/^World link: //p' status2.txt)"
+
+      - name: What the world wrote (always)
+        if: always()
+        run: |
+          sudo systemctl status xifo-world --no-pager || true
+          sudo journalctl -u xifo-world --no-pager -n 60 || true
+          sudo tail -n 80 "$WORLD/logs/world.log" || true
+          sudo tail -n 30 "$WORLD/logs/xi_map.log" || true
+          sudo tail -n 20 "$WORLD"/mariadb/data/mariadb.err || true

@@ -216,19 +216,9 @@ def plan(conn, snap, charid, max_level=75):
     report["left_out"].append("quests, missions, fame, merits, linkshells and the mog house layout (never carried)")
     return {"charid": charid, "levels": levels, "main": main, "sub": sub, "genkai": genkai, "unlocked": unlocked,
             "skills": skills, "spells": spells, "keys": keys, "items": placed, "gil": gil, "equip": equip,
-            "race": _in_range(char.get("race"), 1, 8), "face": _in_range(char.get("face"), 0, 15),
-            "size": _in_range(char.get("size"), 0, 2), "look": look, "title": title, "nation": nation, "rank": rank, "rank_points": int(char.get("rank_points") or 0),
+            "race": int(char.get("race") or 0), "face": int(char.get("face") or 0), "size": int(char.get("size") or 0),
+            "look": look, "title": title, "nation": nation, "rank": rank, "rank_points": int(char.get("rank_points") or 0),
             "report": report, "name": char.get("name") or "?"}
-
-
-def _in_range(value, low, high):
-    """(2026-11-22, delukard, MrDink, Bigbadbill: a CatsEye export had size -1 and the import stopped) the value when it is a
-    whole number from low to high, else None (the new character keeps its own)."""
-    try:
-        v = int(value)
-    except (TypeError, ValueError):
-        return None
-    return v if low <= v <= high else None
 
 
 def _set_bits(blob, ids, offset_for):
@@ -277,10 +267,10 @@ def apply(conn, p):
         cur.execute(f"UPDATE char_profile SET {nation_col} = ?, rank_points = ? WHERE charid = ?", (p["rank"], p["rank_points"], charid))
         if p["race"]:
             look = p["look"]
-            gear = [_in_range(look.get(k), 0, 65535) or 0 for k in ("head", "body", "hands", "legs", "feet", "main", "sub", "ranged")]
-            cur.execute("UPDATE char_look SET race = ?, face = COALESCE(?, face), size = COALESCE(?, size), head = ?, body = ?, "
-                        "hands = ?, legs = ?, feet = ?, main = ?, sub = ?, ranged = ? WHERE charid = ?",
-                        (p["race"], p["face"], p["size"], *gear, charid))
+            cur.execute("UPDATE char_look SET race = ?, face = ?, size = ?, head = ?, body = ?, hands = ?, legs = ?, feet = ?, "
+                        "main = ?, sub = ?, ranged = ? WHERE charid = ?",
+                        (p["race"], p["face"], p["size"], *(int(look.get(k) or 0) for k in ("head", "body", "hands", "legs", "feet",
+                                                                                           "main", "sub", "ranged")), charid))
         cur.execute("DELETE FROM char_equip WHERE charid = ?", (charid,))
         cur.execute("DELETE FROM char_inventory WHERE charid = ?", (charid,))
         cur.execute("INSERT INTO char_inventory (charid, location, slot, itemId, quantity) VALUES (?, 0, 0, 65535, ?)", (charid, p["gil"]))

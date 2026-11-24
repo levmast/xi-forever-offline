@@ -26,6 +26,14 @@ TOP = "XI Forever Offline/"
 LINUX_ONE_CLICK = "XI-Forever-Offline-Linux.tar.gz"     # same file under a fixed name: .../releases/latest/download/<this>
 
 
+def is_song(rel):
+    """The launcher's theme songs (assets/press). They go LAST in the zip, after the exe and VERSION.txt: a launcher up
+    to v0.3.1 keeps the song it played open and stops its update at the first file it cannot replace ("Access is
+    denied ... .mp3", Hasuko 2026-11-22). With the songs last, such a launcher has everything else by then, and is the
+    new version the next time it is opened."""
+    return rel.startswith("assets/press/") and rel.lower().endswith((".mp3", ".wav", ".ogg"))
+
+
 def tracked():
     out = subprocess.run(["git", "-C", HERE, "ls-files", "-z"], capture_output=True, text=True, encoding="utf-8",
                          env=dict(os.environ, GIT_OPTIONAL_LOCKS="0"))
@@ -74,10 +82,14 @@ def main(argv):
     name = f"xi-forever-offline-{args.version}-win64.zip"
     target = os.path.join(args.out, name)
     with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+        songs = [rel for rel in files if is_song(rel)]
         for rel in files:
-            archive.write(os.path.join(HERE, *rel.split("/")), TOP + rel)
+            if rel not in songs:
+                archive.write(os.path.join(HERE, *rel.split("/")), TOP + rel)
         archive.write(exe, TOP + EXE)
         archive.writestr(TOP + "VERSION.txt", f"XI: Forever Offline {args.version}\ncommit {commit}\n")
+        for rel in songs:                       # last: see is_song
+            archive.write(os.path.join(HERE, *rel.split("/")), TOP + rel)
     digest = hashlib.sha256()
     with open(target, "rb") as handle:
         for block in iter(lambda: handle.read(1 << 20), b""):

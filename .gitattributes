@@ -1,0 +1,3 @@
+# install-world.sh is run on Linux servers straight from a download, and build_release.sh by GitHub's Linux
+# machines: shell scripts keep Unix line ends on every PC.
+*.sh text eol=lf

@@ -13,6 +13,7 @@ Experimental: off until the player turns it on in the launcher's CO-OP page.
 import base64
 import hashlib
 import hmac
+import http.client
 import json
 import ntpath
 import os
@@ -20,6 +21,7 @@ import re
 import secrets
 import shutil
 import socket
+import ssl
 import struct
 import subprocess
 import threading
@@ -32,6 +34,15 @@ import launcher_passport as pp
 
 PORT = 54100
 MAX_GUESTS = 6
+# open worlds (anyone may come in, 2026-11-22)
+MAX_OPEN_GUESTS = 64                 # the most visitors an open world may allow (each world picks its own number below this)
+LINK_PREFIX = "XIFO2-"               # a world link: where an open world is and which key its server has (no secret inside)
+OPEN_KEY = hashlib.sha256(b"xifo-open-world").digest()      # frames the two requests anyone may send to an open world
+OPEN_MAX_BODY = 6 * 1024 * 1024
+REGISTER_PER_HOUR = 30               # new visitors one address may introduce to an open world in an hour
+IDENTITY_FILE = "identity"           # coop/identity: this launcher's own secret, made once and never sent anywhere
+PLACES_FILE = "places.json"          # coop/places.json: the open worlds that keep a place for this player's characters
+KEEP_OUT_SECONDS = 30                # a banned visitor still in the game is asked out again this often
 PREFIX = "XIFO1-"
 SETTINGS_FILE = "coop.json"
 PATH = "/xifo"
@@ -39,7 +50,8 @@ CHECKPOINT_SECONDS = 300             # a visitor's launcher fetches a fresh copy
 CHECKPOINT_MIN_SECONDS = 60          # ...and the host makes one at most this often per visitor
 TAKE_BACK_HOURS = 24                 # the host must be out of reach this long before "take back" is offered
 MAX_BODY = 48 * 1024 * 1024
-GAME_PORTS = (("log in", 54231), ("lobby", 54230), ("lobby view", 54001), ("search", 54002), ("profile", 51220))
+GAME_PORTS = (("log in", 54231), ("lobby", 54230), ("lobby view", 54001), ("search", 54002), ("profile", 51220),
+              ("chat", 51240))      # (2026-11-23) xiloader 3 relays PlayOnline's chat (IRC) to the server's 51240: closed = "Failed to reach the server on port 51240"
 FIREWALL_RULE = "XI Forever Offline co-op"
 SERVER_PROGRAMS = ("xi_connect", "xi_map", "xi_search", "xi_profile")
 VISIT_BOOT = "xiforever-coop.ini"
@@ -81,14 +93,20 @@ def load_settings(kit):
     except (OSError, ValueError):
         pass
     out = {"enabled": False, "hosting": False, "mode": "lan", "address": "", "port": PORT, "secret": "",
-           "max_guests": 3, "zoneip_set": "", "backup_done": False}
+           "max_guests": 3, "zoneip_set": "", "backup_done": False, "open": False, "password": "",
+           "about": "", "listed": True}
     if isinstance(data, dict):
         out.update({k: v for k, v in data.items() if k in out})
     if out["mode"] not in MODES:
         out["mode"] = "lan"
+    out["open"] = out["open"] is True
+    out["listed"] = out["listed"] is not False
+    out["about"] = clean_about(out["about"])
+    if not re.fullmatch(r"(?:[0-9a-f]{32}\$[0-9a-f]{64})?", str(out["password"])):
+        out["password"] = ""
     try:
         out["port"] = int(out["port"])
-        out["max_guests"] = max(1, min(MAX_GUESTS, int(out["max_guests"])))
+        out["max_guests"] = max(1, min(MAX_OPEN_GUESTS if out["open"] else MAX_GUESTS, int(out["max_guests"])))
     except (TypeError, ValueError):
         out["port"], out["max_guests"] = PORT, 3
     if not re.fullmatch(r"[0-9a-f]{32}", str(out["secret"])):
@@ -102,6 +120,60 @@ def save_settings(kit, settings):
         json.dump(settings, handle, indent=2)
         handle.write("\n")
     os.replace(path + ".part", path)
+
+
+def identity(kit):
+    """This launcher's own secret (64 hex digits), made the first time it is needed and kept in coop/identity. Every open
+    world is shown a different id and key worked out from it (world_keys), so no world can pass for this launcher in
+    another one. It is never sent anywhere. Losing the file means starting as a new visitor everywhere."""
+    folder = os.path.join(kit, "coop")
+    path = os.path.join(folder, IDENTITY_FILE)
+    try:
+        with open(path, encoding="ascii") as handle:
+            found = handle.read().strip()
+        if re.fullmatch(r"[0-9a-f]{64}", found):
+            return found
+    except (OSError, ValueError):
+        pass
+    os.makedirs(folder, exist_ok=True)
+    made = secrets.token_hex(32)
+    if os.path.exists(path):                     # an unreadable one is kept beside the new one, never thrown away
+        os.replace(path, path + ".damaged-" + time.strftime("%Y%m%d-%H%M%S"))
+    with open(path + ".part", "w", encoding="ascii", newline="\n") as handle:
+        handle.write(made + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(path + ".part", path)
+    return made
+
+
+def world_keys(secret, fingerprint):
+    """(visitor id, visitor key) of this launcher for the world whose server has that fingerprint."""
+    if not re.fullmatch(r"[0-9a-f]{64}", str(secret)) or not fingerprint:
+        raise CoopError("This launcher has no identity for that world.")
+    who = bytes.fromhex(secret)
+    mark = str(fingerprint).encode("ascii", "replace")
+    return (hmac.new(who, b"xifo-visitor-id|" + mark, hashlib.sha256).hexdigest()[:32],
+            hmac.new(who, b"xifo-visitor-key|" + mark, hashlib.sha256).hexdigest())
+
+
+def hash_password(text):
+    """What is kept of a world's password (never the password itself). '' = no password."""
+    if not text:
+        return ""
+    salt = secrets.token_hex(16)
+    return salt + "$" + hashlib.pbkdf2_hmac("sha256", str(text).encode("utf-8"), bytes.fromhex(salt), 100000).hex()
+
+
+def check_password(stored, given):
+    if not stored:
+        return True
+    salt, _sep, digest = str(stored).partition("$")
+    try:
+        made = hashlib.pbkdf2_hmac("sha256", str(given or "").encode("utf-8"), bytes.fromhex(salt), 100000).hex()
+    except ValueError:
+        return False
+    return hmac.compare_digest(made, digest)
 
 
 def versions(kit, server_dir):
@@ -185,6 +257,32 @@ def read_invite(text):
     return invite
 
 
+def make_link(address, port, fingerprint, world_name):
+    """The link of an open world: where it is and the key of its game server. Anyone may have it."""
+    data = json.dumps({"a": address, "p": int(port), "f": fingerprint, "w": world_name}, separators=(",", ":")).encode("utf-8")
+    return LINK_PREFIX + base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+
+def read_link(text):
+    text = re.sub(r"\s+", "", str(text or ""))
+    try:
+        raw = text[len(LINK_PREFIX):]
+        data = json.loads(base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)).decode("utf-8"))
+        link = {"address": str(data["a"]), "port": int(data["p"]), "pin": str(data["f"]), "world": pp.clean_world_name(data.get("w", "")),
+                "open": True}
+    except Exception:
+        raise CoopError("That world link is damaged. Copy it again.")
+    if not text.startswith(LINK_PREFIX) or not valid_address(link["address"]) or not 1 <= link["port"] <= 65535 or \
+            not re.fullmatch(r"SHA256:[A-Za-z0-9+/]{20,64}", link["pin"]):
+        raise CoopError("That world link is damaged. Copy it again.")
+    return link
+
+
+def read_code(text):
+    """An invite code from a friend (XIFO1-) or the link of an open world (XIFO2-)."""
+    return read_link(text) if re.sub(r"\s+", "", str(text or "")).startswith(LINK_PREFIX) else read_invite(text)
+
+
 def guest_key(secret, guest_id):
     return hmac.new(bytes.fromhex(secret), b"guest|" + guest_id.encode("ascii"), hashlib.sha256).hexdigest()
 
@@ -210,6 +308,27 @@ class Host:
         self.lock = threading.Lock()
         self.last_checkpoint, self.last_seen, self.failures = {}, {}, {}
         self.save_dir = os.path.join(kit, "backups", "coop")
+        self.tls = None                      # open worlds: the game server's own certificate, for visitors' launchers
+        self.registrations, self.addresses, self.swept = {}, {}, 0
+        self.out = {}                        # banned visitors still in the game: {guest id: (first asked out, last asked out)}
+        self.announcer, self.announced, self.announce_note = None, 0, ""
+
+    def announce_loop(self):
+        """(2026-11-23) An open world with "list my world" on tells the worlds list (hub.xiforever.com/worlds) its link
+        every few minutes while it is open, so it shows in every player's OPEN WORLDS. The list checks the world itself."""
+        while self.server is not None:
+            try:
+                if self.settings.get("open") and self.settings.get("listed") and self.open_for_arrivals():
+                    link = self.link()
+                    if link and time.time() - self.announced >= ANNOUNCE_SECONDS:
+                        self.announced = time.time()
+                        note = announce_world(link)
+                        if note != self.announce_note:
+                            self.announce_note = note
+                            self.log("Co-op: " + note)
+            except Exception:
+                pass
+            time.sleep(15)
 
     # --- listening ---
     def start(self):
@@ -218,12 +337,29 @@ class Host:
         host = self
 
         class Handler(BaseHTTPRequestHandler):
+            def setup(self):
+                # An open world's visitors come in over TLS (the game server's own certificate, which their launcher
+                # checks against the world's link). Friends with an invite code talk the way they always did. The
+                # first byte tells the two apart.
+                self.secure = False
+                if host.tls is not None:
+                    try:
+                        self.request.settimeout(15)
+                        if self.request.recv(1, socket.MSG_PEEK) == b"\x16":
+                            self.request = host.tls.wrap_socket(self.request, server_side=True)
+                            self.secure = True
+                        self.request.settimeout(120)
+                    except (OSError, ssl.SSLError):
+                        self.secure = None             # a broken hello: nothing is answered
+                super().setup()
+
             def do_POST(self):
                 try:
                     size = int(self.headers.get("Content-Length", "0"))
-                    if self.path != PATH or size <= 0 or size > MAX_BODY:
+                    if self.path != PATH or size <= 0 or size > MAX_BODY or self.secure is None:
                         raise CoopError("no")
-                    answer = host.handle(self.headers.get("X-Coop-Key", ""), self.rfile.read(size), self.client_address[0])
+                    answer = host.handle(self.headers.get("X-Coop-Key", ""), self.rfile.read(size), self.client_address[0],
+                                         secure=bool(self.secure))
                     self.send_response(200)
                     self.send_header("Content-Type", "application/octet-stream")
                     self.send_header("Content-Length", str(len(answer)))
@@ -245,14 +381,22 @@ class Host:
             def log_message(self, *_args):
                 pass
 
+        self.tls = server_tls(self.cfg.get("server_dir")) if self.settings.get("open") else None
+        if self.settings.get("open") and self.tls is None:
+            self.log("Co-op: this world cannot be open to everyone yet: its game server has no certificate (press PLAY once).")
+        self.sweep()
         bind = self.settings.get("address") if self.settings.get("mode") != "direct" else ""
         try:
             self.server = ThreadingHTTPServer((bind or "0.0.0.0", int(self.settings["port"])), Handler)
         except OSError:
             self.server = ThreadingHTTPServer(("0.0.0.0", int(self.settings["port"])), Handler)
         self.server.daemon_threads = True
+        self.server.handle_error = lambda *_args: None        # (a visitor that hangs up mid-request is nothing to print)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
+        if self.announcer is None:
+            self.announcer = threading.Thread(target=self.announce_loop, daemon=True)
+            self.announcer.start()
 
     def stop(self):
         if self.server is not None:
@@ -277,14 +421,16 @@ class Host:
         finally:
             conn.close()
 
-    def handle(self, key_header, body, client="?"):
+    def handle(self, key_header, body, client="?", secure=False):
         """Answers one sealed request with one sealed reply. Raises when the request cannot be trusted."""
         now = time.time()
         fails = self.failures.get(client)
         if fails and fails[0] >= 20 and now - fails[1] < 600:
             raise CoopError("too many wrong tries")
         kind, _sep, guest_id = str(key_header).partition(":")
-        guest = None
+        guest, visitor = None, None
+        if kind in ("open", "visitor") and len(body) > OPEN_MAX_BODY:
+            raise CoopError("too large")
         try:
             if kind == "invite":
                 key = bytes.fromhex(self.settings["secret"])
@@ -296,6 +442,16 @@ class Host:
                 if guest is None:
                     raise CoopError("unknown visitor")
                 key = bytes.fromhex(guest["gkey"])
+            elif kind == "open" and secure and self.settings.get("open"):
+                key = OPEN_KEY                   # anyone may say hello to an open world and introduce itself
+            elif kind == "visitor" and secure and self.settings.get("open") and re.fullmatch(r"[0-9a-f]{32}", guest_id):
+                try:
+                    visitor = self._visitor(guest_id)
+                except Exception:
+                    raise Busy("the database did not answer")
+                if visitor is None:
+                    raise CoopError("unknown visitor")
+                key = bytes.fromhex(visitor["vkey"])
             else:
                 raise CoopError("no key")
             request, blob = unseal(key, body)
@@ -311,6 +467,15 @@ class Host:
                 reply, out = self._hello(), b""
             elif kind == "invite" and op == "arrive":
                 reply, out = self._arrive(request, blob), b""
+            elif kind == "open" and op == "hello":
+                reply, out = self._hello(), b""
+            elif kind == "open" and op == "banner":        # (2026-11-23) the world's own banner, for the OPEN WORLDS cards
+                data = banner_bytes(self.kit) if self.settings.get("open") else b""
+                reply, out = {"ok": True, "sha": hashlib.sha256(data).hexdigest() if data else ""}, data
+            elif kind == "open" and op == "register":
+                reply, out = self._register(request, client), b""
+            elif kind == "visitor" and op == "arrive":
+                reply, out = self._arrive_open(visitor, request, blob, client), b""
             elif kind == "guest" and op == "status":
                 reply, out = self._status(guest), b""
             elif kind == "guest" and op == "checkpoint":
@@ -322,7 +487,8 @@ class Host:
             else:
                 reply, out = {"ok": False, "code": "unknown", "error": "This version does not know that request."}, b""
         except pp.PassportError as e:
-            reply, out = {"ok": False, "code": "refused", "error": str(e)}, b""
+            code = "name" if isinstance(e, pp.NameTaken) else "bad" if isinstance(e, pp.BadPassport) else "refused"
+            reply, out = {"ok": False, "code": code, "error": str(e)}, b""
         except CoopError as e:
             reply, out = {"ok": False, "code": getattr(e, "code", "") or "refused", "error": str(e)}, b""
         except Exception as e:                   # a database hiccup and the like: say so, the visitor's launcher tries again
@@ -330,6 +496,8 @@ class Host:
             reply, out = {"ok": False, "code": "busy", "error": "The host's launcher had a problem. Try again in a moment."}, b""
         if guest is not None:
             self.last_seen[guest["guest_id"]] = now
+            self.addresses[guest["guest_id"]] = client
+        self.sweep()
         return seal(key, reply, out)
 
     # --- the requests ---
@@ -346,7 +514,10 @@ class Host:
             conn.close()
         return {"ok": True, "world": world, "versions": versions(self.kit, self.cfg.get("server_dir")), "schema": signature,
                 "guests": len(guests), "max_guests": int(self.settings["max_guests"]), "open": self.open_for_arrivals(),
-                "rules": world_rules(self.kit), "fingerprint": self.fingerprint()}
+                "rules": world_rules(self.kit), "fingerprint": self.fingerprint(),
+                "open_world": bool(self.settings.get("open")), "password": bool(self.settings.get("password")),
+                "keep_days": pp.LOCKER_DAYS if self.settings.get("open") else 0,
+                "about": clean_about(self.settings.get("about")), "banner": banner_hash(self.kit) if self.settings.get("open") else ""}
 
     def fingerprint(self):
         """The game server's key, so a visitor's game loader knows it is talking to the right server."""
@@ -423,7 +594,7 @@ class Host:
                 holdings = pp.guest_holdings(conn, guest["charid"])
             finally:
                 conn.close()
-            if (holdings["auctions"] or holdings["delivery"]) and not force:
+            if (holdings["auctions"] or holdings["delivery"]) and not force and not guest.get("kept"):   # (a kept place keeps them)
                 return {"ok": False, "code": "holdings", "holdings": holdings,
                         "error": "Some of your things are still in this world's auction house or delivery box."}, b""
         with self.lock:
@@ -450,6 +621,194 @@ class Host:
             self.log(f"Co-op: {guest['name']} is home safely.")
         return {"ok": True}
 
+    # --- open worlds: anyone with the world's link ---
+    def _visitor(self, vid):
+        conn = self.connect()
+        try:
+            return pp.visitor(conn, vid)
+        finally:
+            conn.close()
+
+    def _banned(self, vid, client):
+        conn = self.connect()
+        try:
+            return pp.is_banned(conn, vid, client)
+        finally:
+            conn.close()
+
+    def _strike(self, client):
+        fails = self.failures.get(client)
+        now = time.time()
+        self.failures[client] = ((fails[0] + 1) if fails and now - fails[1] < 600 else 1, now)
+
+    def _register(self, request, client):
+        """A launcher introduces itself: its id and key for this world are remembered the first time."""
+        vid, vkey = str(request.get("vid", "")), str(request.get("vkey", ""))
+        if not re.fullmatch(r"[0-9a-f]{32}", vid) or not re.fullmatch(r"[0-9a-f]{64}", vkey):
+            raise CoopError("That request is damaged.")
+        if self._banned(vid, client):
+            raise Refused("This world does not let you in.", "banned")
+        now = time.time()
+        recent = [t for t in self.registrations.get(client, []) if now - t < 3600]
+        conn = self.connect()
+        try:
+            known = pp.visitor(conn, vid) is not None
+            if not known and len(recent) >= REGISTER_PER_HOUR:
+                raise Refused("Too many new visitors from one place. Try again later.", "busy")
+            pp.register_visitor(conn, vid, vkey, client)
+        finally:
+            conn.close()
+        if not known:
+            self.registrations[client] = recent + [now]
+        return {"ok": True, "known": known}
+
+    def _arrive_open(self, visitor, request, blob, client):
+        guest_id = str(request.get("guest_id", ""))
+        if not re.fullmatch(r"[0-9a-f]{16,32}", guest_id):
+            raise CoopError("That request is damaged.")
+        if not self.open_for_arrivals():
+            raise Refused("This world is not taking visitors right now.", "closed")
+        if self._banned(visitor["vid"], client):
+            raise Refused("This world does not let you in.", "banned")
+        if not check_password(self.settings.get("password"), request.get("password")):
+            self._strike(client)
+            raise Refused("That is not this world's password.", "password")
+        alias = request.get("alias") or None
+        gkey = guest_key(visitor["vkey"], guest_id)
+        with self.lock:
+            conn = self.connect()
+            try:
+                world = self._world(conn)
+                stamp = {"world": world["name"], "id": world["id"], "arrived": int(time.time()), "rules": world_rules(self.kit)}
+                avoid = [i for i in (request.get("avoid") or []) if isinstance(i, int)]
+                record = pp.import_guest(conn, blob, guest_id, gkey, guest_login(guest_id), guest_password(gkey),
+                                         max_guests=int(self.settings["max_guests"]), stamp=stamp, avoid=avoid,
+                                         owner=visitor["vid"], keep=True, alias=alias, strict=True)
+            finally:
+                conn.close()
+        if record["guest_id"] != guest_id:
+            raise Refused(f"{record['name']} is already visiting this world on another visit.", "duplicate")
+        self.addresses[guest_id] = client
+        if not record.get("again"):
+            self.log(f"Co-op: {record.get('local') or record['name']} has arrived in your world.")
+            announce(self.cfg.get("server_dir"), f"{record.get('local') or record['name']} is visiting this world.")
+        return {"ok": True, "guest_id": guest_id, "login": record["login"], "charid": record["charid"], "name": record["name"],
+                "local": record.get("local") or record["name"], "shelf": bool(record.get("shelf")),
+                "address": self.settings.get("address", ""), "world": world, "fingerprint": self.fingerprint()}
+
+    def link(self):
+        """This world's link for anyone (None while it is not open or its server has no certificate yet)."""
+        mark = self.fingerprint()
+        if not self.settings.get("open") or not mark or not self.settings.get("address"):
+            return None
+        conn = self.connect()
+        try:
+            name = self._world(conn)["name"]
+        finally:
+            conn.close()
+        return make_link(self.settings["address"], self.settings["port"], mark, name)
+
+    def sweep(self):
+        """Once a day: the places kept for visitors who have not been back for 90 days are cleared."""
+        if not self.settings.get("open") or time.time() - self.swept < 86400:
+            return
+        self.swept = time.time()
+        try:
+            conn = self.connect()
+            try:
+                gone = pp.expire_lockers(conn)
+            finally:
+                conn.close()
+            if gone:
+                self.log("Co-op: the kept places of " + ", ".join(gone) + " ran out (no visit in 90 days).")
+        except Exception:
+            pass
+
+    def kick(self, guest_id):
+        """Puts a visitor out of the game (the server's co-op script does it within a few seconds)."""
+        for guest in self.guests():
+            if guest["guest_id"] == guest_id and guest["state"] == "active":
+                announce(self.cfg.get("server_dir"), str(int(guest["charid"])), kind="KICK")
+                return True
+        return False
+
+    def ban(self, guest_id, reason="", with_address=False):
+        """Bans the launcher behind a visitor (and the address it last used): it is put out of the game, cannot log in
+        or arrive again, and its character can still go home. A visitor who is home but has a kept place here can be
+        banned too: it cannot come back. Returns the visitor's name, or None."""
+        conn = self.connect()
+        try:
+            rows = pp.guest_list(conn, lockers=True)
+        finally:
+            conn.close()
+        for guest in rows:
+            if guest["guest_id"] != guest_id:
+                continue
+            conn = self.connect()
+            try:
+                if guest.get("owner"):
+                    pp.ban(conn, "key", guest["owner"], reason)
+                if with_address:                 # the address of this visit, else the one its launcher last showed
+                    address = self.addresses.get(guest_id) or ((pp.visitor(conn, guest["owner"]) or {}).get("address") if guest.get("owner") else "")
+                    if address:
+                        pp.ban(conn, "ip", address, reason)
+                pp.close_guest_account(conn, guest_id)
+            finally:
+                conn.close()
+            if guest["state"] == "active":
+                self.kick(guest_id)
+                self.out[guest_id] = (time.time(), time.time())
+            self.log(f"Co-op: {guest.get('local') or guest['name']} is banned from this world.")
+            return guest.get("local") or guest["name"]
+        return None
+
+    def _keep_out(self, rows, now=None):
+        """A banned visitor who is still in the game is asked out again every half minute until it has left: the
+        server's script acts on a request for 90 seconds only. Its account is closed, so it cannot come back in."""
+        now = now or time.time()
+        active = {g["guest_id"]: g for g in rows if g["state"] == "active"}
+        for guest_id, (first, last) in list(self.out.items()):
+            guest = active.get(guest_id)
+            if guest is None or now - first > 3600:
+                self.out.pop(guest_id, None)
+            elif guest["online"] and now - last >= KEEP_OUT_SECONDS:
+                announce(self.cfg.get("server_dir"), str(int(guest["charid"])), kind="KICK")
+                self.out[guest_id] = (first, now)
+
+    def bans(self):
+        """This world's bans, oldest first: [{kind: "key" (a launcher) or "ip" (an address), value, reason, since}]."""
+        conn = self.connect()
+        try:
+            return pp.ban_list(conn)
+        finally:
+            conn.close()
+
+    def unban(self, kind, value):
+        conn = self.connect()
+        try:
+            pp.unban(conn, kind, value)
+        finally:
+            conn.close()
+
+    def forget(self, guest_id):
+        """Gives up the place kept for a visitor who is home: its character here goes, with its auction listings and
+        delivery box. False when that is not a kept place (a visitor who is here is sent home, not forgotten)."""
+        with self.lock:
+            conn = self.connect()
+            try:
+                if not any(kept["guest_id"] == guest_id for kept in pp.locker_list(conn)):
+                    return False
+                return bool(pp.remove_guest(conn, guest_id, forget=True))
+            finally:
+                conn.close()
+
+    def lockers(self):
+        conn = self.connect()
+        try:
+            return pp.locker_list(conn)
+        finally:
+            conn.close()
+
     # --- what the host's own page does ---
     def guests(self):
         conn = self.connect()
@@ -459,6 +818,7 @@ class Host:
             conn.close()
         for row in rows:
             row["seen"] = self.last_seen.get(row["guest_id"])
+        self._keep_out(rows)
         return rows
 
     def send_home(self, guest_id):
@@ -524,9 +884,47 @@ def _post(address, port, key_header, body, timeout):
         return response.read(MAX_BODY + 1024)
 
 
+class _Status(Exception):
+    def __init__(self, code):
+        super().__init__(f"HTTP {code}")
+        self.code = code
+
+
+def der_fingerprint(der):
+    """SHA256:<base64> of the public key in a certificate given as DER bytes (what a TLS connection hands over)."""
+    try:
+        return certificate_fingerprint("-----BEGIN CERTIFICATE-----\n" + base64.b64encode(der or b"").decode("ascii") + "\n-----END CERTIFICATE-----")
+    except (ValueError, IndexError):
+        return None
+
+
+def _post_pinned(address, port, key_header, body, timeout, pin):
+    """One request to an open world over TLS. The world's certificate is its own (no authority signed it), so it is
+    checked against the fingerprint in the world's link before a single byte of the request is sent."""
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    conn = http.client.HTTPSConnection(address, int(port), timeout=timeout, context=context)
+    try:
+        conn.connect()
+        seen = der_fingerprint(conn.sock.getpeercert(binary_form=True))
+        if not pin or not seen or not hmac.compare_digest(seen, pin):
+            raise Refused("That world's server key is not the one in its link, so nothing was sent. Ask for the world's link again.", "pin")
+        conn.request("POST", PATH, body=body, headers={"X-Coop-Key": key_header, "Content-Type": "application/octet-stream"})
+        response = conn.getresponse()
+        data = response.read(MAX_BODY + 1024)
+        if response.status != 200:
+            raise _Status(response.status)
+        return data
+    finally:
+        conn.close()
+
+
 def call(where, key_header, key, obj, blob=b"", timeout=25, post=None):
     """One request to a host. Returns (reply dict, file bytes). Unreachable when nothing answers, Refused when it says no."""
-    post = post or _post
+    if post is None:                          # an open world: TLS, checked against the fingerprint in its link
+        post = (lambda a, p, k, b, t: _post_pinned(a, p, k, b, t, where["pin"])) if where.get("pin") else _post
     try:
         raw = post(where["address"], where["port"], key_header, seal(key, obj, blob), timeout)
     except CoopError:
@@ -543,6 +941,11 @@ def call(where, key_header, key, obj, blob=b"", timeout=25, post=None):
 
 
 def hello(invite, post=None, timeout=12):
+    if invite.get("open"):
+        reply, _data = call(invite, "open", OPEN_KEY, {"op": "hello"}, timeout=timeout, post=post)
+        if not reply.get("open_world"):
+            raise Refused("That world is for invited friends only.", "closed")
+        return reply
     reply, _data = call(invite, "invite", bytes.fromhex(invite["secret"]), {"op": "hello"}, timeout=timeout, post=post)
     return reply
 
@@ -609,7 +1012,7 @@ def away(cfg, connect=None):
         conn.close()
 
 
-def start_visit(cfg, kit, invite, charid, log=print, post=None, connect=None):
+def start_visit(cfg, kit, invite, charid, log=print, post=None, connect=None, password=None, alias=None):
     """The character leaves for the invite's world. Returns what the host answered (login, address, ...).
     If the host says no, the character is unlocked again at once. If the host cannot be reached after the character was
     packed, it stays packed: finish_arrival() tries again, cancel_visit() unpacks it."""
@@ -618,9 +1021,11 @@ def start_visit(cfg, kit, invite, charid, log=print, post=None, connect=None):
     greeting = hello(invite, post=post)
     if not greeting.get("open"):
         raise Refused("That world is not taking visitors right now.", "closed")
-    clash = versions_clash(mine, greeting.get("versions"))
+    clash = None if invite.get("open") else versions_clash(mine, greeting.get("versions"))    # (open worlds: the same character format is enough)
     if clash:
         raise Refused(clash, "version")
+    if invite.get("open") and greeting.get("password") and not password:
+        raise Refused("That world asks for a password.", "password")
     conn = connect()
     try:
         if greeting.get("schema") != pp.schema_signature(conn):
@@ -628,9 +1033,17 @@ def start_visit(cfg, kit, invite, charid, log=print, post=None, connect=None):
         if greeting["world"]["id"] == pp.world_identity(conn)["id"]:
             raise Refused("That invite is for your own world.", "self")
         guest_id = secrets.token_hex(12)
-        host = {"address": invite["address"], "port": invite["port"], "guest_id": guest_id,
-                "gkey": guest_key(invite["secret"], guest_id), "secret": invite["secret"], "world": greeting["world"],
-                "arrived": False, "started": int(time.time())}
+        if invite.get("open"):               # this launcher's own id and key for that world; the world remembers them
+            vid, vkey = world_keys(identity(kit), invite["pin"])
+            call(invite, "open", OPEN_KEY, {"op": "register", "vid": vid, "vkey": vkey}, post=post)
+            host = {"address": invite["address"], "port": invite["port"], "guest_id": guest_id, "gkey": guest_key(vkey, guest_id),
+                    "open": True, "pin": invite["pin"], "vid": vid, "world": greeting["world"], "arrived": False,
+                    "started": int(time.time()), "alias": alias, "password": password or "",
+                    "keep_days": _days(greeting.get("keep_days"))}
+        else:
+            host = {"address": invite["address"], "port": invite["port"], "guest_id": guest_id,
+                    "gkey": guest_key(invite["secret"], guest_id), "secret": invite["secret"], "world": greeting["world"],
+                    "arrived": False, "started": int(time.time())}
         data, _nonce = pp.depart(conn, charid, host, versions=mine)
     finally:
         conn.close()
@@ -647,7 +1060,7 @@ def _away_row(cfg, charid, connect):
     raise CoopError("That character is not visiting another world.")
 
 
-def finish_arrival(cfg, kit, charid, log=print, post=None, connect=None):
+def finish_arrival(cfg, kit, charid, log=print, post=None, connect=None, alias=None, password=None):
     """Hands the packed character to the host (again, if the first try got no answer)."""
     connect = connect or (lambda: pp.connect(cfg))
     row = _away_row(cfg, charid, connect)
@@ -664,12 +1077,27 @@ def finish_arrival(cfg, kit, charid, log=print, post=None, connect=None):
         mine = pp.own_character_ids(conn)
     finally:
         conn.close()
+    request = {"op": "arrive", "guest_id": host["guest_id"], "versions": versions(kit, cfg.get("server_dir")), "avoid": mine}
     try:
-        reply, _blob = call(host, "invite", bytes.fromhex(host["secret"]),
-                            {"op": "arrive", "guest_id": host["guest_id"], "versions": versions(kit, cfg.get("server_dir")),
-                             "avoid": mine}, blob=data, timeout=60, post=post)
+        if host.get("open"):
+            if alias is not None:
+                host["alias"] = alias
+            if password is not None:
+                host["password"] = password
+            _vid, vkey = world_keys(identity(kit), host["pin"])
+            request.update({"alias": host.get("alias"), "password": host.get("password") or ""})
+            reply, _blob = call(host, "visitor:" + host["vid"], bytes.fromhex(vkey), request, blob=data, timeout=60, post=post)
+        else:
+            reply, _blob = call(host, "invite", bytes.fromhex(host["secret"]), request, blob=data, timeout=60, post=post)
     except Refused as e:
-        if e.code in ("key", "busy"):
+        # an open world's "name" (taken there: try again with a visiting name) and "password" leave the character packed
+        if e.code in ("key", "busy") or (host.get("open") and e.code in ("name", "password", "pin")):
+            if host.get("open") and (alias is not None or password is not None):
+                conn = connect()              # what the player just typed is kept for the next try: a right password
+                try:                          # is not asked for again because the name turned out to be taken
+                    pp.update_away(conn, charid, host=host)
+                finally:
+                    conn.close()
             raise
         conn = connect()                      # a clear no: nothing was made over there, so unpack at once
         try:
@@ -681,6 +1109,9 @@ def finish_arrival(cfg, kit, charid, log=print, post=None, connect=None):
     host.update({"arrived": True, "login": reply["login"], "host_charid": int(reply["charid"]), "fingerprint": reply.get("fingerprint"),
                  "game_address": reply.get("address") or host["address"], "last_ok": int(time.time())})
     host.pop("secret", None)                  # from here on the visitor's own key is used
+    host.pop("password", None)
+    if host.get("open"):
+        host.update({"local": reply.get("local") or row["name"], "shelf": bool(reply.get("shelf"))})
     conn = connect()
     try:
         pp.update_away(conn, charid, host=host)
@@ -707,6 +1138,8 @@ def can_take_back(host, now=None):
     since = host.get("unreachable_since")
     if host.get("gone"):
         return True, "That world no longer has the character."
+    if host.get("bad_return"):
+        return True, "That world sent back a character this version cannot accept."
     if since and now - since >= TAKE_BACK_HOURS * 3600:
         return True, f"Your friend's world has been out of reach for over {TAKE_BACK_HOURS} hours."
     if since:
@@ -784,9 +1217,19 @@ def come_home(cfg, kit, charid, force=False, log=print, post=None, connect=None)
     reply, data = _guest_call(host, {"op": "go_home", "force": bool(force)}, timeout=90, post=post)
     conn = connect()
     try:
-        result = pp.come_home(conn, data, backup_dir=os.path.join(kit, "backups", "coop"))
+        try:                                  # (an open world's owner is a stranger: what it sends back is checked value by value)
+            result = pp.come_home(conn, data, backup_dir=os.path.join(kit, "backups", "coop"), strict=bool(host.get("open")))
+        except pp.BadPassport as e:
+            host["bad_return"] = True
+            pp.update_away(conn, charid, host=host)
+            raise Refused(str(e) + " Take back brings the character home as it last was.", "bad")
     finally:
         conn.close()
+    if host.get("open"):                      # that world keeps the character's place: note where, and until when
+        try:
+            remember_place(kit, row, host)
+        except Exception:
+            pass
     try:
         _guest_call(host, {"op": "confirm_home", "generation": reply.get("generation")}, timeout=30, post=post)
     except CoopError:                         # the host keeps the spent copy until it hears; nothing is lost either way
@@ -809,10 +1252,14 @@ def take_back(cfg, kit, charid, log=print, connect=None):
             checkpoint = handle.read()
     except OSError:
         pass
+    try:
+        strict = bool(_away_row(cfg, charid, connect)["host"].get("open"))
+    except CoopError:
+        strict = False
     conn = connect()
     try:
         try:
-            result = pp.take_back(conn, charid, checkpoint=checkpoint, backup_dir=os.path.join(kit, "backups", "coop"))
+            result = pp.take_back(conn, charid, checkpoint=checkpoint, backup_dir=os.path.join(kit, "backups", "coop"), strict=strict)
         except pp.PassportError:
             if checkpoint is None:
                 raise
@@ -846,11 +1293,422 @@ def load_return_file(cfg, kit, path, connect=None):
     """A going-home passport the host sent as a file (when the two launchers could not talk)."""
     with open(path, "rb") as handle:
         data = handle.read()
-    conn = (connect or (lambda: pp.connect(cfg)))()
+    connect = connect or (lambda: pp.connect(cfg))
+    try:                                      # a file from an open world is checked like anything else it sends
+        strict = bool(_away_row(cfg, int((pp.unpack(data).get("home") or {}).get("charid", 0)), connect)["host"].get("open"))
+    except Exception:
+        strict = False
+    conn = connect()
     try:
-        return pp.come_home(conn, data, backup_dir=os.path.join(kit, "backups", "coop"))
+        return pp.come_home(conn, data, backup_dir=os.path.join(kit, "backups", "coop"), strict=strict)
     finally:
         conn.close()
+
+
+# ----- the places open worlds keep for this player's characters (coop/places.json) -----
+def _days(value):
+    """How long a world says it keeps a place, as a whole number of days from 0 to ten years (anything else: 0)."""
+    try:
+        return max(0, min(3650, int(value)))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def _places_path(kit):
+    return os.path.join(kit, "coop", PLACES_FILE)
+
+
+def places(kit, now=None):
+    """The places open worlds keep for this player's characters, the most recent visit first:
+    [{world, world_id, address, port, pin, charid, name, local, last, days, until}]. `until` is when that world clears
+    the place if the character has not been back. A place whose time is up is left out."""
+    now = now or time.time()
+    try:
+        with open(_places_path(kit), encoding="utf-8") as handle:
+            found = json.load(handle)
+    except (OSError, ValueError):
+        return []
+    out = []
+    for place in found if isinstance(found, list) else []:
+        try:
+            item = {"world": pp.clean_world_name(place.get("world", "")), "world_id": str(place["world_id"]),
+                    "address": str(place["address"]), "port": int(place["port"]), "pin": str(place["pin"]),
+                    "charid": int(place["charid"]), "name": str(place["name"]), "local": str(place.get("local") or place["name"]),
+                    "last": int(place["last"]), "days": _days(place["days"])}
+        except (AttributeError, KeyError, TypeError, ValueError):
+            continue
+        item["until"] = item["last"] + item["days"] * 86400
+        if item["days"] > 0 and item["until"] > now and valid_address(item["address"]) and 1 <= item["port"] <= 65535:
+            out.append(item)
+    return sorted(out, key=lambda item: -item["last"])
+
+
+def remember_place(kit, row, host, now=None):
+    """A character is home from an open world that keeps its place: note where it is and until when. Returns the
+    place, or None when that world keeps none."""
+    world = host.get("world") or {}
+    days = _days(host.get("keep_days"))
+    if not host.get("open") or days <= 0 or not world.get("id") or not host.get("pin"):
+        return None
+    now = int(now or time.time())
+    place = {"world": world.get("name", ""), "world_id": str(world["id"]), "address": host["address"], "port": int(host["port"]),
+             "pin": host["pin"], "charid": int(row["charid"]), "name": row["name"], "local": host.get("local") or row["name"],
+             "last": now, "days": days}
+    others = [{k: v for k, v in old.items() if k != "until"} for old in places(kit, now)
+              if not (old["world_id"] == place["world_id"] and old["charid"] == place["charid"])]
+    os.makedirs(os.path.dirname(_places_path(kit)), exist_ok=True)
+    _write(_places_path(kit), (json.dumps([place] + others, indent=2) + "\n").encode("utf-8"))
+    return place
+
+
+def forget_place(kit, world_id, charid, now=None):
+    """Takes a place off this launcher's list (the world itself is not told)."""
+    left = [{k: v for k, v in old.items() if k != "until"} for old in places(kit, now)
+            if not (old["world_id"] == str(world_id) and old["charid"] == int(charid))]
+    if os.path.exists(_places_path(kit)):
+        _write(_places_path(kit), (json.dumps(left, indent=2) + "\n").encode("utf-8"))
+
+
+def place_link(place):
+    """The world link that leads back to a kept place."""
+    return make_link(place["address"], place["port"], place["pin"], place["world"])
+
+
+# ----- the list of open worlds (2026-11-23): the project's own list, the official world (The Hub) first -----
+WORLDS_URL = "https://xiforever.com/worlds.json"     # the list on the project's website
+WORLDS_FILE = "worlds.json"                          # in the kit: the list it came with; in coop/: the one last read from the website
+WORLDS_FRESH_SECONDS = 600                           # the website is asked again when the copy here is older than this
+WORLDS_MOST = 50
+
+
+def read_worlds(text):
+    """The worlds in a worlds.json, the official ones first: [{name, about, official, link, invite}]. An entry that
+    is not the link of an open world is left out, and so is a second entry for the same world; a file that cannot be
+    read gives []."""
+    try:
+        found = json.loads(text)
+        found = found.get("worlds") if isinstance(found, dict) else None
+    except (TypeError, ValueError):
+        found = None
+    out, seen = [], set()
+    for world in found if isinstance(found, list) else []:
+        try:
+            link = re.sub(r"\s+", "", str(world["link"]))
+            invite = read_link(link)
+            name = pp.clean_world_name(world.get("name") or invite["world"])
+        except (AttributeError, KeyError, TypeError, ValueError, CoopError):
+            continue
+        if link in seen:
+            continue
+        seen.add(link)
+        about = " ".join("".join(c if c.isprintable() else " " for c in str(world.get("about") or "")).split())[:160]
+        out.append({"name": name, "about": about, "official": world.get("official") is True, "link": link, "invite": invite})
+        if len(out) >= WORLDS_MOST:
+            break
+    return sorted(out, key=lambda world: not world["official"])      # (the file's own order stays within each kind)
+
+
+def _worlds_path(kit):
+    return os.path.join(kit, "coop", WORLDS_FILE)
+
+
+def listed_worlds(kit):
+    """The open worlds this launcher can show without being given a link, the official ones first: from the list last
+    read from the website, else from the one the kit came with."""
+    for path in (_worlds_path(kit), os.path.join(kit, WORLDS_FILE)):
+        try:
+            with open(path, encoding="utf-8") as handle:
+                found = read_worlds(handle.read())
+        except (OSError, ValueError):
+            continue
+        if found:
+            return found
+    return []
+
+
+def refresh_worlds(kit, fetch=None, now=None):
+    """Reads the project's list from the website when the copy here is older than ten minutes, and keeps it in
+    coop/worlds.json. True when a new copy was kept. No internet, a file that cannot be read and an empty list all
+    leave what is here as it is."""
+    path = _worlds_path(kit)
+    try:
+        if 0 <= (now or time.time()) - os.path.getmtime(path) < WORLDS_FRESH_SECONDS:
+            return False
+    except OSError:
+        pass
+    try:
+        if fetch is None:
+            import launcher_thirdparty
+            fetch = launcher_thirdparty._get
+        data = fetch(WORLDS_URL, timeout=8)
+        text = data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else str(data)
+        if len(text) > 200000 or not read_worlds(text):
+            return False
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path + ".part", "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+        os.replace(path + ".part", path)
+    except Exception:
+        return False
+    return True
+
+
+def world_state(world, timeout=6, post=None):
+    """A few words about a listed world right now: who is there, or that it does not answer."""
+    try:
+        greeting = hello(world["invite"], post=post, timeout=timeout)
+        line = f"online: {int(greeting.get('guests', 0))} of {int(greeting.get('max_guests', 0))} visitors"
+    except Exception:
+        return "no answer right now"
+    return line + (", has a password" if greeting.get("password") else "")
+
+
+# ----- worlds that list themselves, with their own banner (2026-11-23, the user: "automatic") -----
+DIRECTORY_URL = "https://hub.xiforever.com/worlds"   # the worlds list on the hub (dev/worldlist/worldlist_service.py)
+DIRECTORY_FILE = "directory.json"                    # coop/: the list last read from it
+ANNOUNCE_SECONDS = 300
+BANNER_FILE = "banner.png"                           # coop/banner.png: this world's banner, as the host chose it
+BANNER_SIZE = (640, 160)                             # what the cards show (larger pictures are shrunk to fit)
+BANNER_MOST = 400 * 1024
+ABOUT_MOST = 160
+
+
+def clean_about(text):
+    """A world's description: one line of printable text, at most 160 characters."""
+    return " ".join("".join(c if c.isprintable() else " " for c in str(text or "")).split())[:ABOUT_MOST]
+
+
+def _banner_path(kit):
+    return os.path.join(kit, "coop", BANNER_FILE)
+
+
+def set_banner(kit, picture):
+    """Makes coop/banner.png from a picture the host picked (any size: shrunk and cropped to 640 x 160). None removes it."""
+    path = _banner_path(kit)
+    if picture is None:
+        if os.path.exists(path):
+            os.remove(path)
+        return None
+    from PIL import Image
+    with Image.open(picture) as image:
+        image = image.convert("RGB")
+        w, h = BANNER_SIZE
+        scale = max(w / image.width, h / image.height)
+        image = image.resize((max(w, round(image.width * scale)), max(h, round(image.height * scale))), Image.LANCZOS)
+        left, top = (image.width - w) // 2, (image.height - h) // 2
+        image = image.crop((left, top, left + w, top + h))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        image.save(path + ".part", "PNG", optimize=True)
+    if os.path.getsize(path + ".part") > BANNER_MOST:
+        from PIL import Image as _I
+        with _I.open(path + ".part") as again:
+            again.convert("P", palette=_I.ADAPTIVE, colors=200).save(path + ".part", "PNG", optimize=True)
+    os.replace(path + ".part", path)
+    return path
+
+
+def banner_bytes(kit):
+    try:
+        with open(_banner_path(kit), "rb") as handle:
+            data = handle.read(BANNER_MOST + 1)
+        return data if 0 < len(data) <= BANNER_MOST else b""
+    except OSError:
+        return b""
+
+
+def banner_hash(kit):
+    data = banner_bytes(kit)
+    return hashlib.sha256(data).hexdigest() if data else ""
+
+
+def banner_cache(kit, sha):
+    return os.path.join(kit, "coop", "banners", sha + ".png")
+
+
+def fetch_banner(kit, invite, sha, post=None, timeout=12):
+    """A listed world's banner, asked from the world itself (its key checked against its link) and kept in coop/banners.
+    Returns the file, or None. A picture that is not the one the world named, too big, or not a picture is not kept."""
+    if not re.fullmatch(r"[0-9a-f]{64}", str(sha or "")):
+        return None
+    path = banner_cache(kit, sha)
+    if os.path.exists(path):
+        return path
+    try:
+        reply, data = call(invite, "open", OPEN_KEY, {"op": "banner"}, timeout=timeout, post=post)
+    except CoopError:
+        return None
+    if not data or len(data) > BANNER_MOST or hashlib.sha256(data).hexdigest() != sha:
+        return None
+    try:
+        import io
+        from PIL import Image
+        with Image.open(io.BytesIO(data)) as image:
+            image.verify()
+            if image.format != "PNG" or image.width > 2000 or image.height > 1000:
+                return None
+    except Exception:
+        return None
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".part", "wb") as handle:
+        handle.write(data)
+    os.replace(path + ".part", path)
+    return path
+
+
+def _http_json(url, body=None, timeout=10, fetch=None):
+    if fetch is not None:
+        return json.loads(fetch(url, body))
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    request = urllib.request.Request(url, data=data, method="POST" if data else "GET",
+                                     headers={"Content-Type": "application/json", "User-Agent": "XI-Forever-Offline-launcher"})
+    try:
+        import launcher_thirdparty
+        context = launcher_thirdparty.ssl_context()
+    except Exception:
+        context = None
+    with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
+        return json.loads(response.read(400000) or b"{}")
+
+
+def announce_world(link, fetch=None):
+    """Tells the worlds list this world is open. Returns a line for the log (only logged when it changes)."""
+    try:
+        answer = _http_json(DIRECTORY_URL + "/announce", {"link": link}, fetch=fetch)
+    except Exception as e:
+        return f"the worlds list could not be reached ({type(e).__name__}); your world is not listed for now."
+    if answer.get("ok"):
+        return "your world is listed in everyone's OPEN WORLDS."
+    return "the worlds list did not list your world: " + str(answer.get("error") or "no reason given")[:200]
+
+
+def refresh_directory(kit, fetch=None, now=None):
+    """The worlds that listed themselves, read from the hub when the copy here is older than WORLDS_FRESH_SECONDS."""
+    path = os.path.join(kit, "coop", DIRECTORY_FILE)
+    try:
+        if 0 <= (now or time.time()) - os.path.getmtime(path) < WORLDS_FRESH_SECONDS:
+            return False
+    except OSError:
+        pass
+    try:
+        answer = _http_json(DIRECTORY_URL, fetch=fetch)
+        worlds = answer.get("worlds") if isinstance(answer, dict) else None
+        if not isinstance(worlds, list):
+            return False
+        text = json.dumps({"worlds": [{"link": str(w.get("link", ""))} for w in worlds[:WORLDS_MOST] if isinstance(w, dict)]})
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path + ".part", "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+        os.replace(path + ".part", path)
+        return True
+    except Exception:
+        return False
+
+
+def all_worlds(kit):
+    """OPEN WORLDS: the project's own list (The Hub first), then the worlds that listed themselves."""
+    out = listed_worlds(kit)
+    seen = {world["link"] for world in out} | {world["invite"]["pin"] for world in out}
+    try:
+        with open(os.path.join(kit, "coop", DIRECTORY_FILE), encoding="utf-8") as handle:
+            extra = read_worlds(handle.read())
+    except (OSError, ValueError):
+        extra = []
+    for world in extra:
+        if world["link"] in seen or world["invite"]["pin"] in seen:
+            continue
+        world["official"] = False
+        out.append(world)
+        seen |= {world["link"], world["invite"]["pin"]}
+    return out[:WORLDS_MOST]
+
+
+def world_card(kit, world, post=None, timeout=6):
+    """What an OPEN WORLDS card shows right now: {"state", "name", "about", "banner" (a file or None), "up", "password"}."""
+    try:
+        greeting = hello(world["invite"], post=post, timeout=timeout)
+    except Exception:
+        return {"state": "no answer right now", "up": False, "name": world["name"], "about": world["about"], "banner": None,
+                "password": False}
+    name = pp.clean_world_name(((greeting.get("world") or {}).get("name")) or world["name"])
+    about = clean_about(greeting.get("about")) or world["about"]
+    banner = fetch_banner(kit, world["invite"], greeting.get("banner"), post=post) if greeting.get("banner") else None
+    guests, most = int(greeting.get("guests", 0)), int(greeting.get("max_guests", 0))
+    state = f"{guests} of {most} here" if greeting.get("open") else "not taking visitors right now"
+    return {"state": state, "up": bool(greeting.get("open")), "name": name, "about": about, "banner": banner,
+            "password": bool(greeting.get("password"))}
+
+
+FRIENDS_FILE = "friends.json"        # coop/: the friends' worlds this launcher went to with an invite code (newest first)
+FRIENDS_MOST = 8
+
+
+def remember_friend(kit, code, world_name, now=None):
+    """(2026-11-23, the user: "make the regular co-op as easy as joining the hub") a friend's world you went to once is
+    kept, so it gets a card with PLAY next time: no code to paste again. Kept only on this PC."""
+    code = re.sub(r"\s+", "", str(code or ""))
+    try:
+        invite = read_code(code)
+    except CoopError:
+        return
+    if invite.get("open"):
+        return
+    rows = [r for r in friends(kit) if r["code"] != code and r["invite"]["address"] != invite["address"]]
+    rows.insert(0, {"code": code, "name": pp.clean_world_name(world_name or invite["world"]), "last": int(now or time.time())})
+    path = os.path.join(kit, "coop", FRIENDS_FILE)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    keep = [{"code": r["code"], "name": r["name"], "last": r.get("last", 0)} for r in rows[:FRIENDS_MOST]]
+    with open(path + ".part", "w", encoding="utf-8", newline="\n") as handle:
+        json.dump({"friends": keep}, handle, indent=2)
+    os.replace(path + ".part", path)
+
+
+def friends(kit):
+    """[{code, name, last, invite}] of the friends' worlds kept by remember_friend, newest first."""
+    try:
+        with open(os.path.join(kit, "coop", FRIENDS_FILE), encoding="utf-8") as handle:
+            found = json.load(handle).get("friends") or []
+    except (OSError, ValueError, AttributeError):
+        return []
+    out = []
+    for row in found[:FRIENDS_MOST]:
+        try:
+            invite = read_code(row["code"])
+        except (CoopError, KeyError, TypeError):
+            continue
+        if not invite.get("open"):
+            out.append({"code": row["code"], "name": pp.clean_world_name(row.get("name") or invite["world"]),
+                        "last": int(row.get("last") or 0), "invite": invite})
+    return out
+
+
+def forget_friend(kit, code):
+    rows = [r for r in friends(kit) if r["code"] != code]
+    path = os.path.join(kit, "coop", FRIENDS_FILE)
+    with open(path + ".part", "w", encoding="utf-8", newline="\n") as handle:
+        json.dump({"friends": [{"code": r["code"], "name": r["name"], "last": r["last"]} for r in rows]}, handle, indent=2)
+    os.replace(path + ".part", path)
+
+
+def come_home_after_game(cfg, kit, charid, log=print, tries=8, wait=8, sleep=time.sleep, post=None, connect=None):
+    """(2026-11-23, the user: no button to press) The game was closed after playing in another world: the character
+    comes home by itself. The world may still think it is logged in for a few seconds, so it is asked again a few times.
+    Returns the result of come_home, a Refused for things left behind (the player is asked), or None (still there)."""
+    for attempt in range(tries):
+        try:
+            return come_home(cfg, kit, charid, log=log, post=post, connect=connect)
+        except Refused as e:
+            if e.code == "online" and attempt + 1 < tries:
+                sleep(wait)
+                continue
+            if e.code in ("holdings", "online"):
+                return e
+            raise
+        except Unreachable:
+            if attempt + 1 < tries:
+                sleep(wait)
+                continue
+            raise
+    return None
 
 
 # ----- the visitor's game: boot file and macros -----
@@ -1154,11 +2012,11 @@ def prepare_world(cfg, kit, settings, log=print, connect=None, is_local=None):
             log("Co-op: hosting is off, the world is private to this PC again.")
         settings["zoneip_set"] = ""
         save_settings(kit, settings)
-    write_host_config(cfg.get("server_dir"), hosting, connect or (lambda: pp.connect(cfg)))
+    write_host_config(cfg.get("server_dir"), hosting, connect or (lambda: pp.connect(cfg)), bool(hosting and settings.get("open")))
     return hosting
 
 
-def write_host_config(server_dir, hosting, connect):
+def write_host_config(server_dir, hosting, connect, is_open=False):
     """modules/custom/lua/coop_config.lua for the server's co-op script (read when the server starts)."""
     if not server_dir:
         return
@@ -1176,7 +2034,8 @@ def write_host_config(server_dir, hosting, connect):
     try:
         with open(target, "w", encoding="utf-8", newline="\n") as handle:
             handle.write("-- Written by the XI: Forever Offline launcher (CO-OP page) at every PLAY.\n"
-                         f"return {{ hosting = {'true' if hosting else 'false'}, world = '{safe}' }}\n")
+                         f"return {{ hosting = {'true' if hosting else 'false'}, world = '{safe}', "
+                         f"open = {'true' if is_open else 'false'} }}\n")
     except OSError:
         pass
 
@@ -1295,6 +2154,20 @@ def server_fingerprint(server_dir):
         with open(os.path.join(server_dir, "login.cert"), encoding="ascii", errors="replace") as handle:
             return certificate_fingerprint(handle.read())
     except (OSError, ValueError, IndexError):
+        return None
+
+
+def server_tls(server_dir):
+    """A TLS context with the game server's own certificate and key (login.cert, login.key: the ones the game loader
+    already checks), or None while the server has never run."""
+    if not server_dir:
+        return None
+    try:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.load_cert_chain(os.path.join(server_dir, "login.cert"), os.path.join(server_dir, "login.key"))
+        return context
+    except (OSError, ssl.SSLError, ValueError):
         return None
 
 

@@ -16,6 +16,7 @@ import shutil
 import sys
 import time
 import zipfile
+import zlib
 
 KIT_REPO = "Hurami89/xi-forever-offline"
 SERVER_REPO = "Hurami89/xi-forever-offline-server"
@@ -67,8 +68,12 @@ def check(kit, server, test_builds, fetch):
         have = installed_version(folder) if folder else None
         release = newest_release(repo, test_builds, fetch)
         tag = release.get("tag_name") if release else None
+        # (2026-11-23, Ryan: "Launcher: you have ?" after an update stopped halfway, and Update now did nothing) a players'
+        # launcher (the built program) with no VERSION.txt is a copy that lost it: the newest one is offered. A copy
+        # run from the source (a developer's) still never updates itself.
+        lost = key == "kit" and have is None and getattr(sys, "frozen", False) and bool(folder)
         out[key] = {"installed": have, "newest": tag, "notes": (release or {}).get("body", ""), "release": release,
-                    "newer": bool(tag and have and version_key(tag) > version_key(have))}
+                    "newer": bool(tag and ((have and version_key(tag) > version_key(have)) or lost))}
     return out
 
 
@@ -81,18 +86,24 @@ def _download(release, pattern, kit, fetch, log, what):
                                                     "release: try again later)."))
     name = names[0]
     log(f"Downloading {name}...")
-    data = fetch(assets[name], timeout=3600)
+    wanted = None
     sums_name = "SHA256SUMS.txt" if IS_WINDOWS else "SHA256SUMS-linux.txt"
     if sums_name in assets:
         sums = fetch(assets[sums_name]).decode("utf-8", "replace")
         wanted = next((line.split()[0].lower() for line in sums.splitlines() if line.strip().endswith(name)), None)
-        if wanted and hashlib.sha256(data).hexdigest() != wanted:
-            raise RuntimeError(f"{name} does not match its published checksum: nothing was changed.")
     folder = os.path.join(kit, "downloads", "updates")
     os.makedirs(folder, exist_ok=True)
     path = os.path.join(folder, name)
-    with open(path, "wb") as handle:
-        handle.write(data)
+    import launcher_thirdparty as tp
+    if fetch is tp._get:                  # the real thing: a release zip is hundreds of MB, so it goes straight to disk
+        tp.stream_to_file(assets[name], path, wanted, timeout=3600,
+                          mismatch=f"{name} does not match its published checksum: nothing was changed.")
+    else:                                 # a stand-in fetch (the tests) hands over the bytes
+        data = fetch(assets[name], timeout=3600)
+        if wanted and hashlib.sha256(data).hexdigest() != wanted:
+            raise RuntimeError(f"{name} does not match its published checksum: nothing was changed.")
+        with open(path, "wb") as handle:
+            handle.write(data)
     prune_updates(kit, keep=(path,), log=log)
     return path
 
@@ -155,12 +166,53 @@ def _unpack_tar(tar_path, dest, keep=(), log=print):
     return count
 
 
+SOUNDS = (".mp3", ".wav", ".ogg")                 # a song the launcher (or a second launcher window) may be playing
+REPLACE_TRIES, REPLACE_WAIT = 10, 0.3             # a file held for a moment (a virus scanner, a song just stopped)
+
+
+def _same(path, info):
+    """True when the file on disk already is what the zip holds (size and checksum): nothing to write."""
+    try:
+        if os.path.getsize(path) != info.file_size:
+            return False
+        crc = 0
+        with open(path, "rb") as handle:
+            for block in iter(lambda: handle.read(1 << 20), b""):
+                crc = zlib.crc32(block, crc)
+        return (crc & 0xFFFFFFFF) == info.CRC
+    except OSError:
+        return False
+
+
+def _into_place(part, target, sleep=time.sleep):
+    """Renames the finished .part over its target. Windows refuses while another program has the target open (Hasuko,
+    2026-11-22: "Access is denied ... xifo_theme...mp3": the launcher itself was playing that song), or for a moment
+    while a virus scanner reads the new file: tried a few times. Returns False for a sound file that stays held (the
+    old one is kept, the rest of the update goes on); anything else that stays held stops the update, saying why."""
+    for attempt in range(REPLACE_TRIES):
+        try:
+            os.replace(part, target)
+            return True
+        except PermissionError:
+            if attempt + 1 < REPLACE_TRIES:
+                sleep(REPLACE_WAIT)
+    try:
+        os.remove(part)
+    except OSError:
+        pass
+    if target.lower().endswith(SOUNDS):
+        return False
+    raise RuntimeError(f"Windows would not let the update replace {target}: another program has it open "
+                       "(a second launcher window, the game, an editor). Close it and press Update again.")
+
+
 def _unpack(zip_path, dest, keep=(), log=print, running_exe=None):
     """Unpacks the zip's single top folder over dest. A file in keep is never replaced. The running exe is renamed
-    out of the way first (Windows lets a running program be renamed, not replaced)."""
+    out of the way first (Windows lets a running program be renamed, not replaced). A file that already is what the
+    zip holds is left alone, so a file some program has open only matters when it really changed."""
     if not zip_path.lower().endswith(".zip"):
         return _unpack_tar(zip_path, dest, keep=keep, log=log)
-    count = 0
+    count, same, held = 0, 0, []
     with zipfile.ZipFile(zip_path) as archive:
         for info in archive.infolist():
             head, _, rest = info.filename.partition("/")
@@ -172,6 +224,9 @@ def _unpack(zip_path, dest, keep=(), log=print, running_exe=None):
             if rest in keep:
                 continue
             target = os.path.join(dest, *parts)
+            if _same(target, info):
+                same += 1
+                continue
             if running_exe and os.path.normcase(os.path.abspath(target)) == os.path.normcase(os.path.abspath(running_exe)):
                 old = target[:-4] + ".old.exe"
                 if os.path.exists(old):
@@ -183,9 +238,13 @@ def _unpack(zip_path, dest, keep=(), log=print, running_exe=None):
             os.makedirs(os.path.dirname(target), exist_ok=True)
             with archive.open(info) as src, open(target + ".part", "wb") as out:
                 shutil.copyfileobj(src, out)
-            os.replace(target + ".part", target)
-            count += 1
-    log(f"{count} files updated.")
+            if _into_place(target + ".part", target):
+                count += 1
+            else:
+                held.append(rest)
+    log(f"{count} files updated" + (f", {same} already up to date." if same else "."))
+    for rest in held:
+        log(f"Left as it was (it is being played; it is replaced at the next update): {rest}")
     return count
 
 

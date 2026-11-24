@@ -28,9 +28,10 @@ $std = & $py -c "import sys; skip=set('$skip'.split()); print('\n'.join(sorted(n
 $hidden = @($std -split "`r?`n" | Where-Object { $_ }) + @("bcrypt", "certifi", "mariadb", "PIL.Image", "PIL.ImageTk",
             "PIL.ImageDraw", "PIL.ImageFont", "PIL.ImageFilter", "PIL.ImageChops", "PIL.ImageStat",   # forever_beta_shirt.py
             "launcher_core", "launcher_squad", "launcher_rules", "launcher_icons", "launcher_personality",
-            "launcher_thirdparty", "launcher_setup", "launcher_game", "launcher_client",
+            "launcher_thirdparty", "launcher_revamped", "launcher_setup", "launcher_game", "launcher_gamefiles", "launcher_client",
             "launcher_passport", "launcher_coop", "launcher_coop_gui", "launcher_contrib",
-            "launcher_pages", "launcher_widgets", "launcher_settings", "launcher_gamepad", "launcher_theme", "launcher_hood")
+            "launcher_pages", "launcher_widgets", "launcher_settings", "launcher_gamepad", "launcher_theme", "launcher_hood",
+            "launcher_hd", "launcher_hd_gui", "launcher_stinkshell")
 $opts = @("--noconfirm", "--onefile", "--windowed", "--name", "XI Forever Offline",
           "--icon", (Join-Path $PSScriptRoot "assets\ui\icon.ico"),
           "--distpath", $PSScriptRoot, "--workpath", (Join-Path $PSScriptRoot "build\pyinstaller"),

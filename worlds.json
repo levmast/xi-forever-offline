@@ -1,0 +1,11 @@
+{
+ "version": 1,
+ "worlds": [
+  {
+   "name": "The Hub",
+   "official": true,
+   "about": "The official world of XI: Forever Offline, always online. Era rates, bot players.",
+   "link": "XIFO2-eyJhIjoiNjYuMTc5LjI1NS4yMzYiLCJwIjo1NDEwMCwiZiI6IlNIQTI1NjpqUTVHV2h0YnJCNWpqQ2xITURvN2JxVFdPbXo4YmRXWmp1Tkl5bGJ4by9BIiwidyI6IlRoZSBIdWIifQ"
+  }
+ ]
+}

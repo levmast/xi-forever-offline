@@ -39,7 +39,17 @@ BUTTONS = {
     'coop_carry_save':   ((252, H), 'SAVE FOR OTHER PC',  [('ca-children', (0.0, 0.0, 0.5, 0.75))],       BROWN),
     'coop_carry_load':   ((264, H), 'LOAD FROM OTHER PC', [('ca-mini-taru', (0.30, 0.0, 0.52, 1.0))],       BROWN),
     'coop_carry_folder': ((150, H), 'FOLDER...',          [('ca-children', (0.5, 0.0, 1.0, 0.75))],       STEEL),
+    # Open worlds (2026-11-23): the world link and its password, kept places, kick and ban, and a visitor's own places
+    'coop_copylink': ((176, H), 'COPY LINK',   [('ca-hume-f', (0.1, 0.0, 0.9, 0.42))],      BROWN),
+    'coop_password': ((172, H), 'PASSWORD',    [('ca-galka', (0.1, 0.0, 0.9, 0.42))],       STEEL),
+    'coop_places':   ((140, H), 'PLACES',      [('ca-taru-m', (0.0, 0.0, 0.55, 0.55))],     BROWN),
+    'coop_kick':     ((112, H), 'KICK',        [('behemoth', (0.0, 0.0, 0.6, 0.7))],        PURPLE),
+    'coop_ban':      ((104, H), 'BAN',         [('shadow-lord', (0.2, 0.0, 0.8, 0.45))],    RED),
+    'coop_again':    ((196, H), 'VISIT AGAIN', [('ca-hume-m', (0.1, 0.0, 0.9, 0.42))],      BLUE),
+    'coop_forget':   ((150, H), 'FORGET',      [('ca-elvaan-m', (0.1, 0.0, 0.9, 0.36))],    GREY),
+    'coop_unban':    ((160, H), 'LIFT BAN',    [('ca-ferena', (0.1, 0.0, 0.9, 0.42))],      GREEN),
 }
+build.ART_SHARE['coop_password'] = 0.27                # a long word needs the room (as build.py does for OPTIONS)
 ANCHOR = {'coop': 0.5, 'coop_on': 0.5, 'coop_play': 0.55, 'coop_stop': 0.6}
 HEADERS = {'coop_head_host': 'HOST MY WORLD', 'coop_head_visit': 'VISIT A FRIEND'}
 BADGES = {                                             # name: (label, colour)

@@ -37,7 +37,7 @@ Settings (button place, last tab): config/addons/servermenu/settings.cfg
 
 addon.name    = 'servermenu';
 addon.author  = 'XI: Forever Offline';
-addon.version = '1.26j';   -- (1.26j) Attack my target / Stop; (1.26i) the menu opens again (opacity helper stood below the menu); (1.26h) a click right after a refresh is no longer dropped by the game; (1.26g) opacity, one gear button
+addon.version = '1.26l';   -- (1.26l) Spells and abilities window on the profile (Frost); (1.26k) the Auto-equip tip names "Squad gets all gear"; (1.26j) Attack my target / Stop; (1.26i) the menu opens again (opacity helper stood below the menu); (1.26h) a click right after a refresh is no longer dropped by the game; (1.26g) opacity, one gear button
 addon.desc    = 'The XI: Forever Offline menu: squad mates, and the dualbox character with his gambits.';
 addon.link    = '';
 
@@ -200,6 +200,7 @@ local S = {
     open = { false }, tab = 'Squad',
     -- squad
     mates = {}, incoming = nil, waitUntil = 0, hideUntil = 0, lastAsk = -1000, lastSend = -1000, queue = {}, pendingApply = false, more = {},
+    actionsOpen = { false }, actionsFresh = false,
     sheetOpen = { false }, sheetFresh = false, profile = nil, profileIncoming = nil, sheetSlot = nil, sheetWaitUntil = 0, lastSheetAsk = -1000,
     -- dualbox
     duoHold = false, duo = nil, duoRead = -1000, duoSeq = 0, duoPending = nil, duoSentSeq = nil, duoSentAt = -1000, duoGambits = false,
@@ -355,6 +356,29 @@ local function actionsWatchdog(t)
     if S.want and next(S.want) ~= nil and S.wantAt and t - S.wantAt > 40 then S.want = {}; S.tries = {}; end
 end
 
+-- The addon channel packet (id 0x1F0): [id][size][sync 2][version 1][reserved 3][text ... NUL][pad to 4]. The size byte is the dword count times two
+-- plus the ninth bit of the id; the client fills the sync bytes. Only used when the server said chan|1.
+local CHANNEL_ID, CHANNEL_MAX = 0x1F0, 120;
+local function channelBytes(text)
+    text = tostring(text or ''):gsub('%c', ' ');
+    if #text > CHANNEL_MAX then text = text:sub(1, CHANNEL_MAX); end
+    local size = math.ceil((8 + #text + 1) / 4) * 4;
+    local b = {};
+    for i = 1, size do b[i] = 0; end
+    b[1], b[2] = CHANNEL_ID % 256, (math.floor(CHANNEL_ID / 256) % 2) + (size / 4) * 2;
+    b[5] = 1;
+    for i = 1, #text do b[8 + i] = text:byte(i); end
+    return b;
+end
+local function channelSend(text)
+    local bytes = channelBytes(text);
+    if bytes[9] == 0 then return false; end   -- (nothing to say)
+    local okM, pm = pcall(function() return AshitaCore:GetPacketManager(); end);
+    if not okM or pm == nil then return false; end
+    if pcall(pm.AddOutgoingPacket, pm, CHANNEL_ID, bytes) then return true; end
+    return pcall(pm.AddOutgoingPacket, pm, CHANNEL_ID, #bytes, bytes) == true;
+end
+
 local SAY_GAP = 2.2;   -- seconds the game needs between two chat lines, or it drops the second and shows it as ">> /say ..."
 
 local function pump(t)
@@ -403,6 +427,8 @@ local function pump(t)
         S.ownAutobox = S.ownAutobox or {};
         S.ownAutobox[#S.ownAutobox + 1] = { text = first.command, at = t };
     end
+    -- the server handles the addon channel packet: a "!" line goes out as that packet, so it is not typed, not echoed, not a chat line
+    if S.channel and first.command:find('^/say !') and channelSend(first.command:sub(6)) then return; end
     pcall(function() chat:QueueCommand(1, first.command); end);
 end
 
@@ -427,6 +453,13 @@ end
 local queueDuo -- (the second window's command batch, defined further down)
 
 local function onLine(payload)
+    -- the server handles the addon channel packet (packets/c2s/0x1f0_addon_channel.h): chan|<version>. An older server never says it.
+    local chanVersion = payload:match('^chan|(%d+)$');
+    if chanVersion then
+        -- (only as the answer to a line this menu sent a moment ago: a player who types the words in chat changes nothing)
+        if now() < S.hideUntil then S.incomingChannel = chanVersion == '1'; end
+        return;
+    end
     -- (1.19) a Blue Mage mate's set blue magic: blu|slot|slots|points|used|auto, blus|slot|id|name|level|points|set, blue|slot
     local bs, bsl, bpt, bused, bauto = payload:match('^blu|(%d+)|(%d+)|(%d+)|(%d+)|(%d+)$');
     if bs then
@@ -464,6 +497,8 @@ local function onLine(payload)
         return;
     end
     if payload == 'end' then
+        S.channel = S.incomingChannel == true;   -- (an older server never says chan|1, so the menu keeps typing)
+        S.incomingChannel = nil;
         S.mates = S.incoming or {};
         reconcileActions();
         S.incoming = nil;
@@ -659,7 +694,26 @@ local function onSheetLine(text)
         end
     elseif key == 'note' then
         data.note = rest;
+    elseif key == 'spell' or key == 'ability' then
+        -- (1.26l, Frost) a called mate's spells (name | MP) and job abilities (name | level)
+        local name, value = rest:match('^([^|]+)|(%d+)$');
+        if name then
+            local field = (key == 'spell') and 'spells' or 'abilities';
+            data[field] = data[field] or {};
+            data[field][#data[field] + 1] = { name, tonumber(value) or 0 };
+        end
     end
+end
+
+-- "cure_ii" / "Cure II" / "provoke" -> "Cure II", "Provoke"
+local ROMAN = { i = 'I', ii = 'II', iii = 'III', iv = 'IV', v = 'V', vi = 'VI' };
+local function prettyName(text)
+    local words = {};
+    for word in tostring(text or ''):gsub('_', ' '):gmatch('%S+') do
+        local lower = word:lower();
+        words[#words + 1] = ROMAN[lower] or (lower:sub(1, 1):upper() .. lower:sub(2));
+    end
+    return table.concat(words, ' ');
 end
 
 -- role, mode, job and sub apply when a mate is called, so they leave a "press Apply now" banner
@@ -1287,8 +1341,8 @@ local function squadTab()
             ask(1.5);
         end
         -- (1.26g, FalconX51; the user: one button, lit while it is on) best gear once = on, then off again
-        tooltip(on and 'Lit: your mates wear the best gear you gave the squad and pick again each time they are called.\nClick to switch it off: they keep what they wear now, and you can change any piece by hand.'
-            or 'Click: every mate puts on the best gear you gave the squad for its job and level, and the button lights up.\nFor best gear just once, click it again: the gear stays and the choice is yours again.');
+        tooltip(on and 'Lit: your mates wear the best gear you gave the squad and pick again each time they are called.\nClick to switch it off: they keep what they wear now, and you can change any piece by hand.\nWith the launcher\'s "Squad gets all gear" on, the choice is from everything their jobs can wear.'
+            or 'Click: every mate puts on the best gear you gave the squad for its job and level, and the button lights up.\nFor best gear just once, click it again: the gear stays and the choice is yours again.\nWith the launcher\'s "Squad gets all gear" on, the choice is from everything their jobs can wear.');
     end
     if S.adv then
         imgui.SameLine(0, 6);
@@ -2706,6 +2760,19 @@ local function renderSheet()
                 wrapped('Jobs: ' .. table.concat(parts, ', '), C.text);
             end
 
+            -- (1.26l, Frost) what this mate can cast and use, in a window of its own
+            do
+                local nSpells, nAbilities = d.spells and #d.spells or 0, d.abilities and #d.abilities or 0;
+                local label = (nSpells + nAbilities > 0) and string.format('Spells and abilities (%d / %d)', nSpells, nAbilities)
+                    or 'Spells and abilities';
+                if button(label, 'sheetactions', 0, 0, S.actionsOpen[1] and 'on' or nil) then
+                    S.actionsOpen[1] = not S.actionsOpen[1];
+                    S.actionsFresh = S.actionsOpen[1];
+                end
+                tooltip('The spells and job abilities this mate can use right now (its jobs and levels). Only while it is called.');
+                gap(2);
+            end
+
             if has('Separator') then imgui.Separator(); end
             colorText(C.gold, 'Equipped items');
             gap(2);
@@ -2737,11 +2804,75 @@ local function renderSheet()
     if vars > 0 then imgui.PopStyleVar(vars); end
 end
 
+-- (1.26l, Frost) the Spells and abilities window, next to the profile; it follows the sheet that is open
+local function renderActions()
+    if not imgui or not S.actionsOpen[1] or not S.sheetOpen[1] then return; end
+    local d = S.profile;
+    if S.actionsFresh then
+        S.actionsFresh = false;
+        if has('SetNextWindowFocus') then imgui.SetNextWindowFocus(); end
+    end
+    if has('SetNextWindowSize') and G('ImGuiCond_FirstUseEver') then
+        imgui.SetNextWindowSize({ px(360), px(460) }, G('ImGuiCond_FirstUseEver'));
+    end
+    local title = 'Spells and abilities###sm_actions';
+    if d and d.hdr then title = string.format('%s: spells and abilities###sm_actions', d.hdr.name); end
+    local colors = pushColors({ { 'ImGuiCol_WindowBg', C.panel }, { 'ImGuiCol_Border', C.line }, { 'ImGuiCol_Text', C.text } });
+    local vars = pushVars({ { 'ImGuiStyleVar_WindowRounding', 6 }, { 'ImGuiStyleVar_WindowPadding', { 12, 10 } }, { 'ImGuiStyleVar_ItemSpacing', { 8, 4 } } });
+    if imgui.Begin(title, S.actionsOpen, G('ImGuiWindowFlags_NoCollapse') or 0) then
+        scaleWindow();
+        if d == nil or d.hdr == nil then
+            dimText('Asking the server...');
+        elseif not d.vitals then
+            wrappedColored(C.faint, 'Call ' .. tostring(d.hdr.name) .. ' to see the spells and abilities they can use now.');
+        else
+            local width = contentWidth();
+            local valueX = math.max(px(200), (width > 0 and width or px(330)) - px(70));
+            colorText(C.gold, 'Spells');
+            gap(2);
+            if not d.spells or #d.spells == 0 then
+                tint(C.faint, 'None at this job and level.');
+                newLine();
+            else
+                for _, sp in ipairs(d.spells) do
+                    tint(C.text, prettyName(sp[1]));
+                    imgui.SameLine(valueX, 0);
+                    tint(C.dim, sp[2] > 0 and (tostring(sp[2]) .. ' MP') or '');
+                    newLine();
+                end
+            end
+            gap(4);
+            if has('Separator') then imgui.Separator(); end
+            colorText(C.gold, 'Job abilities');
+            gap(2);
+            if not d.abilities or #d.abilities == 0 then
+                tint(C.faint, 'None at this job and level.');
+                newLine();
+            else
+                for _, ab in ipairs(d.abilities) do
+                    tint(C.text, prettyName(ab[1]));
+                    imgui.SameLine(valueX, 0);
+                    tint(C.dim, 'Lv ' .. tostring(ab[2]));
+                    newLine();
+                end
+            end
+            gap(4);
+            wrappedColored(C.faint, 'Ask for one in party chat, e.g. /p cure <me>, /p provoke. A mate you call again '
+                .. 'after a level up or a job change shows the new list.');
+        end
+    end
+    S.scaledNow = false;
+    imgui.End();
+    if colors > 0 then imgui.PopStyleColor(colors); end
+    if vars > 0 then imgui.PopStyleVar(vars); end
+end
+
 local function render()
     if not imgui then return; end
     buttonWindow();
     menuWindow();
     renderSheet();
+    renderActions();
 end
 
 -- ---------------------------------------------------------------- events

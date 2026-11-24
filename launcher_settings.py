@@ -229,6 +229,15 @@ S("main.LAND_KINGS_TIMED", "rules", "Comforts", FLAG, "Land kings on a timer",
       "(Honey Wine, Blue Pondweed, Beastly Shank). On = the era: the ??? is gone, a king appears by itself 21 to 24 "
       "hours after the last one fell, and from the fourth kill in a row Nidhogg, Aspidochelone or King Behemoth "
       "can come in its place. The hours count while the servers are off too. (sparkiie)")
+S("main.EPHEMERAL_MOOGLES", "rules", "Comforts", FLAG, "Ephemeral Moogles",
+  tip="The crafting guilds' Ephemeral Moogles (from Seekers of Adoulin) are there and keep your crystals for you. "
+      "On by default. (Gilder, stanky kong)")
+S("main.ANCESTRY_MOOGLES", "rules", "Comforts", FLAG, "Ancestry Moogles",
+  tip="The Ancestry Moogles in Port San d'Oria, Port Bastok and Windurst Walls (from Seekers of Adoulin) change your "
+      "race, face, hair and size, free and as often as you like. Off by default. (Yenkei)")
+S("main.TREASURE_WAIT_MULTIPLIER", "rules", "Comforts", RATE, "Chest and coffer wait", step=0.25,
+  tip="After a treasure chest or coffer is opened, the next one in that area is an illusion (no loot) for 15 to 60 "
+      "minutes. 1x = the era, 0.5x = half as long, 0 = every chest and coffer gives its loot. (Rysan, Frost)")
 S("map.MAX_MERIT_POINTS", "rules", "Comforts", NUMBER, "Merit points you can hold", step=5,
   tip="30 = the default here (the earliest era held 10). Up to 99.")
 
@@ -256,10 +265,30 @@ S("squad_keep_gear", "rules", "Squad", SWITCH, "Keep gear you give",
       "Off = the squad takes the piece (one-of-a-kind gear is always kept).")
 S("squad_all_gear", "rules", "Squad", SWITCH, "Squad gets all gear",
   tip="Every piece of gear counts as given to your squad: mates can wear anything their job and level allow, "
-      "without trading it to them first. Off = gear has to be given once (trade it, or !squad give).")
+      "without trading it to them first. With Auto-equip on (the Squads menu in game) they then put on the best of "
+      "all of it for their job. Off = gear has to be given once (trade it, or !squad give).")
+S("main.SQUAD_MATES_RAISABLE", "rules", "Squad", FLAG, "Fallen mates can be Raised",
+  tip="A squad mate that falls stays where it fell for 5 minutes; Raise, Raise II, Raise III or Arise brings it back. "
+      "Off = it is sent home at once. On by default. (Meli)")
+S("main.SQUAD_UNLIMITED_JUICE", "rules", "Squad", FLAG, "Unlimited juice",
+  tip="A squad mate with none of the juices you gave it drinks one for its level, free, when its MP runs low. Off = "
+      "only the juices you trade to it. (Frost)")
 S("training_dummies", "rules", "Squad", SWITCH, "Training dummies",
   tip="For testing: !sandbox puts dummies of level 1 to 99 in Rolanberry Fields that never die and never attack. "
-      "Off = no dummies.")
+      "On by default; off = no dummies.")
+
+# ---------------------------------------------------------------- Rules > Party buffs (2026-11-23)
+BUFF_RANGE_WARNING = ("Extended keeps the old party-wide reach: buffs land on every party member and squad mate at any distance. "
+                      "Some add-ons that move your party automatically (positioning, songs, rolls, healer placement) may not "
+                      "work with Retail, and that is the reason to pick Extended. Retail is recommended.")
+BUFF_RANGE_NOTE = ("Retail: a buff lands only on mates standing inside the effect's radius, like real players, so positioning "
+                   "matters. Extended: it lands on everyone in the party, wherever they stand, so placement has no effect.")
+S("buff_range", "rules", "Party buffs", CHOICE, "Buff range",
+  options=(("retail", "Retail (recommended)"), ("extended", "Extended")),
+  tip="Retail: trusts, squad mates and pets are covered by party buffs (Protectra, Curaga, songs, rolls, Warcry) only inside "
+      "the effect's radius, like real players, and cast at the normal spell range. Gambits and Squads Revamped movement is "
+      "designed for Retail range. Extended is supported for buffs only; positioning is not tuned for it."
+      "\n\n" + BUFF_RANGE_WARNING + "\n\n" + BUFF_RANGE_NOTE)
 
 # ---------------------------------------------------------------- Era: the dev PC only (players are locked to the era values)
 S("main.MAX_LEVEL", "era", "Era", NUMBER, "Level cap", dev=True, step=1)
@@ -286,13 +315,13 @@ S("main.SPARKS_RATE", "era", "Out-of-era content", RATE, "RoE sparks", dev=True,
 LAYOUT = {
     "world": (("Town crowds", "Field parties"), ("Bot players", "Auction house", "Conquest"), ("AI chat", "Seasonal events")),
     "rules": (("Experience and fame", "Notorious monsters", "Battle", "Damage"), ("Loot and gil", "Travel", "Squad", "Expansions"),
-              ("Skills and crafting", "Comforts", "Tetra Master")),
+              ("Skills and crafting", "Comforts", "Tetra Master", "Party buffs")),
     "squad": (("Squad rules",),),
     "era": (("Era",), ("Later expansions",), ("Out-of-era content",)),
 }
 
 # keys collect() returns that are not settings a person picks
-INTERNAL = {"bots_head_start_done", "claim_shield", "defaults_version"}
+INTERNAL = {"bots_head_start_done", "claim_shield", "defaults_version", "training_dummies_explicit"}
 
 
 def covered_keys():

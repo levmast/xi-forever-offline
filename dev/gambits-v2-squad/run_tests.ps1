@@ -63,7 +63,8 @@ try {
             @{ n = 'WAR/PLD/RDM/WS batch (test_gambits_ws_batch.lua)';  a = @('test_gambits_ws_batch.lua', $lua, $gl, $ja, $add, $Work, $Server) },
             @{ n = 'job expansion (test_gambits_jobexp.lua)';           a = @('test_gambits_jobexp.lua', $lua, $gl, $ja, $add, $Work, $Server) },
             @{ n = 'UI/UX 0.3.1 (test_gambits_uiux.lua)';               a = @('test_gambits_uiux.lua', $lua, $gl, $ja, $add, $Work, $Server) },
-            @{ n = 'song tiers + import/export 0.3.3 (test_gambits_bard_io.lua)'; a = @('test_gambits_bard_io.lua', $lua, $gl, $ja, $add, $Work, $Server) }
+            @{ n = 'song tiers + import/export 0.3.3 (test_gambits_bard_io.lua)'; a = @('test_gambits_bard_io.lua', $lua, $gl, $ja, $add, $Work, $Server) },
+            @{ n = 'picker list cache (test_gambits_view_cache.lua)';   a = @('test_gambits_view_cache.lua', $lua, $gl, $ja, $add, $Work, $Server) }
         )
         foreach ($s in $suites) {
             $out = & $run.exe @pre @($s.a) 2>&1 | ForEach-Object { "$_" }

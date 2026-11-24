@@ -14,6 +14,7 @@ import shutil
 import sys
 import tarfile
 import time
+import urllib.error
 import urllib.request
 import zipfile
 
@@ -44,9 +45,53 @@ def for_platform(items, platform=None):
     return out
 
 
-def load_manifest(kit, platform=None):
+def test_builds_on(kit):
+    """The 'Get test builds (pre-releases)' setting (config.json in the kit folder)."""
+    try:
+        with open(os.path.join(kit, "config.json"), encoding="utf-8-sig") as handle:
+            return bool(json.load(handle).get("test_builds"))
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def channel_of(item):
+    """'stable' (the default) or 'beta'. A beta item is offered only to players who switched on 'Get test builds' (or who
+    already have it installed, so they can still update or remove it), and it follows the newest release including
+    pre-releases."""
+    return "beta" if item.get("channel") == "beta" else "stable"
+
+
+def beta_groups(kit):
+    """The beta groups the player signed up for ("beta_groups" in config.json, a list or 'a, b'), lower case."""
+    try:
+        with open(os.path.join(kit, "config.json"), encoding="utf-8-sig") as handle:
+            value = json.load(handle).get("beta_groups") or []
+    except (OSError, ValueError, AttributeError):
+        return set()
+    if isinstance(value, str):
+        value = value.split(",")
+    return {str(v).strip().lower() for v in value if str(v).strip()}
+
+
+def for_channel(items, kit, test_builds=None):
+    """Stable items always. A beta item only with 'Get test builds' on and, when it names a "group", only if the player
+    signed up for that group (beta_groups); an item that is installed stays listed so it can be updated or removed."""
+    if test_builds is None:
+        test_builds = test_builds_on(kit)
+    state = load_state(kit)
+    groups = beta_groups(kit)
+    out = []
+    for item in items:
+        if channel_of(item) != "beta" or item["id"] in state:
+            out.append(item)
+        elif test_builds and (not item.get("group") or str(item["group"]).lower() in groups):
+            out.append(item)
+    return out
+
+
+def load_manifest(kit, platform=None, test_builds=None):
     with open(os.path.join(kit, "thirdparty.json"), encoding="utf-8-sig") as handle:
-        return for_platform(json.load(handle)["items"], platform)
+        return for_channel(for_platform(json.load(handle)["items"], platform), kit, test_builds)
 
 
 def state_path(kit):
@@ -58,13 +103,23 @@ def load_state(kit):
         with open(state_path(kit), encoding="utf-8-sig") as handle:
             data = json.load(handle)
         return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
+    except OSError:
+        return {}
+    except ValueError:
+        # a damaged file: keep it (thirdparty-installed.json.bad) instead of letting the next save overwrite the
+        # record of everything that was installed
+        try:
+            os.replace(state_path(kit), state_path(kit) + ".bad")
+        except OSError:
+            pass
         return {}
 
 
 def _save_state(kit, state):
-    with open(state_path(kit), "w", encoding="utf-8", newline="\n") as handle:
+    tmp = state_path(kit) + ".tmp"          # write whole, then swap: a crash never leaves half a file
+    with open(tmp, "w", encoding="utf-8", newline="\n") as handle:
         json.dump(state, handle, indent=2)
+    os.replace(tmp, state_path(kit))
 
 
 def target_root(item, kit, ashita, server=None):
@@ -330,10 +385,74 @@ def ssl_context():
     return _SSL_CONTEXT
 
 
+class RateLimited(RuntimeError):
+    """The site has stopped answering this connection for a while. GitHub gives about 60 requests an hour to someone who
+    is not signed in; the message says when it starts again."""
+
+
+def _rate_limit_message(error, url):
+    """The plain-words message for an HTTP error that means "too many requests", else None."""
+    headers = getattr(error, "headers", None) or {}
+    remaining, retry = headers.get("X-RateLimit-Remaining"), headers.get("Retry-After")
+    if not (error.code == 429 or (error.code == 403 and (remaining == "0" or retry))):
+        return None
+    reset = headers.get("X-RateLimit-Reset")
+    if reset and str(reset).isdigit():
+        at = int(reset)
+    elif retry and str(retry).isdigit():
+        at = time.time() + int(retry)
+    else:
+        at = None
+    who = "GitHub" if "github" in url else "The download site"
+    return (f"{who} is limiting this connection for a while (it allows about 60 requests an hour without signing in)."
+            + (f" It answers again at {time.strftime('%H:%M', time.localtime(at))}." if at else " Try again in an hour."))
+
+
+def _open_url(url, timeout=60, headers=None):
+    """The open connection to a URL (use it in a `with`). The one place the launcher's downloads go through."""
+    request = urllib.request.Request(url, headers=dict({"User-Agent": USER_AGENT}, **(headers or {})))
+    try:
+        return urllib.request.urlopen(request, timeout=timeout, context=ssl_context())
+    except urllib.error.HTTPError as error:
+        message = _rate_limit_message(error, url)
+        if message:
+            raise RateLimited(message) from error
+        raise
+
+
 def _get(url, timeout=60):
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/vnd.github+json"})
-    with urllib.request.urlopen(request, timeout=timeout, context=ssl_context()) as response:
+    """A small answer (a GitHub page of release data, a checksum file) as bytes. Big files go through stream_to_file."""
+    with _open_url(url, timeout, {"Accept": "application/vnd.github+json"}) as response:
         return response.read()
+
+
+def stream_to_file(url, path, sha256=None, mismatch="The download does not match its published checksum - not installed.",
+                   chunk=1 << 20, timeout=600):
+    """Saves a download to disk a piece at a time (never the whole file in memory: the server zip is hundreds of MB),
+    working out its SHA-256 on the way. The data goes to <path>.part first; when `sha256` is given and does not match,
+    the part file is deleted and nothing is left at `path`. Returns the SHA-256 of what was saved."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    part = path + ".part"
+    digest = hashlib.sha256()
+    try:
+        with _open_url(url, timeout) as response, open(part, "wb") as handle:
+            while True:
+                block = response.read(chunk)
+                if not block:
+                    break
+                handle.write(block)
+                digest.update(block)
+        actual = digest.hexdigest()
+        if sha256 and actual != sha256.lower():
+            raise RuntimeError(mismatch)
+        os.replace(part, path)
+    except BaseException:
+        try:
+            os.remove(part)
+        except OSError:
+            pass
+        raise
+    return actual
 
 
 def resolve(item, fetch=_get):
@@ -342,7 +461,7 @@ def resolve(item, fetch=_get):
     kind = source["type"]
     if kind == "github_release":
         tag = source.get("tag", "latest")
-        if tag == "latest" and source.get("prereleases"):
+        if tag == "latest" and (source.get("prereleases") or channel_of(item) == "beta"):
             # GitHub's releases/latest skips pre-releases: take the newest published one, test builds included
             releases = [r for r in json.loads(fetch(API + source["repo"] + "/releases?per_page=20")) if not r.get("draft")]
             if not releases:
@@ -352,12 +471,34 @@ def resolve(item, fetch=_get):
             path = "releases/latest" if tag == "latest" else "releases/tags/" + tag
             release = json.loads(fetch(API + source["repo"] + "/" + path))
         assets = {a["name"]: a["browser_download_url"] for a in release.get("assets", [])}
+        sizes = {a["name"]: int(a.get("size") or 0) for a in release.get("assets", [])}
+        if source.get("assets"):                     # (XISpeaks, 2026-11-23) one program in several files, all needed
+            sums = {}
+            if source.get("sha256sums"):
+                for line in fetch(assets[source["sha256sums"]]).decode("utf-8", "replace").splitlines():
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        sums[os.path.basename(parts[-1].lstrip("*"))] = parts[0].lower()
+            parts = []
+            for pattern in source["assets"]:
+                found_names = sorted(n for n in assets if re.search(pattern, n))
+                if not found_names:
+                    raise RuntimeError(f"{item['name']}: no file matching {pattern} in release {release.get('tag_name')}")
+                name = found_names[0]
+                if source.get("sha256sums") and name not in sums:
+                    raise RuntimeError(f"{item['name']}: {name} is not listed in {source['sha256sums']}")
+                parts.append({"name": name, "url": assets[name], "sha256": sums.get(name), "size": sizes.get(name, 0)})
+            return {"version": release.get("tag_name", tag), "url": parts[0]["url"], "name": parts[0]["name"],
+                    "sha256": parts[0]["sha256"], "parts": parts}
         names = [n for n in assets if re.search(source["asset"], n)]
         if not names:
             raise RuntimeError(f"{item['name']}: no file matching {source['asset']} in release {release.get('tag_name')}")
         name = sorted(names)[0]
         digest = digest512 = None
         if source.get("sha256sums"):
+            if source["sha256sums"] not in assets:
+                raise RuntimeError(f"{item['name']}: release {release.get('tag_name')} has no {source['sha256sums']} "
+                                   f"to check {name} against - not installed.")
             sums = fetch(assets[source["sha256sums"]]).decode("utf-8", "replace")
             for line in sums.splitlines():
                 parts = line.split()
@@ -365,6 +506,14 @@ def resolve(item, fetch=_get):
                     digest = parts[0].lower()
             if not digest:
                 raise RuntimeError(f"{item['name']}: {name} is not listed in {source['sha256sums']}")
+        # every checksum there is for this file: the author's list, GitHub's own record of the upload (the "digest" it
+        # keeps for each release file), and a pin in thirdparty.json. They must agree; the first one found is checked.
+        listed = next((a.get("digest") for a in release.get("assets", []) if a.get("name") == name), None)
+        known = [d.lower() for d in (digest, listed[7:] if str(listed).lower().startswith("sha256:") else None,
+                                     source.get("sha256")) if d]
+        if len(set(known)) > 1:
+            raise RuntimeError(f"{item['name']}: the checksums for {name} do not agree with each other - not installed.")
+        digest = known[0] if known else None
         if source.get("sha512sums"):                 # GE-Proton: one <name>.sha512sum file per download
             sums_names = [n for n in assets if re.search(source["sha512sums"], n)]
             for sums_name in sums_names:
@@ -381,14 +530,16 @@ def resolve(item, fetch=_get):
     if kind == "github_archive":
         ref = source["ref"]
         url = f"https://github.com/{source['repo']}/archive/{ref}.zip"
-        return {"version": ref, "url": url, "name": source["repo"].split("/")[-1] + "-" + ref + ".zip", "sha256": None}
+        return {"version": ref, "url": url, "name": source["repo"].split("/")[-1] + "-" + ref + ".zip",
+                "sha256": (source.get("sha256") or "").lower() or None}      # GitHub builds these on the spot: no list, only a pin
     if kind == "kit":                              # shipped inside the kit folder (no download)
         return {"version": source["version"], "url": "", "name": source["path"], "sha256": source.get("sha256"),
                 "local": source["path"]}
     if kind == "ollama_model":
         return {"version": source["model"], "url": "", "name": source["model"], "sha256": None}
     if kind in ("url", "installer"):
-        return {"version": time.strftime("%Y-%m-%d"), "url": source["url"], "name": source["url"].rsplit("/", 1)[-1], "sha256": None}
+        return {"version": time.strftime("%Y-%m-%d"), "url": source["url"], "name": source["url"].rsplit("/", 1)[-1],
+                "sha256": (source.get("sha256") or "").lower() or None}
     raise ValueError(f"{item['name']} is downloaded from its page by hand: {source.get('url', item.get('homepage'))}")
 
 
@@ -416,11 +567,15 @@ def download(item, kit, found, fetch=_get):
         return path
     folder = os.path.join(kit, "downloads", item["id"])
     os.makedirs(folder, exist_ok=True)
-    data = fetch(found["url"], timeout=600)
+    path = os.path.join(folder, found["name"])
+    if fetch is _get:                              # the real thing: straight to disk, a piece at a time
+        found["sha256_actual"] = stream_to_file(found["url"], path, found.get("sha256"),
+                                                  mismatch=f"{item['name']}: the download does not match its published checksum - not installed.")
+        return path
+    data = fetch(found["url"], timeout=600)        # a stand-in fetch (the tests) hands over the bytes
     actual = hashlib.sha256(data).hexdigest()
     if found.get("sha256") and actual != found["sha256"]:
         raise RuntimeError(f"{item['name']}: the download does not match its published checksum - not installed.")
-    path = os.path.join(folder, found["name"])
     with open(path, "wb") as handle:
         handle.write(data)
     found["sha256_actual"] = actual
@@ -576,10 +731,7 @@ def download_file(url, path, log=print, sha256=None, sha512=None, fetch=None, ch
     elif not os.path.exists(path):
         part = path + ".part"
         have = os.path.getsize(part) if os.path.exists(part) else 0
-        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-        if have:
-            request.add_header("Range", f"bytes={have}-")
-        with urllib.request.urlopen(request, timeout=60, context=ssl_context()) as response:
+        with _open_url(url, 60, {"Range": f"bytes={have}-"} if have else None) as response:
             if have and getattr(response, "status", 200) != 206:
                 have = 0
             total = have + int(response.headers.get("Content-Length") or 0)
@@ -653,8 +805,208 @@ def _extract_with_system_tar(archive_path, dest):
         raise RuntimeError("Unpacking failed: " + (done.stderr or "")[-300:])
 
 
-def install(item, kit, ashita, fetch=_get, log=print, server=None, run=None):
-    """Downloads and installs one item. Returns the version installed."""
+def extract_zip(archive_path, dest, keep=(), log=print):
+    """Unpacks a .zip into dest file by file (a big archive never sits in memory). Paths outside dest are refused;
+    files under a `keep` folder that already exist (your own settings) are left alone. Returns (written, kept)."""
+    real = os.path.realpath(dest)
+    written = kept = 0
+    with zipfile.ZipFile(archive_path) as archive:
+        for info in archive.infolist():
+            name = info.filename.replace("\\", "/")
+            parts = name.split("/")
+            if name.startswith("/") or ".." in parts or ":" in parts[0]:
+                raise RuntimeError(f"refusing a path outside the folder: {info.filename}")
+            target = os.path.realpath(os.path.join(dest, *[p for p in parts if p]))
+            if not target.startswith(real + os.sep):
+                raise RuntimeError(f"refusing a path outside the folder: {info.filename}")
+            if name.endswith("/"):
+                os.makedirs(target, exist_ok=True)
+                continue
+            if keep and name.startswith(keep) and os.path.exists(target):
+                kept += 1
+                continue
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with archive.open(info) as source, open(target + ".part", "wb") as out:
+                shutil.copyfileobj(source, out, 1 << 20)
+            os.replace(target + ".part", target)
+            written += 1
+    return written, kept
+
+
+def apply_fixups(item, root, log=print):
+    """(2026-11-23) Small fixes to another author's files after they are unpacked: item "fixups" = [[file, old text, new
+    text, why], ...], each one only where the old text is found (an author's newer release that fixed it is left alone).
+    XISpeaks beta 4: its NPC list window called imgui.BeginChild(..., true), which this Ashita refuses (krazy)."""
+    for fix in item.get("fixups", []):
+        try:
+            rel, old, new = fix[0], fix[1], fix[2]
+        except (IndexError, TypeError):
+            continue
+        parts = rel.replace("\\", "/").split("/")
+        if rel.startswith("/") or ".." in parts:
+            continue
+        path = os.path.join(root, *parts)
+        try:
+            with open(path, encoding="utf-8", newline="") as handle:
+                text = handle.read()
+        except OSError:
+            continue
+        if old in text:
+            with open(path, "w", encoding="utf-8", newline="") as handle:
+                handle.write(text.replace(old, new))
+            log(f"{item['name']}: fixed {rel} ({fix[3] if len(fix) > 3 else 'a small fix'}).")
+
+
+def check_free_space(item, folder, parts, free=None):
+    """Big multi-file downloads: room for everything unpacked plus the biggest download (each is deleted after it is
+    unpacked) plus 1 GB to spare. Raises with a plain message when there is not."""
+    total = sum(p.get("size", 0) for p in parts)
+    need = int(total * item.get("unpacked_factor", 1.1)) + max([p.get("size", 0) for p in parts] or [0]) + (1 << 30)
+    if free is None:
+        probe = folder
+        while probe and not os.path.exists(probe):
+            probe = os.path.dirname(probe)
+        free = shutil.disk_usage(probe or ".").free
+    if total and free < need:
+        raise RuntimeError(f"not enough free disk space: it needs about {need / 2**30:.1f} GB, "
+                           f"and {free / 2**30:.1f} GB is free on that drive.")
+    return need
+
+
+def _signature_of(path):
+    """(status, who signed it) of a Windows program, from Windows itself (Get-AuthenticodeSignature), or None when
+    Windows' answer could not be had."""
+    import subprocess
+    script = ("$s = Get-AuthenticodeSignature -LiteralPath $env:XIFO_CHECK_PATH; "
+              "[Console]::Out.WriteLine([string]$s.Status); "
+              "if ($s.SignerCertificate) { [Console]::Out.WriteLine($s.SignerCertificate.Subject) }")
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True,
+                             errors="replace", timeout=120, creationflags=NO_WINDOW, env=dict(os.environ, XIFO_CHECK_PATH=path))
+    except Exception:
+        return None
+    lines = [l.strip() for l in (out.stdout or "").splitlines() if l.strip()]
+    if out.returncode != 0 or not lines:
+        return None
+    return lines[0], (lines[1] if len(lines) > 1 else "")
+
+
+def check_signature(item, path, log=print):
+    """(Windows) An installer item that names its "signer" in thirdparty.json (the company that signs it) is only started
+    when Windows says its signature is valid and is that company's. Nothing is checked when no signer is named, and when
+    Windows can't be asked the installer goes ahead with a note, so a broken check never stops the Visual C++ runtime."""
+    signer = item["source"].get("signer")
+    if not signer or PLATFORM != "windows":
+        return True
+    found = _signature_of(path)
+    if found is None:
+        log(f"{item['name']}: could not ask Windows who signed this installer, starting it without that check.")
+        return True
+    status, subject = found
+    if status != "Valid" or signer.lower() not in subject.lower():
+        raise RuntimeError(f"{item['name']}: the installer is not signed by {signer} "
+                           f"(Windows says: {status}{', ' + subject if subject else ''}) - not started.")
+    return True
+
+
+def clean_download(kit, item_id):
+    """Deletes downloads/<id>/ (the file an install fetched and has used). Returns the bytes freed."""
+    base = os.path.realpath(os.path.join(kit, "downloads"))
+    folder = os.path.realpath(os.path.join(base, item_id))
+    if not item_id or os.path.dirname(folder) != base or not os.path.isdir(folder):
+        return 0
+    freed = sum(os.path.getsize(os.path.join(top, name)) for top, _dirs, names in os.walk(folder) for name in names
+                if os.path.exists(os.path.join(top, name)))
+    shutil.rmtree(folder, ignore_errors=True)
+    return freed
+
+
+def prune_downloads(kit, days=7, log=print, now=None):
+    """What an install left behind (an installer that was still running when the launcher stopped looking at it, a
+    download that broke): every downloads/<id>/ folder nothing has touched for `days` days is deleted. The folder
+    downloads/updates is the launcher's own update files and is tidied by launcher_update. Returns the bytes freed."""
+    base = os.path.join(kit, "downloads")
+    if not os.path.isdir(base):
+        return 0
+    limit = (now or time.time()) - days * 86400
+    freed = 0
+    for name in os.listdir(base):
+        folder = os.path.join(base, name)
+        if name == "updates" or not os.path.isdir(folder) or os.path.islink(folder):
+            continue
+        stamps = [os.path.getmtime(os.path.join(top, n)) for top, _dirs, names in os.walk(folder) for n in names]
+        if stamps and max(stamps) > limit:
+            continue
+        freed += clean_download(kit, name)
+        if os.path.isdir(folder) and not os.listdir(folder):      # an empty folder is only clutter
+            os.rmdir(folder)
+    if freed:
+        log(f"Removed old downloads ({max(1, freed // (1024 * 1024))} MB).")
+    return freed
+
+
+def remove_stale(item, kit, root, state, wanted, log=print, stamp=None):
+    """An update used to leave behind the files the old version had and the new one does not (a renamed or dropped Lua
+    file keeps loading, or keeps showing in the addon's folder). Removes the files an earlier install of this item put in
+    place (the list kept in thirdparty-installed.json) that are not in `wanted` (the files of the version just installed).
+    Never touches: a file another download also installed, a file inside the item's kept (settings) folders, anything
+    outside the item's folder. Every file is copied to backups/thirdparty/<id>-<time>-old/ first.
+    Returns the list of files removed."""
+    old = (state.get(item["id"]) or {}).get("files") or []
+    if not old or not root:
+        return []
+    norm = lambda path: str(path).replace("\\", "/")
+    wanted = {norm(w) for w in wanted}
+    keep = tuple(norm(k) for k in item.get("keep", []))
+    replace = tuple(norm(r) for r in item.get("replace", []))
+    others = {norm(f) for other, record in state.items() if other != item["id"] and isinstance(record, dict)
+              for f in record.get("files", [])}
+    real = os.path.realpath(root)
+    backup = os.path.join(kit, "backups", "thirdparty", f"{item['id']}-{stamp or time.strftime('%Y%m%d-%H%M%S')}-old")
+    removed, folders = [], set()
+    for rel in old:
+        rel = norm(rel)
+        parts = rel.split("/")
+        full = os.path.realpath(os.path.join(root, *parts))
+        if rel in wanted or rel in others or ".." in parts or not full.startswith(real + os.sep):
+            continue
+        if keep and rel.startswith(keep) and not (replace and rel.startswith(replace)):
+            continue
+        if not os.path.isfile(full):
+            continue
+        os.makedirs(os.path.dirname(os.path.join(backup, *parts)), exist_ok=True)
+        shutil.copy2(full, os.path.join(backup, *parts))
+        os.remove(full)
+        removed.append(rel)
+        folders.add(os.path.dirname(full))
+    for folder in sorted(folders, key=len, reverse=True):          # folders that are empty now
+        while folder.startswith(real + os.sep):
+            try:
+                os.rmdir(folder)
+            except OSError:
+                break
+            folder = os.path.dirname(folder)
+    if removed:
+        log(f"{item['name']}: {len(removed)} file(s) the old version had and this one does not were removed (copies saved in {backup}).")
+    return removed
+
+
+def install(item, kit, ashita, fetch=_get, log=print, server=None, run=None, keep_download=False, remove_old=True):
+    """Downloads and installs one item. Returns the version installed. The downloaded file is deleted afterwards
+    (keep_download=True keeps it); an installer that is still open on the player's screen is left alone. An update also
+    removes the files the old version had and the new one does not (remove_old=False leaves them)."""
+    started = []
+    try:
+        return _install(item, kit, ashita, fetch, log, server, run, started, remove_old)
+    finally:
+        if not keep_download and not started:
+            try:
+                clean_download(kit, item["id"])
+            except OSError:
+                pass
+
+
+def _install(item, kit, ashita, fetch, log, server, run, started, remove_old=True):
     if item["source"]["type"] == "ollama_model":
         pull_model(item["source"]["model"], log=log)
         return item["source"]["model"]
@@ -662,6 +1014,30 @@ def install(item, kit, ashita, fetch=_get, log=print, server=None, run=None):
     if not root:
         raise RuntimeError("Set the " + ("server" if item.get("into") == "server" else "Ashita") + " folder first.")
     found = resolve(item, fetch)
+    if item.get("unpack") == "zips" and found.get("parts"):     # several big .zip files, streamed to disk one by one
+        dest = os.path.join(root, *item.get("unpack_to", "").split("/")) if item.get("unpack_to") else root
+        check_free_space(item, dest, found["parts"])
+        keep = tuple(item.get("keep", []))
+        written = kept = 0
+        for number, part in enumerate(found["parts"], 1):
+            log(f"{item['name']}: downloading part {number} of {len(found['parts'])}, {part['name']}"
+                + (f" ({part['size'] / 2**20:.0f} MB)" if part.get("size") else "") + "...")
+            path = download_file(part["url"], os.path.join(kit, "downloads", item["id"], part["name"]), log=log,
+                                 sha256=part.get("sha256"), fetch=None if fetch is _get else fetch)
+            log(f"{item['name']}: unpacking part {number}...")
+            w, k = extract_zip(path, dest, keep=keep, log=log)
+            written, kept = written + w, kept + k
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        log(f"{item['name']}: {written} file(s) installed" + (f", {kept} of your own kept" if kept else "") + ".")
+        apply_fixups(item, root, log)
+        state = load_state(kit)
+        state[item["id"]] = {"version": found["version"], "file": ", ".join(p["name"] for p in found["parts"]),
+                             "sha256": None, "from": found["url"], "at": time.strftime("%Y-%m-%d %H:%M")}
+        _save_state(kit, state)
+        return found["version"]
     log(f"{item['name']}: downloading {found['name']} ({found['version']})...")
     if item.get("unpack") == "tree":                # big Linux tools (Proton, umu, Ollama): streamed, unpacked whole
         path = download_file(found["url"], os.path.join(kit, "downloads", item["id"], found["name"]), log=log,
@@ -683,7 +1059,11 @@ def install(item, kit, ashita, fetch=_get, log=print, server=None, run=None):
         _save_state(kit, state)
         return found["version"]
     path = download(item, kit, found, fetch)
+    if not found.get("sha256") and not found.get("local"):
+        log(f"{item['name']}: the author publishes no checksum for this file, so it could not be checked against one. "
+            f"Its SHA-256 ({(found.get('sha256_actual') or '')[:16]}...) is saved in thirdparty-installed.json.")
     if item["source"]["type"] == "installer":
+        check_signature(item, path, log=log)
         log(f"{item['name']}: starting its installer.")
         if item["source"].get("wait"):             # quiet installers (Visual C++): wait until done
             import subprocess
@@ -692,10 +1072,12 @@ def install(item, kit, ashita, fetch=_get, log=print, server=None, run=None):
                 raise RuntimeError(f"{item['name']}: the installer stopped with code {result.returncode}.")
         elif os.name == "nt":
             os.startfile(path)                     # Windows: the installer asks the player itself
+            started.append(path)                   # (it is still running: its file stays until the next tidy)
         else:
             raise RuntimeError(f"{item['name']} is a Windows installer.")
     else:
         modes = {}
+        archive = None
         if zipfile.is_zipfile(path):
             archive = zipfile.ZipFile(path)
             names = archive.namelist()
@@ -708,9 +1090,14 @@ def install(item, kit, ashita, fetch=_get, log=print, server=None, run=None):
             read = lambda name: archive.extractfile(members[name]).read()
         else:
             names = [found["name"]]
-            read = lambda _name: open(path, "rb").read()
+
+            def read(_name):
+                with open(path, "rb") as single:
+                    return single.read()
         moves = plan(item, names)
         if not moves:
+            if archive is not None:
+                archive.close()
             raise RuntimeError(f"{item['name']}: nothing in {found['name']} matched where it should go.")
         keep = tuple(item.get("keep", []))
         # files inside a kept folder that belong to the tool itself and must follow its version (Ashita's own memory
@@ -719,6 +1106,7 @@ def install(item, kit, ashita, fetch=_get, log=print, server=None, run=None):
         stamp = time.strftime("%Y%m%d-%H%M%S")
         backup = os.path.join(kit, "backups", "thirdparty", f"{item['id']}-{stamp}")
         written = kept = 0
+        placed = []
         for name, rel in moves:
             dest = os.path.join(root, rel)
             if os.path.exists(dest):
@@ -733,27 +1121,186 @@ def install(item, kit, ashita, fetch=_get, log=print, server=None, run=None):
             if modes.get(name, 0) & 0o111:
                 os.chmod(dest, 0o755)
             written += 1
+            placed.append(rel.replace("\\", "/"))
+        if archive is not None:
+            archive.close()                   # (a zip left open stays locked on Windows)
         log(f"{item['name']}: {written} file(s) installed" + (f", {kept} of your own kept" if kept else "")
             + (f"; replaced files saved in {backup}" if os.path.isdir(backup) else "") + ".")
     state = load_state(kit)
-    state[item["id"]] = {"version": found["version"], "file": found["name"], "sha256": found.get("sha256_actual"),
-                         "from": found["url"], "at": time.strftime("%Y-%m-%d %H:%M")}
+    record = {"version": found["version"], "file": found["name"], "sha256": found.get("sha256_actual"),
+              "from": found["url"], "at": time.strftime("%Y-%m-%d %H:%M")}
+    if item["source"]["type"] != "installer":
+        # every file this item put in its folder (an update adds to the list), so uninstall() can take them out again
+        before = set((state.get(item["id"]) or {}).get("files", []))
+        gone = set()
+        if remove_old and before:
+            gone = set(remove_stale(item, kit, root, state, [rel for _name, rel in moves], log=log, stamp=stamp))
+        record["files"] = sorted(set(placed) | (before - gone))
+    state[item["id"]] = record
     _save_state(kit, state)
     return found["version"]
 
 
-def latest_version(item, fetch=_get):
-    """The newest release tag for a GitHub release item (to offer an update), or None."""
+def uninstall(item, kit, ashita, server=None, log=print):
+    """Removes the files this launcher installed for an item (the list kept in thirdparty-installed.json), after copying
+    them to backups/thirdparty/<id>-uninstall-<time>/. Settings kept from your own folders are not on the list, so they stay.
+    Returns the number of files removed."""
+    if item.get("required"):
+        raise RuntimeError(f"{item['name']} is needed by the launcher and can't be removed here.")
+    state = load_state(kit)
+    files = (state.get(item["id"]) or {}).get("files")
+    if not files:
+        raise RuntimeError(f"{item['name']}: no list of installed files was kept (it was installed by hand or by an older "
+                           "launcher). Delete its folder yourself.")
+    root = target_root(item, kit, ashita, server)
+    if not root:
+        raise RuntimeError("Set the " + ("server" if item.get("into") == "server" else "Ashita") + " folder first.")
+    real = os.path.realpath(root)
+    backup = os.path.join(kit, "backups", "thirdparty", f"{item['id']}-uninstall-{time.strftime('%Y%m%d-%H%M%S')}")
+    removed, folders = 0, set()
+    for rel in files:
+        parts = rel.split("/")
+        full = os.path.realpath(os.path.join(root, *parts))
+        if ".." in parts or not full.startswith(real + os.sep):
+            raise RuntimeError(f"{item['name']}: refusing to remove outside its folder ({rel})")
+        if not os.path.isfile(full):
+            continue
+        os.makedirs(os.path.dirname(os.path.join(backup, *parts)), exist_ok=True)
+        shutil.copy2(full, os.path.join(backup, *parts))
+        os.remove(full)
+        removed += 1
+        folders.add(os.path.dirname(full))
+    for folder in sorted(folders, key=len, reverse=True):          # empty folders the item left behind
+        while folder.startswith(real + os.sep):
+            try:
+                os.rmdir(folder)
+            except OSError:
+                break
+            folder = os.path.dirname(folder)
+    del state[item["id"]]
+    _save_state(kit, state)
+    log(f"{item['name']}: {removed} file(s) removed" + (f"; copies saved in {backup}" if removed else "") + ".")
+    return removed
+
+
+def latest_version(item, fetch=_get, strict=False):
+    """The newest release tag for a GitHub release item (to offer an update), or None. An item pinned to a tested
+    version has nothing newer to offer. An answer that could not be had is None, except that "GitHub is limiting this
+    connection" is always raised (RateLimited), and with strict=True every error is."""
     source = item["source"]
     if source["type"] != "github_release":
         return None
+    if source.get("tag", "latest") != "latest":       # pinned to a tested version: nothing newer to offer
+        return None
     try:
-        if source.get("prereleases"):
+        if source.get("prereleases") or channel_of(item) == "beta":
             releases = [r for r in json.loads(fetch(API + source["repo"] + "/releases?per_page=20")) if not r.get("draft")]
             return releases[0]["tag_name"] if releases else None
         return json.loads(fetch(API + source["repo"] + "/releases/latest")).get("tag_name")
+    except RateLimited:
+        raise
     except Exception:
+        if strict:
+            raise
         return None
+
+
+# ----- which version is newer (2026-11-23) -----
+_PRE_RANK = {"alpha": 0, "beta": 1, "preview": 1, "pre": 1, "rc": 2}
+
+
+def parse_version(text):
+    """A release tag as something that sorts: v1.10.0 -> ((1, 10), (9, 0)); v1.0.0-beta.2 -> ((1,), (1, 2)), which is
+    before v1.0.0 (a finished release is rank 9). None when the text holds no number (main, installed)."""
+    text = str(text or "")
+    mark = re.search(r"(?<![A-Za-z])(alpha|beta|preview|pre|rc)(?![A-Za-z])[-._]?(\d*)", text, re.I)
+    numbers = [int(n) for n in re.findall(r"\d+", text[:mark.start()] if mark else text)]
+    if not numbers:
+        return None
+    while len(numbers) > 1 and numbers[-1] == 0:          # 1.0 and 1.0.0 are the same version
+        numbers.pop()
+    rank = (_PRE_RANK[mark.group(1).lower()], int(mark.group(2) or 0)) if mark else (9, 0)
+    return tuple(numbers), rank
+
+
+def is_newer(tag, have):
+    """Is the release `tag` newer than the installed version `have`? Compared as numbers, so v1.10 is newer than v1.9 and
+    an older release is not offered as an "update". When one of them is not a version number (a branch name, or an
+    install this launcher did not record) any different tag counts as newer, as before."""
+    if not tag:
+        return False
+    a, b = parse_version(tag), parse_version(have)
+    if a is None or b is None:
+        return tag != have
+    return a > b
+
+
+def installed_versions(items, kit, ashita, server=None, state=None):
+    """{item id: installed version text} for the installed items whose newest version can be looked up (GitHub releases)."""
+    state = load_state(kit) if state is None else state
+    out = {}
+    for item in items:
+        if item.get("source", {}).get("type") != "github_release":
+            continue
+        installed, version = status(item, kit, ashita, state, server=server)
+        if installed:
+            out[item["id"]] = version
+    return out
+
+
+def check_updates(items, versions, fetch=_get):
+    """Asks GitHub which installed downloads have a newer release: ({item id: newer tag}, [what went wrong]).
+    `versions` is installed_versions(). Items that are not installed or are pinned are not asked about; one answer is
+    asked for once however many items share a repository. When GitHub starts limiting this connection the check stops
+    there and says so (the rest were not checked), instead of showing "nothing newer" for all of them."""
+    newer, problems, answers = {}, [], {}
+
+    def once(url, timeout=60):
+        if url not in answers:
+            answers[url] = fetch(url, timeout)
+        return answers[url]
+    for item in items:
+        if item["id"] not in versions:
+            continue
+        try:
+            tag = latest_version(item, once, strict=True)
+        except RateLimited as error:
+            problems.append(f"{error} The rest were not checked.")
+            break
+        except Exception as error:
+            problems.append(f"{item['name']}: could not look up the newest version ({error}).")
+            continue
+        if tag and is_newer(tag, versions[item["id"]]):
+            newer[item["id"]] = tag
+    return newer, problems
+
+
+CHECK_FILE = "thirdparty-check.json"
+
+
+def check_downloads(kit, items, versions, fetch=_get, force=False, now=None, every=6 * 3600):
+    """check_updates, but asking GitHub at most once every `every` seconds unless force: the last answer is kept in
+    thirdparty-check.json, so starting the launcher ten times does not use up the 60 requests an hour. Returns
+    (newer, problems, asked): `newer` is always only what is still newer than what is installed now."""
+    now = time.time() if now is None else now
+    path = os.path.join(kit, CHECK_FILE)
+    try:
+        with open(path, encoding="utf-8-sig") as handle:
+            last = json.load(handle)
+        if not isinstance(last, dict):
+            last = {}
+    except (OSError, ValueError):
+        last = {}
+    if not force and isinstance(last.get("at"), (int, float)) and 0 <= now - last["at"] < every:
+        known = last.get("newer") if isinstance(last.get("newer"), dict) else {}
+        return {k: v for k, v in known.items() if k in versions and is_newer(v, versions[k])}, [], False
+    newer, problems = check_updates(items, versions, fetch)
+    try:
+        with open(path, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump({"at": now, "newer": newer}, handle, indent=2)
+    except OSError:
+        pass
+    return newer, problems, True
 
 
 def credits_lines(kit):

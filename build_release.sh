@@ -23,9 +23,9 @@ mapfile -t std < <("$py" -c "import sys; skip=set('$skip'.split()); print('\n'.j
 hidden=("${std[@]}" bcrypt certifi mariadb PIL.Image PIL.ImageTk PIL._tkinter_finder
         PIL.ImageDraw PIL.ImageFont PIL.ImageFilter PIL.ImageChops PIL.ImageStat   # forever_beta_shirt.py
         launcher_core launcher_squad launcher_rules launcher_icons launcher_personality
-        launcher_thirdparty launcher_setup launcher_game launcher_client launcher_update launcher_linux
+        launcher_thirdparty launcher_revamped launcher_setup launcher_game launcher_gamefiles launcher_client launcher_update launcher_linux
         launcher_passport launcher_coop launcher_coop_gui launcher_contrib
-        launcher_pages launcher_widgets launcher_settings launcher_gamepad launcher_theme launcher_hood)
+        launcher_pages launcher_widgets launcher_settings launcher_gamepad launcher_theme launcher_hood launcher_hd launcher_hd_gui launcher_stinkshell)
 opts=(--noconfirm --onefile --name XI-Forever-Offline
       --distpath "$PWD" --workpath "$PWD/build/pyinstaller" --specpath "$PWD/build/pyinstaller"
       --collect-all mariadb --collect-data certifi)

@@ -682,7 +682,7 @@ def update_config(kit, values, drop=()):
 # ----- the kit's own addons -----
 # (2026-11-19) "Gambits" is now the squad Rule Set editor (wildcabbagepatch's Gambits v2, first shipped as GambitsV2);
 # the addon that had the name before (your own character's rules, Parser, EXP Watch, Enemy Info) is "autobox".
-OWN_ADDONS = ("Gambits", "autobox", "followme", "servermenu", "squadpanel")
+OWN_ADDONS = ("Gambits", "autobox", "followme", "servermenu", "squadpanel", "stinkshell", "autora")
 STOCK_ADDONS = ("distance", "fps", "move", "timestamp", "tparty", "checker", "drawdistance", "allmaps")
 STOCK_PLUGINS = ("minimap",)
 START_ADDONS = ("Gambits", "servermenu", "crystalboy")          # loaded at startup on a new install
@@ -900,7 +900,7 @@ def run_setup(kit, choices, tp, log=print, fetch=None, run=subprocess.run, popen
         ffxi, viewer = ll.find_game_parts(choices.get("ffxi_dir"))
         if not ffxi or not viewer:
             raise RuntimeError("That folder doesn't have both FINAL FANTASY XI and PlayOnlineViewer in it. Choose the "
-                               "SquareEnix folder copied from a Windows PC (it has both).")
+                               "SquareEnix folder (it has both), from a Windows PC or from the game installed here through Steam or Proton.")
         lang = ll.detect_lang(viewer)
         if game == "copy":
             paths = lg.copy_install(ffxi, viewer, os.path.join(kit, "Game"), log=log)
@@ -919,7 +919,7 @@ def run_setup(kit, choices, tp, log=print, fetch=None, run=subprocess.run, popen
                 raise RuntimeError("FINAL FANTASY XI isn't installed yet. Finish Square Enix's installer (it may still be "
                                    "open), then press Install again; the download is kept.")
         choices["ffxi_dir"] = found
-        extra_cfg["game_update_needed"] = True
+        extra_cfg["game_update_needed"] = not update_game_files(kit, found, log=log, context=tp.ssl_context())
     if not valid_ffxi(choices.get("ffxi_dir")):
         raise RuntimeError("That folder is not FINAL FANTASY XI (FFXiMain.dll is missing). Install the game first.")
     if game == "copy":
@@ -1006,16 +1006,11 @@ def run_setup(kit, choices, tp, log=print, fetch=None, run=subprocess.run, popen
         folder = os.path.join(kit, "downloads", "mariadb")
         os.makedirs(folder, exist_ok=True)
         path = os.path.join(folder, found["name"])
-        if IS_WINDOWS:
-            data = fetch(found["url"], timeout=1800)
-            if found.get("sha256"):
-                import hashlib
-                if hashlib.sha256(data).hexdigest() != found["sha256"].lower():
-                    raise RuntimeError("The MariaDB download does not match its published checksum.")
-            with open(path, "wb") as handle:
-                handle.write(data)
-        else:                                          # Linux: a bigger package, streamed to disk (resumable)
-            tp.download_file(found["url"], path, log=log, sha256=found.get("sha256"), fetch=fetch)
+        # (2026-11-23, Art-Machine: setup sat on "Downloading MariaDB" with no sign of life) streamed to disk on Windows
+        # too: a progress line every 10%, a stalled mirror gives up after 60 s instead of 30 minutes, a second try
+        # carries on from the part already downloaded, and a zip already in downloads\mariadb is used as it is.
+        log(f"   (from {found['url'].split('/')[2] if '//' in found['url'] else 'mariadb.org'}; about 100 MB on Windows)")
+        tp.download_file(found["url"], path, log=log, sha256=found.get("sha256"), fetch=fetch)
         unpack_package(path, mdb)
     if not IS_WINDOWS:
         still = fill_missing_libs(mdb, os.path.join(kit, *COMPAT_LIBS), log=log)
@@ -1134,6 +1129,26 @@ def existing_case(base, rel):
                 pass
         path = candidate
     return path
+
+
+def update_game_files(kit, ffxi_dir, log=print, context=None, update=None):
+    """(2026-11-23) Square Enix's installer puts in the April 2019 game: bring it up to date from XI: Forever Offline's
+    own release of the game files (launcher_gamefiles.py). True when the game is up to date; False (with a message)
+    when it couldn't be done, so the PlayOnline login and update stays the way to update it."""
+    import launcher_game as lg
+    import launcher_gamefiles as gf
+    log("   Updating the game to the newest version (only the files that changed since Square Enix's installer)...")
+    try:
+        lang = lg.detect_lang(ffxi_dir)
+        viewer = lg.find_viewer(ffxi_dir, lang)
+        if not viewer:
+            raise RuntimeError("the PlayOnline folder that goes with the game wasn't found")
+        (update or gf.update)(kit, ffxi_dir, viewer, log=log, context=context)
+        return True
+    except Exception as problem:
+        log(f"   The game couldn't be updated from XI: Forever Offline's download ({problem}). PlayOnline can update it "
+            "instead; the launcher shows you how. Or press Install again to try the download again: finished parts are kept.")
+        return False
 
 
 # ----- Phoenix's Era-DATs (the same steps and backup layout as install-era-dats.ps1 / restore-original-dats.ps1) -----

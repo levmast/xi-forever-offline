@@ -7,9 +7,10 @@ folder. Nothing is installed system-wide and nothing needs `sudo`, so it works o
 ## What you need
 - A 64-bit Linux from 2022 or newer (SteamOS 3.5+, Bazzite, Fedora 37+, Ubuntu 22.04+, Arch, Mint 21+...).
 - About 25 GB free: the game (about 16 GB), Proton and its runtime (about 2 GB), the server and the database.
-- **FINAL FANTASY XI from a Windows PC.** We never host Square Enix's files. Update the game there first (PlayOnline,
-  once), then copy its `SquareEnix` folder (inside `C:\Program Files (x86)\PlayOnline`, the one with
-  `PlayOnlineViewer` and `FINAL FANTASY XI` in it) to a USB stick or straight to the Linux machine.
+- **FINAL FANTASY XI**, its `SquareEnix` folder (the one with `PlayOnlineViewer` and `FINAL FANTASY XI` in it). We never
+  host Square Enix's files. It can come from a Windows PC (inside `C:\Program Files (x86)\PlayOnline`, copied to a USB stick
+  or straight to the Linux machine), or from the game installed on Linux itself: the Steam version, or the official
+  installer from playonline.com run through Proton or Wine. Update the game first (PlayOnline, once). (Thanks Sunie.)
 
 ## Install
 1. Download `XI-Forever-Offline-Linux.tar.gz` and extract it where you want it (your home folder, or the SD card on a

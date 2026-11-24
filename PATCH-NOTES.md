@@ -2,10 +2,83 @@
 
 Newest first. The launcher shows this file on SYSTEM > Patch notes; the same notes go to #patch-notes on Discord.
 
+## v0.3.5 · 23 November 2026
+
+### New
+• RULES > Comforts: Ancestry Moogles (off by default). The race-change moogles in Port San d'Oria, Port Bastok and Windurst Walls change your race, face, hair and size, free and as often as you like. (Yenkei)
+• RULES > Comforts: Chest and coffer wait. After a chest or coffer is opened, the next one in that area is an illusion for 15-60 minutes; 1x = the era, 0 = every one gives its loot. (Rysan, Frost)
+• GM characters: the GM commands that change a character (!addquest, !completemission, !addkeyitem, !givegil, !setplayerlevel, !setrank, !additem and more) also work on your characters that are logged out. The change is saved and made when that character next logs in.
+• Character transfer: the quest and mission logs come across too (completed quests, quests in progress, nation, Zilart, Promathia and Aht Urhgan missions, Assault). Zone once with charcapture loaded before /capture. A quest in progress starts again from its first step, and fame still can't be carried (the game never sends it).
+• CO-OP, redone: a bigger page in three parts. The Hub on its own at the top, then OPEN WORLDS, a card for every world other players opened to everyone (its banner, its description, how many people are there), then your own world and visiting friends.
+• One button: PLAY on a world takes your character there and starts the game. Close the game (log out) and your character comes home by itself, with everything it earned. No VISIT and no COME HOME to press. You are only asked when it has to: a world's password, a name that is taken there, or things you left on that world's auction house or in its delivery box.
+• Friends' worlds work the same way, on the same network, over Tailscale or over the internet: paste the invite code under VISIT A FRIEND and press PLAY. After that their world has its own card under YOUR FRIENDS' WORLDS (with who is there), so next time it is one click. "forget" takes a card away.
+• Your world in everyone's OPEN WORLDS: on the CO-OP page, HOST MY WORLD, Anyone (world link), write a line in "About my world", pick a banner (any picture, shown 640 x 160) and leave "List my world" ticked. It lists itself while it is open. Only worlds at an internet address can be listed (not a home network or Tailscale), and each card comes from the world itself, checked against its key.
+• SQUAD JUICES: trade juices to a squad mate (any amount, any kind) and it keeps them, drinking one when its MP runs low and it has no Refresh on, in a fight or out of it. Every drink uses up one of the juices you gave it; the effects are the real items'. !squad juice shows what each mate carries. RULES, "Squad mates: unlimited juice" (off by default): a mate with none of yours left drinks a juice for its level, free. (Frost, Syfin)
+• Squad: a "Spells and abilities" button on a mate's profile window (the Profile button on its row in the Squads menu) opens a list of every spell it can cast right now, with the MP, and every job ability it can use, with the level. Shown while the mate is called. (Frost)
+• Ephemeral Moogles: the crafting guilds' crystal-storage moogles are there, on by default. Trade them crystals or clusters to store, talk to one to take them out. RULES, "Ephemeral Moogles keep your crystals" (1 = on, 0 = off). (Gilder, stanky kong)
+• Bot players: the roster can go up to 2000 and bots online up to 1500 for strong PCs. Past the usual 600 / 550 the launcher asks first, with a warning. Bots online are at most 60% of the roster (now said next to the setting), so 500 online needs a roster of about 840. (Meli)
+• Squad mates can be Raised: a mate that falls stays where it fell, in your party, for 5 minutes. Raise, Raise II, Raise III or Arise brings it back at once with 10 / 25 / 50 / 100% HP, no call wait. Nobody raises it: it leaves as before, and calling it again works any time. RULES, "Fallen squad mates can be Raised" (1 = on). (Meli)
+• Squad camp: the monster your puller brings back is the whole squad's fight even while you rest or keep your weapon away. Everyone stands up and goes in, and the tank provokes it. (Eureka629)
+• Squad food: any food can join the menu. Trade one to a mate and it is unlocked for the whole squad (that one is the price), under "Foods you gave" in !squad food <slot>; it works as the real item. A food from the list traded the same way is unlocked without the gil. (FalconX51)
+• !squad attack and !squad stop also order the bot players in your party. (Yenkei)
+• GM characters: !squad setlevel <slot> <job> <level> sets a squad mate's level in a job. (ChazDingle)
+• Graphics: draw distance for scenery and for characters (through Ashita's drawdistance add-on; 0 = the game's own). (Dugahst)
+• SYSTEM > Updates: "Repair..." installs the newest launcher and server again over what you have (database update included), for an update that stopped halfway. (Reika, Ryan)
+
+### Fixes
+• Auction house from anywhere: with the switch on, AHGo still hung on "placing bid" outside the cities; it bids and sells from any area now. (Emeric, Velderen, sparkiie)
+• A Paladin can Cover a squad mate. (sparkiie)
+• CO-OP: TEST CONNECTION now also checks port 51240 (PlayOnline's chat, which the game loader passes on to the world), and a world set up on a Linux server opens it in that server's firewall. Without it the game stopped right after logging in with "Failed to reach the server on port 51240". (The Hub's visitors)
+• STINKSHELL: the window closed the game ("Ashita has crashed") as soon as it opened. Fixed in the add-on (1.1). (Hexblood, Rysan, Frost)
+• XISPEAKS: /xis voices closed the game on this Ashita. The launcher now fixes that line in the author's file after installing, and once more at PLAY for an install you already have. (XISpeaks testers)
+• Squad mates showing no armor, or the wrong outfit, after zoning, a Home Point warp or a re-call: the outfit is now sent again a few seconds after a mate comes out, so a client still loading the area draws it after all. (Jker_s81, Rysan, Meli, krazy)
+• Squad greetings: only the first mate you called used the lines you wrote in Squad > Greetings; the others used their built-in lines. A mate with its own greetings now always uses them. (Waxworks)
+• LoFi music and HD packs said On but did nothing after the game's folder was moved: XIPivot kept looking for them in the old folder. The launcher now points it at the new one by itself (at PLAY, and whenever you switch a pack). (Ryan)
+• Setup: step 4 looked frozen on "Downloading MariaDB" on Windows. It now shows the progress, gives up on a stalled download after a minute instead of half an hour, and the next try carries on where it stopped. (Art-Machine)
+• Squad chat with AI: a line you said to someone outside the squad (a bot player in your linkshell or party, or anyone you name first, "Hrokok are you still there?") got an answer from a squad mate, and so did your next lines. Now the squad leaves them to that person for a minute and a half, until you name a mate. (Sunie)
+• Updates: a launcher that lost its version file (an update stopped halfway: "Launcher: you have ?") was never offered the update again. It is now. (Ryan)
+• Linux: setup no longer says the game must come from a Windows PC; the Steam version or the official installer run through Proton works too. (Sunie)
+
+## v0.3.4 · 23 November 2026
+
+### New
+• CO-OP: open worlds (EXPERIMENTAL). A world can be open to anyone who has its link, not only to friends with an invite code. On the CO-OP page, "Who can come in" is Friends (invite code), as before, or Anyone (world link). An open world takes up to 64 visitors (you set the number), can have a PASSWORD, and has a world link to hand out with COPY LINK. The link is there once your game server has run (press PLAY once). Between friends everything works as it did.
+• CO-OP: OPEN WORLDS. The visit side of the CO-OP page lists the open worlds of the project, with The Hub, the official always-online world, first. The list says how many visitors each world has right now. Pick a world and press VISIT: there is no link to paste.
+• CO-OP: visiting an open world. Paste a world link into "Code or link" and press VISIT. A world with a password asks for it. If your character's name is taken there, you pick a visiting name for that world; you still go home under your own. TEST CONNECTION now also says whether a world has a password and how long it keeps your place.
+• CO-OP: your place is kept. When you go home from an open world, your place there stays for 90 days after your last visit: your linkshell, what you have on that world's auction house and in its delivery box, and your visiting name. Everything your character earned comes home with you, as always. "YOUR PLACES IN OPEN WORLDS" lists them, with VISIT AGAIN and FORGET.
+• CO-OP, for the host of an open world: KICK logs a visitor out of the game. BAN puts a visitor out and keeps that launcher from coming back (and its address too, if you say so); a banned visitor's character can still go home. PLACES shows the places kept for visitors who are home and your bans, with FORGET, BAN and LIFT BAN.
+• CO-OP: an open world checks a stranger's character before it comes in, and your launcher checks it again before it comes home. A character a server could not load safely is turned away and stays where it was; on the way home, TAKE BACK opens at once.
+• CO-OP: an open world (The Hub) has its own white linkshell, "Forever": everyone who logs in there gets a linkpearl in their bag once, to chat with everyone in that world. Put it on from the Linkshell menu. It stays in that world when you go home.
+• STINKSHELL (new add-on, off until you switch it on): one online chat room for every XI: Forever Offline player, whatever world you play in, in a window straight out of 1999. Your screen name is your character's name (the first player to use a name keeps it; anyone else gets a number after it). Switch "stinkshell" on at OPTIONS > Addons; it needs the internet and the launcher open. In the game: /stink opens or closes the window, /sl <text> says something without opening it. Be nice: moderators can mute, kick and ban.
+• XISPEAKS (optional, Windows, a big download): NPCs read their lines aloud with local voices, made by lord-daeloth. It is NOT downloaded with the game: OPTIONS > Addons > Install next to XISpeaks asks first, then downloads about 2.9 GB from its author's GitHub page (every file checked) and needs about 6 GB free while it installs. It comes in switched off: tick XISpeaks on the Addons page and the launcher starts its voice program while your world runs. In game: /xis test, /xis voices, /xis stop. (suggested by delukard)
+• LOFI FFXI MUSIC (optional download): lo-fi remixes of the game's music by Spaceroast, converted for XIPivot by CatsAndBoats. OPTIONS > Get more, the XIPivot row, "HD packs and music...", Download (about 430 MB, from its author's GitHub page). It installs switched off: turn it on in "Your packs" and it plays from the next PLAY. Support Spaceroast on Spotify. (suggested by datadecay)
+• AUTO RA (new add-on, off until you switch it on): auto ranged attack. Tick "autora" at OPTIONS > Addons; a small bar has three modes: Manual (you shoot), Auto (keeps shooting while you are engaged) and Until hate (holds fire while the monster is attacking you, starts again when it turns to someone else). /autora shows or hides the bar, /autora delay <sec> sets the pause between shots. (suggested by JØ)
+
+### Changes
+• A yell ban or a yell wait no longer travels with a character between worlds: each world keeps its own.
+
+### Fixes
+• The server could crash when a field party out hunting was fighting one of Horro's slimes and the slime ran away: the party kept a handle on a monster the game had already deleted. Field parties now look their monster up again each time. (Stalwart Shield)
+• A squad Corsair set to the Support or Healer role never used Phantom Roll: every job ability the role rules did not know counted as a melee move, which those roles drop. Rolls now count as party buffs, so every role rolls, and the Conserve mode no longer holds them back for mana a roll does not use. (krazy)
+• Bot players in the world's own parties no longer stand up and sit down again and again when a cure will not go off: a resting healer stands up first and casts a moment later, and after two cures that never started it rests for 30 seconds instead of trying again. (K-Andy, Hasuko)
+• SYSTEM > GM and testing: "Start GM game" said the GM account was not set up when you had just set it up in the same launcher session. (Oldboy)
+
+## v0.3.3 · 22 November 2026
+
+### New
+• HD texture packs (experimental): OPTIONS > Get more > XIPivot > "HD texture packs...". Sharper textures made by players (AshenbubsHD, NextGames HD and others on Nexus Mods), loaded through XIPivot: your FINAL FANTASY XI folder is not changed. The window opens the pack's page on Nexus Mods and you download it there with your own free account (Nexus does not let a program do that for free accounts, and the packs may not be passed on by us). The launcher does the rest: it finds the file in your Downloads (.zip, .rar or .7z, or a folder you unpacked), puts only the game data into Ashita's XIPivot folder, switches XIPivot on and lists the pack. Each pack has On/Off, Up/Down (the higher one wins) and Remove. Where a pack holds a file our era set replaces, the era file wins. The packs are big (7 to 26 GB unpacked); if the screen goes black when you change areas the game ran out of memory, so switch the biggest pack off. Changes count from the next PLAY.
+
+### Fixes
+• Squad auto-equip works with RULES > Squad > "Squad gets all gear". It only chose from gear that was given to the squad, so with that switch on (nothing has to be given) it did nothing. Now it chooses from everything the mate's job can wear at its level and puts on the best rated piece for each slot. It leaves out what adds nothing for the job (costumes, fishing rods, pearls), bows and guns for jobs with no skill in them, other races' gear and the game masters' Judge's set. Gear you gave is still chosen as before. The lines it says now name where the choice was made from.
+
 ## v0.3.2 · 22 November 2026
 
 ### New
 • Squad: "Attack my target" and "Stop" in the Squads menu, and the commands !squad attack and !squad stop. Target a monster and your squad goes in without you drawing your weapon: stay back, sit and rest, stand up to heal. They fight it to the end and come back to you; Stop calls them back early. It also works on the move, and at a camp on anything within 20 yalms of it. Bot players in your party go in too. In a macro: /say !squad attack. (Hasuko, Yenkei)
+
+### Fixes
+• Updating no longer stops with "Access is denied ... .mp3" while the launcher's theme song is on. The launcher kept the song's file open, and Windows will not replace an open file. Now the song is stopped before an update, files that did not change are left alone, and a file that is held for a moment is tried again. If you are on v0.3.0 or v0.3.1 and the update stops with that message: close the launcher and open it again (it is the new version then), or switch the song off under Options > Theme before you update. (Hasuko, wildthing)
+• OPTIONS > Addons and Plugins: Ashita's chatfix add-on now carries a red "Do not use here" note, and the launcher asks before it is switched on. It is made for servers with the old chat layout; here it cuts the first letter off every chat line and the Squads menu and Gambits stop working. If your chat is missing first letters, switch chatfix off there. (Unleashable, PikaFox, Bigbadbill, Neet)
 
 ## v0.3.1 · 22 November 2026
 

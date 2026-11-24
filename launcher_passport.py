@@ -30,6 +30,7 @@ import decimal
 import hashlib
 import io
 import json
+import math
 import os
 import re
 import secrets
@@ -44,13 +45,24 @@ BOT_CHAR_BASE = 16000000             # ...and their characters from here up
 AWAY_LOGIN = "coopaway"              # the locked account that holds characters who are visiting another world
 LS_ITEMS = (513, 514, 515)           # linkshell, pearlsack, linkpearl: they point at a linkshell of one world
 LINK_SLOTS = (16, 17)                # char_equip slots of the two worn linkshells
-WORLD_VAR_PREFIXES = ("[Bots]", "[Bot]", "COOP_")               # character variables that belong to one world
+WORLD_VAR_PREFIXES = ("[Bots]", "[Bot]", "COOP_", "[YELL]")     # character variables that belong to one world
+GAOL = 131                           # Mordion Gaol: without GM rights a character there can do nothing (jail)
 MAX_MATES = 12                # squad mates one character may bring (the game keeps six)
 SQUAD_TABLES = ("squad_mate", "squad_job", "squad_equip", "squad_unlock")
 MATE_VAR = re.compile(r"^(SQUAD_[A-Z_]*_)(\d+)((?:_\d+)?)$")                # a mate's own setting: SQUAD_AI_<mate id>, SQUAD_LOOK_<mate id>...
 GUEST_VAR = "COOP_GUEST"
 MAX_PASSPORT_BYTES = 64 * 1024 * 1024
 MAX_ROWS = 20000
+# open worlds (anyone may come in): passports of strangers are read with tighter limits and checked value by value
+OPEN_PASSPORT_BYTES = 8 * 1024 * 1024
+OPEN_ROWS = {"char_inventory": 1500, "char_spells": 1500, "char_vars": 5000, "char_effects": 200}
+LOCKER_DAYS = 90                     # a visitor's place in an open world is kept this long after its last visit
+ALIAS = re.compile(r"[A-Z][a-z]{2,14}")           # a visiting name, written the way the game writes names
+INT_BITS = {"tinyint": 8, "smallint": 16, "mediumint": 24, "int": 32, "bigint": 64}
+TEXT_TYPES = ("varchar", "char", "text", "tinytext", "mediumtext", "longtext")
+BLOB_TYPES = ("blob", "tinyblob", "mediumblob", "longblob", "varbinary", "binary")
+MAX_LEVEL = 99
+MAX_CONTAINER, MAX_SLOT, MAX_EQUIP_SLOT = 17, 80, 17
 
 CHARS_SKIP = ("charid", "accid", "original_accid", "gmlevel")
 ONE_ROW = ("char_stats", "char_jobs", "char_exp", "char_look", "char_profile", "char_points", "char_storage",
@@ -77,13 +89,28 @@ DDL = (
     "`charid` INT UNSIGNED NOT NULL, `accid` INT UNSIGNED NOT NULL, `login` VARCHAR(16) NOT NULL, "
     "`state` VARCHAR(16) NOT NULL DEFAULT 'active', `nonce` VARCHAR(64) NOT NULL, `generation` INT UNSIGNED NOT NULL DEFAULT 1, "
     "`arrived` DATETIME NOT NULL, `updated` DATETIME NOT NULL, `final_file` TEXT NULL, `info` TEXT NULL, "
-    "PRIMARY KEY (`guest_id`), UNIQUE KEY `home` (`home_world`, `home_charid`)) "
+    "`owner` VARCHAR(64) NOT NULL DEFAULT '', `alias` VARCHAR(15) NULL, `kept` TINYINT NOT NULL DEFAULT 0, "
+    "PRIMARY KEY (`guest_id`), UNIQUE KEY `home` (`owner`, `home_world`, `home_charid`)) "
+    "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",
+    "CREATE TABLE IF NOT EXISTS `coop_visitor` (`vid` VARCHAR(64) NOT NULL, `vkey` VARCHAR(64) NOT NULL, "
+    "`first_seen` DATETIME NOT NULL, `last_seen` DATETIME NOT NULL, `address` VARCHAR(64) NOT NULL DEFAULT '', "
+    "PRIMARY KEY (`vid`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",
+    "CREATE TABLE IF NOT EXISTS `coop_ban` (`kind` VARCHAR(8) NOT NULL, `value` VARCHAR(64) NOT NULL, "
+    "`reason` VARCHAR(200) NOT NULL DEFAULT '', `since` DATETIME NOT NULL, PRIMARY KEY (`kind`, `value`)) "
     "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",
 )
 
 
 class PassportError(Exception):
     """Something about a passport or a character that the player can be told as it is."""
+
+
+class NameTaken(PassportError):
+    """A character of that name already lives in the world (an open world lets the visitor pick a visiting name)."""
+
+
+class BadPassport(PassportError):
+    """A passport from a stranger's world holds something this world must not take in."""
 
 
 # ----- small database helpers -----
@@ -116,6 +143,10 @@ def ensure_tables(conn):
         cur.execute(statement)
     if "squad" not in table_columns(cur, "coop_away"):     # (a table made by the first co-op build)
         cur.execute("ALTER TABLE `coop_away` ADD COLUMN `squad` TINYINT NOT NULL DEFAULT 0")
+    if "owner" not in table_columns(cur, "coop_guest"):    # (a table made before open worlds)
+        cur.execute("ALTER TABLE `coop_guest` ADD COLUMN `owner` VARCHAR(64) NOT NULL DEFAULT '', ADD COLUMN `alias` VARCHAR(15) NULL, "
+                    "ADD COLUMN `kept` TINYINT NOT NULL DEFAULT 0, DROP INDEX `home`, "
+                    "ADD UNIQUE KEY `home` (`owner`, `home_world`, `home_charid`)")
     conn.commit()
     cur.close()
 
@@ -243,13 +274,19 @@ def pack(passport):
     return buffer.getvalue()
 
 
-def unpack(data):
+def unpack(data, limit=MAX_PASSPORT_BYTES):
     try:
+        if len(data) > limit:
+            raise PassportError("That passport is too large to be real.")
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             info = archive.getinfo("passport.json")
-            if info.file_size > MAX_PASSPORT_BYTES:
+            if info.file_size > limit:
                 raise PassportError("That passport is too large to be real.")
-            passport = json.loads(archive.read("passport.json").decode("utf-8"))
+            with archive.open(info) as handle:          # (never more than the limit, whatever the zip claims)
+                raw = handle.read(limit + 1)
+            if len(raw) > limit:
+                raise PassportError("That passport is too large to be real.")
+            passport = json.loads(raw.decode("utf-8"))
     except PassportError:
         raise
     except Exception:
@@ -523,7 +560,7 @@ def _make_room_for_name(cur, name):
     if row is None:
         return None
     if int(row[1]) < BOT_ACCOUNT_BASE:
-        raise PassportError(f"A character named {name} already lives in this world, so {name} cannot visit it.")
+        raise NameTaken(f"A character named {name} already lives in this world, so {name} cannot visit it.")
     for ending in ("a", "o", "e", "i", "u", "an", "el", "is", "or", "us"):
         other = (name[:15 - len(ending)] + ending)
         if not _one(cur, "SELECT 1 FROM chars WHERE charname = ? LIMIT 1", (other,)):
@@ -799,10 +836,12 @@ def difference(before, after):
     return out
 
 
-def come_home(conn, data, backup_dir=None):
+def come_home(conn, data, backup_dir=None, strict=False):
     """A character returns: its rows are replaced by the passport's and it is unlocked. Returns a dict for the player
-    (name, what changed, notes). The same passport twice is harmless; a passport of another visit is refused."""
-    passport = unpack(data)
+    (name, what changed, notes). The same passport twice is harmless; a passport of another visit is refused.
+    strict=True (the visit was to an open world, whose owner is a stranger): every value is checked first, and
+    BadPassport is raised with the character left exactly as it was."""
+    passport = unpack(data, OPEN_PASSPORT_BYTES if strict else MAX_PASSPORT_BYTES)
     world = world_identity(conn)
     home = passport.get("home") or {}
     if passport.get("kind") not in ("return", "checkpoint") or home.get("world") != world["id"]:
@@ -822,6 +861,9 @@ def come_home(conn, data, backup_dir=None):
             return {"name": name_row[0], "already": True, "changes": {}, "notes": [], "summary": passport["summary"]}
         layout, squad = local_layout(cur), squad_layout(cur)
         _check_tables(passport, layout, squad)
+        if strict:
+            inspect_passport(cur, passport, layout, squad)
+        freed = strict and _out_of_gaol(passport)
         # Did the squad leave with the character? Not on a visit that began with the first co-op build: then the
         # squad at home is left exactly as it is, whatever the passport holds.
         took_squad = bool(away[4]) and passport.get("format") == FORMAT
@@ -840,6 +882,8 @@ def come_home(conn, data, backup_dir=None):
                                         "", 0, layout_signature(layout, squad), squad=before_squad)))
         mates = _put_squad(cur, squad, charid, passport.get("squad"), keep_ids=True) if took_squad else None
         notes = _replace_rows(cur, layout, charid, passport["tables"], accid=int(away[0]), mates=mates, squad_home=not took_squad)
+        if freed:
+            notes.append(f"{name_row[0]} came back from that world's jail and was put at its home point.")
         cur.execute("UPDATE coop_away SET state = 'home', generation = ?, updated = ? WHERE charid = ?",
                     (int(passport.get("generation", 0)), _now(), charid))
         conn.commit()
@@ -853,7 +897,7 @@ def come_home(conn, data, backup_dir=None):
         cur.close()
 
 
-def take_back(conn, charid, checkpoint=None, backup_dir=None):
+def take_back(conn, charid, checkpoint=None, backup_dir=None, strict=False):
     """Ends a visit without the host. With a checkpoint (bytes) of this visit the character comes back as it was then;
     without one it is simply unlocked as it was before it left. A later return from that host is refused."""
     if checkpoint:
@@ -861,7 +905,7 @@ def take_back(conn, charid, checkpoint=None, backup_dir=None):
         home = passport.get("home") or {}
         if int(home.get("charid", 0)) != int(charid):
             raise PassportError("That checkpoint belongs to another character.")
-        return come_home(conn, checkpoint, backup_dir=backup_dir)
+        return come_home(conn, checkpoint, backup_dir=backup_dir, strict=strict)
     ensure_tables(conn)
     cur = conn.cursor()
     try:
@@ -882,16 +926,20 @@ def take_back(conn, charid, checkpoint=None, backup_dir=None):
 
 
 # ----- host world: a visitor arrives, is saved, leaves -----
-def guest_list(conn, include_gone=False):
+def guest_list(conn, include_gone=False, lockers=False):
+    """The visitors of this world. lockers=True also lists the places kept for visitors who went home (open worlds)."""
     ensure_tables(conn)
     cur = conn.cursor()
     try:
         rows = _all(cur, "SELECT g.guest_id, g.name, g.charid, g.accid, g.login, g.state, g.generation, g.arrived, g.updated, "
                          "g.home_world, g.home_charid, g.final_file, (SELECT COUNT(*) FROM accounts_sessions s WHERE s.charid = g.charid), "
-                         "g.gkey, g.nonce FROM coop_guest g" + ("" if include_gone else " WHERE g.state <> 'gone'") + " ORDER BY g.arrived")
+                         "g.gkey, g.nonce, g.owner, g.alias, g.kept FROM coop_guest g" +
+                         ("" if include_gone else " WHERE g.state <> 'gone'" + ("" if lockers else " AND g.state <> 'locker'")) +
+                         " ORDER BY g.arrived")
         return [{"guest_id": r[0], "name": r[1], "charid": int(r[2]), "accid": int(r[3]), "login": r[4], "state": r[5],
                  "generation": int(r[6]), "arrived": str(r[7]), "updated": str(r[8]), "home_world": r[9],
-                 "home_charid": int(r[10]), "final_file": r[11], "online": bool(r[12]), "gkey": r[13], "nonce": r[14]} for r in rows]
+                 "home_charid": int(r[10]), "final_file": r[11], "online": bool(r[12]), "gkey": r[13], "nonce": r[14],
+                 "owner": r[15] or "", "alias": r[16], "local": r[16] or r[1], "kept": bool(r[17])} for r in rows]
     finally:
         cur.close()
         conn.rollback()
@@ -924,13 +972,18 @@ def _delete_character(cur, charid, accid, login):
     cur.execute("DELETE FROM accounts WHERE id = ? AND login = ?", (accid, login))
 
 
-def import_guest(conn, data, guest_id, gkey, login, password, max_guests=6, stamp=None, avoid=()):
+def import_guest(conn, data, guest_id, gkey, login, password, max_guests=6, stamp=None, avoid=(), owner="", keep=False,
+                 alias=None, strict=False):
     """A visitor arrives: a guest account and the character, from the passport. Returns the guest's record (a dict).
     Sending the same passport again changes nothing and returns the same record. The character keeps its own id when
     that is free here (its macros then just work); otherwise it gets a new one that is none of `avoid` (the ids of the
-    visitor's other characters, whose macro folders on the visitor's PC must not be touched)."""
+    visitor's other characters, whose macro folders on the visitor's PC must not be touched).
+    Open worlds: `owner` is the visitor's own id (two visitors never share or take each other's place here); keep=True
+    keeps the character's place when it goes home (see remove_guest) and gives it back on the next visit; `alias` is
+    the name it uses here when its own is taken (NameTaken says so); strict=True checks every value of the passport."""
     avoid = {int(i) for i in list(avoid)[:200] if isinstance(i, int)}
-    passport = unpack(data)
+    passport = unpack(data, OPEN_PASSPORT_BYTES if strict else MAX_PASSPORT_BYTES)
+    owner = str(owner or "")
     world = world_identity(conn)
     home = passport.get("home") or {}
     home_world, home_charid = str(home.get("world", "")), int(home.get("charid", 0))
@@ -940,30 +993,43 @@ def import_guest(conn, data, guest_id, gkey, login, password, max_guests=6, stam
         raise PassportError("That passport was made by another version of XI: Forever Offline. Update both worlds first.")
     if home_world == world["id"]:
         raise PassportError("That character lives in this world already.")
-    name = passport["name"]
+    name = local = passport["name"]
+    if alias is not None:
+        if not isinstance(alias, str) or not ALIAS.fullmatch(alias):
+            raise PassportError("A visiting name is 3 to 15 letters and starts with a capital, like Hurami.")
+        local = alias
     ensure_tables(conn)
     cur = conn.cursor()
     try:
-        old = _one(cur, "SELECT guest_id, charid, accid, login, state, nonce, generation, gkey FROM coop_guest "
-                        "WHERE home_world = ? AND home_charid = ? FOR UPDATE", (home_world, home_charid))
+        old = _one(cur, "SELECT guest_id, charid, accid, login, state, nonce, generation, gkey, alias FROM coop_guest "
+                        "WHERE owner = ? AND home_world = ? AND home_charid = ? FOR UPDATE", (owner, home_world, home_charid))
         if old is not None and old[5] == passport["nonce"] and old[4] == "active":
             conn.rollback()
             return {"guest_id": old[0], "charid": int(old[1]), "accid": int(old[2]), "login": old[3], "name": name,
-                    "gkey": old[7], "again": True}
+                    "gkey": old[7], "again": True, "local": old[8] or name}
         if old is not None and old[5] == passport["nonce"]:
             raise PassportError(f"{name} has already left this world on that visit.")
         active = _one(cur, "SELECT COUNT(*) FROM coop_guest WHERE state = 'active'")[0]
-        if old is None and int(active) >= int(max_guests):
+        if (old is None or (keep and old[4] != "active")) and int(active) >= int(max_guests):
             raise PassportError("This world already has all the visitors it allows.")
         layout, squad = local_layout(cur), squad_layout(cur)
         _check_tables(passport, layout, squad)
+        if strict:
+            inspect_passport(cur, passport, layout, squad)
+            _out_of_gaol(passport)
+        # Its place here was kept from an earlier visit (an open world's locker): the same character and account are
+        # used again, so what stayed in this world (linkshells, auction listings, the delivery box, its name) is still its own.
+        shelf = bool(keep and old is not None and old[4] == "locker" and
+                     _one(cur, "SELECT 1 FROM chars WHERE charid = ? AND accid = ? FOR UPDATE", (int(old[1]), int(old[2]))))
+        if shelf:
+            return _back_to_locker(conn, cur, passport, old, layout, squad, guest_id, gkey, login, password, stamp, owner)
         if old is not None:                      # an earlier visit of the same character: its old copy here is replaced
             if old[4] != "gone":
                 if is_online(cur, int(old[1])):
                     raise PassportError(f"{name} is in the game here right now.")
                 _delete_character(cur, int(old[1]), int(old[2]), old[3])
             cur.execute("DELETE FROM coop_guest WHERE guest_id = ?", (old[0],))
-        renamed = _make_room_for_name(cur, name)
+        renamed = _make_room_for_name(cur, local)
         accid = _free_id(cur, "accounts", "id", 1000, BOT_ACCOUNT_BASE)
         if _one(cur, "SELECT 1 FROM accounts WHERE login = ? LIMIT 1", (login,)):
             raise PassportError("That guest login is taken; try again.")
@@ -973,7 +1039,7 @@ def import_guest(conn, data, guest_id, gkey, login, password, max_guests=6, stam
             home_charid < BOT_CHAR_BASE else _free_id(cur, "chars", "charid", 1, BOT_CHAR_BASE, avoid)
         cols = layout["chars"]
         values = [_dec(v) for v in passport["tables"]["chars"]["rows"][0]]
-        values[cols.index("charname")] = name
+        values[cols.index("charname")] = local
         names = ", ".join(f"`{c}`" for c in cols)
         extra_cols, extra_vals = ["charid", "accid"], [charid, accid]
         if "original_accid" in table_columns(cur, "chars"):
@@ -1000,12 +1066,12 @@ def import_guest(conn, data, guest_id, gkey, login, password, max_guests=6, stam
         info = json.dumps({"stamps": stamps, "home_name": (passport.get("world") or {}).get("name", ""), "renamed_bot": renamed,
                            "arrived_as": passport.get("summary", {})})
         cur.execute("INSERT INTO coop_guest (guest_id, gkey, home_world, home_charid, name, charid, accid, login, state, nonce, "
-                    "generation, arrived, updated, info) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)",
+                    "generation, arrived, updated, info, owner, alias, kept) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?)",
                     (guest_id, gkey, home_world, home_charid, name, charid, accid, login, passport["nonce"],
-                     int(passport.get("generation", 1)), _now(), _now(), info))
+                     int(passport.get("generation", 1)), _now(), _now(), info, owner, local if local != name else None, 1 if keep else 0))
         conn.commit()
         return {"guest_id": guest_id, "charid": charid, "accid": accid, "login": login, "name": name, "gkey": gkey,
-                "again": False, "renamed_bot": renamed}
+                "again": False, "renamed_bot": renamed, "local": local, "shelf": False}
     except Exception:
         conn.rollback()
         raise
@@ -1078,18 +1144,25 @@ def export_guest(conn, guest_id, final=False, versions=None, save_dir=None):
         cur.close()
 
 
-def remove_guest(conn, guest_id):
-    """The visitor is home (or the host says goodbye): its character and account are removed from this world."""
+def remove_guest(conn, guest_id, forget=False):
+    """The visitor is home (or the host says goodbye): its character and account are removed from this world.
+    A visitor of an open world (kept) keeps its place instead: the character stays behind with its account closed, so
+    its linkshells, auction listings, delivery box and name are there on the next visit. forget=True removes it anyway."""
     cur = conn.cursor()
     try:
-        row = _one(cur, "SELECT charid, accid, state, name, login FROM coop_guest WHERE guest_id = ? FOR UPDATE", (guest_id,))
+        row = _one(cur, "SELECT charid, accid, state, name, login, kept FROM coop_guest WHERE guest_id = ? FOR UPDATE", (guest_id,))
         if row is None:
             raise PassportError("That visitor is not in this world.")
-        if row[2] == "gone":
+        if row[2] == "gone" or (row[2] == "locker" and not forget):
             conn.rollback()
             return False
         if is_online(cur, int(row[0])):
             raise PassportError(f"{row[3]} is in the game right now.")
+        if int(row[5] or 0) and not forget:      # an open world keeps its place: the character stays, with its account closed
+            cur.execute("UPDATE accounts SET status = 0 WHERE id = ? AND login = ?", (int(row[1]), row[4]))
+            cur.execute("UPDATE coop_guest SET state = 'locker', updated = ? WHERE guest_id = ?", (_now(), guest_id))
+            conn.commit()
+            return True
         _delete_character(cur, int(row[0]), int(row[1]), row[4])
         cur.execute("UPDATE coop_guest SET state = 'gone', updated = ? WHERE guest_id = ?", (_now(), guest_id))
         conn.commit()
@@ -1099,6 +1172,338 @@ def remove_guest(conn, guest_id):
         raise
     finally:
         cur.close()
+
+
+# ----- open worlds: a visitor's place is kept between visits, and passports of strangers are checked -----
+def _back_to_locker(conn, cur, passport, old, layout, squad, guest_id, gkey, login, password, stamp, owner):
+    """A visitor returns to the place an open world kept for it. Its rows are replaced by the passport's the way a
+    character's are when it comes home: what belongs to this world (linkshell items, this world's variables, its name
+    here) stays. Finishes the transaction import_guest() began and returns the guest's record."""
+    name, charid, accid = passport["name"], int(old[1]), int(old[2])
+    if is_online(cur, charid):
+        raise PassportError(f"{name} is in the game here right now.")
+    if _one(cur, "SELECT 1 FROM accounts WHERE login = ? AND id <> ? LIMIT 1", (login, accid)):
+        raise PassportError("That guest login is taken; try again.")
+    if not _one(cur, "SELECT 1 FROM accounts WHERE id = ? AND id < ? AND login <> ?", (accid, BOT_ACCOUNT_BASE, AWAY_LOGIN)):
+        raise PassportError(f"The place kept for {name} in this world is damaged.")
+    cur.execute("UPDATE accounts SET login = ?, password = PASSWORD(?), status = 1, timelastmodify = NOW() WHERE id = ?",
+                (login, password, accid))
+    mates = _put_squad(cur, squad, charid, passport.get("squad"), keep_ids=True)
+    _replace_rows(cur, layout, charid, passport["tables"], mates=mates)
+    if "char_vars" in layout:
+        vcols = table_columns(cur, "char_vars")
+        cur.execute("REPLACE INTO char_vars (charid, varname, value" + (", expiry" if "expiry" in vcols else "") + ") "
+                    "VALUES (?, ?, 1" + (", 0" if "expiry" in vcols else "") + ")", (charid, GUEST_VAR))
+    stamps = list(passport.get("stamps") or [])
+    if stamp:
+        stamps.append(stamp)
+    info = json.dumps({"stamps": stamps, "home_name": (passport.get("world") or {}).get("name", ""), "renamed_bot": None,
+                       "arrived_as": passport.get("summary", {})})
+    cur.execute("UPDATE coop_guest SET guest_id = ?, gkey = ?, login = ?, state = 'active', nonce = ?, generation = ?, arrived = ?, "
+                "updated = ?, final_file = NULL, info = ?, name = ?, kept = 1 WHERE guest_id = ?",
+                (guest_id, gkey, login, passport["nonce"], int(passport.get("generation", 1)), _now(), _now(), info, name, old[0]))
+    conn.commit()
+    return {"guest_id": guest_id, "charid": charid, "accid": accid, "login": login, "name": name, "gkey": gkey,
+            "again": False, "renamed_bot": None, "local": old[8] or name, "shelf": True}
+
+
+def locker_list(conn, days=LOCKER_DAYS):
+    """The places an open world keeps for visitors who are home: [{guest_id, name, local, owner, since, expires}]."""
+    ensure_tables(conn)
+    cur = conn.cursor()
+    try:
+        rows = _all(cur, "SELECT guest_id, name, alias, owner, updated, charid FROM coop_guest WHERE state = 'locker' ORDER BY updated")
+        return [{"guest_id": r[0], "name": r[1], "local": r[2] or r[1], "owner": r[3] or "", "since": str(r[4]), "charid": int(r[5]),
+                 "expires": str(r[4] + datetime.timedelta(days=days)) if isinstance(r[4], datetime.datetime) else ""} for r in rows]
+    finally:
+        cur.close()
+        conn.rollback()
+
+
+def expire_lockers(conn, days=LOCKER_DAYS, now=None):
+    """Removes the places of visitors who have not been back for `days` days (their character, account, listings and
+    delivery box here). Returns the names. One that cannot be removed right now is left for the next time."""
+    ensure_tables(conn)
+    limit = (now or _now()) - datetime.timedelta(days=days)
+    cur = conn.cursor()
+    gone = []
+    try:
+        rows = _all(cur, "SELECT guest_id, charid, accid, login, name, alias FROM coop_guest WHERE state = 'locker' AND updated < ? FOR UPDATE", (limit,))
+        for guest_id, charid, accid, login, name, alias in rows:
+            if is_online(cur, int(charid)):
+                continue
+            _delete_character(cur, int(charid), int(accid), login)
+            cur.execute("UPDATE coop_guest SET state = 'gone', updated = ? WHERE guest_id = ?", (_now(), guest_id))
+            gone.append(alias or name)
+        conn.commit()
+        return gone
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+
+
+def visitor(conn, vid):
+    """What an open world remembers of a launcher that has been here: {vid, vkey, first_seen, last_seen, address}, or None."""
+    ensure_tables(conn)
+    cur = conn.cursor()
+    try:
+        row = _one(cur, "SELECT vid, vkey, first_seen, last_seen, address FROM coop_visitor WHERE vid = ?", (vid,))
+        return {"vid": row[0], "vkey": row[1], "first_seen": str(row[2]), "last_seen": str(row[3]), "address": row[4]} if row else None
+    finally:
+        cur.close()
+        conn.rollback()
+
+
+def register_visitor(conn, vid, vkey, address=""):
+    """A launcher shows an open world its id and key. The first time they are remembered; after that the key must be
+    the same one (PassportError otherwise: somebody else is using that id). Returns True when it was new."""
+    ensure_tables(conn)
+    cur = conn.cursor()
+    try:
+        row = _one(cur, "SELECT vkey FROM coop_visitor WHERE vid = ? FOR UPDATE", (vid,))
+        if row is None:
+            cur.execute("INSERT INTO coop_visitor (vid, vkey, first_seen, last_seen, address) VALUES (?, ?, ?, ?, ?)",
+                        (vid, vkey, _now(), _now(), str(address)[:64]))
+        elif row[0] != vkey:
+            raise PassportError("This world knows that visitor under another key.")
+        else:
+            cur.execute("UPDATE coop_visitor SET last_seen = ?, address = ? WHERE vid = ?", (_now(), str(address)[:64], vid))
+        conn.commit()
+        return row is None
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+
+
+def ban(conn, kind, value, reason=""):
+    """kind 'key' (a visitor's id) or 'ip' (an address). A banned visitor cannot arrive; a character already here can still go home."""
+    if kind not in ("key", "ip") or not value:
+        raise PassportError("Nothing to ban.")
+    ensure_tables(conn)
+    cur = conn.cursor()
+    try:
+        cur.execute("REPLACE INTO coop_ban (kind, value, reason, since) VALUES (?, ?, ?, ?)", (kind, str(value)[:64], str(reason)[:200], _now()))
+        conn.commit()
+    finally:
+        cur.close()
+
+
+def unban(conn, kind, value):
+    ensure_tables(conn)
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM coop_ban WHERE kind = ? AND value = ?", (kind, str(value)[:64]))
+        conn.commit()
+    finally:
+        cur.close()
+
+
+def ban_list(conn):
+    ensure_tables(conn)
+    cur = conn.cursor()
+    try:
+        return [{"kind": r[0], "value": r[1], "reason": r[2], "since": str(r[3])}
+                for r in _all(cur, "SELECT kind, value, reason, since FROM coop_ban ORDER BY since")]
+    finally:
+        cur.close()
+        conn.rollback()
+
+
+def is_banned(conn, vid, address=""):
+    ensure_tables(conn)
+    cur = conn.cursor()
+    try:
+        return _one(cur, "SELECT 1 FROM coop_ban WHERE (kind = 'key' AND value = ? AND value <> '') OR (kind = 'ip' AND value = ? AND value <> '') LIMIT 1",
+                    (str(vid or ""), str(address or ""))) is not None
+    finally:
+        cur.close()
+        conn.rollback()
+
+
+def close_guest_account(conn, guest_id):
+    """A visitor's account is closed (it cannot log in again); its character stays so it can still go home."""
+    cur = conn.cursor()
+    try:
+        row = _one(cur, "SELECT accid, login FROM coop_guest WHERE guest_id = ? AND state = 'active'", (guest_id,))
+        if row is not None:
+            cur.execute("UPDATE accounts SET status = 0 WHERE id = ? AND login = ?", (int(row[0]), row[1]))
+        conn.commit()
+        return row is not None
+    finally:
+        cur.close()
+
+
+def _column_types(cur, table):
+    """{column: (type, unsigned, longest value, may be empty)} of a table of this database."""
+    rows = _all(cur, "SELECT column_name, data_type, column_type, character_maximum_length, is_nullable FROM information_schema.columns "
+                     "WHERE table_schema = DATABASE() AND table_name = ?", (table,))
+    return {r[0]: (str(r[1]).lower(), "unsigned" in str(r[2]).lower(), r[3], str(r[4]).upper() == "YES") for r in rows}
+
+
+def _fits(value, kind, unsigned, size, nullable):
+    """Is this passport value something that column can hold? (As it sits in the passport: see _enc.)"""
+    if value is None:
+        return nullable
+    if kind in INT_BITS:
+        if isinstance(value, bool) or not isinstance(value, int):
+            return False
+        bits = INT_BITS[kind]
+        low, high = (0, 2 ** bits - 1) if unsigned else (-2 ** (bits - 1), 2 ** (bits - 1) - 1)
+        return low <= value <= high
+    if kind in ("float", "double"):
+        return not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value) and abs(value) < 1e30
+    if kind == "decimal":
+        if isinstance(value, dict) and set(value) == {"n"} and isinstance(value["n"], str):
+            return bool(re.fullmatch(r"-?\d{1,30}(\.\d{1,30})?", value["n"]))
+        return not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value)
+    if kind in TEXT_TYPES:
+        return isinstance(value, str) and len(value) <= int(size or 65535) and not re.search(r"[\x00-\x1f\x7f]", value)
+    if kind in BLOB_TYPES:
+        if not (isinstance(value, dict) and set(value) == {"b"} and isinstance(value["b"], str)):
+            return False
+        if len(value["b"]) > (int(size or 65535) * 4) // 3 + 8:
+            return False
+        try:
+            return len(base64.b64decode(value["b"], validate=True)) <= int(size or 65535)
+        except Exception:
+            return False
+    if kind in ("datetime", "timestamp"):
+        return isinstance(value, dict) and set(value) == {"t"} and isinstance(value["t"], str) and \
+            bool(re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d", value["t"]))
+    if kind == "date":
+        return isinstance(value, dict) and set(value) == {"d"} and isinstance(value["d"], str) and bool(re.fullmatch(r"\d{4}-\d\d-\d\d", value["d"]))
+    if kind == "time":
+        return isinstance(value, dict) and set(value) == {"s"} and isinstance(value["s"], (int, float)) and not isinstance(value["s"], bool)
+    return False                                 # a kind of column this version has never seen travel
+
+
+def inspect_passport(cur, passport, layout, squad=None):
+    """For passports that come from strangers (an open world's visitors, or the way home from an open world). Called
+    after _check_tables(). Every value must be one its column can hold, and the few values the game server trusts
+    blindly (areas, jobs, levels, looks, items, bag slots) must exist. Raises BadPassport; changes nothing.
+    This is about what a server can safely load, not about how a character was earned."""
+    def bad(why):
+        raise BadPassport(f"{passport['name']} cannot be taken in: {why}.")
+
+    blocks = [(t, passport["tables"][t]) for t in layout]
+    if squad and passport.get("squad"):
+        blocks += [(t, passport["squad"][t]) for t in squad]
+    for table, block in blocks:
+        types = _column_types(cur, table)
+        if len(block["rows"]) > OPEN_ROWS.get(table, MAX_ROWS):
+            bad(f"it has more {table} entries than a character can have")
+        specs = [types.get(c) for c in block["cols"]]
+        if any(spec is None for spec in specs):
+            bad("this world stores characters differently")
+        for row in block["rows"]:
+            for column, spec, value in zip(block["cols"], specs, row):
+                if not _fits(value, *spec):
+                    bad(f"a value does not fit ({table}.{column})")
+
+    tables = passport["tables"]
+
+    def cell(table, column):
+        return _cell(tables, table, column)
+
+    def column(table, name):
+        block = tables.get(table)
+        if not block or name not in block["cols"]:
+            return []
+        i = block["cols"].index(name)
+        return [r[i] for r in block["rows"]]
+
+    if table_columns(cur, "zone_settings"):
+        zones = {int(r[0]) for r in _all(cur, "SELECT zoneid FROM zone_settings")}
+        for name in ("pos_zone", "pos_prevzone", "home_zone"):
+            value = cell("chars", name)
+            if zones and value is not None and value not in zones:
+                bad("it is in an area this world does not have")
+    nation = cell("chars", "nation")
+    if nation is not None and nation > 2:
+        bad("its nation is not one of the three")
+    job, sub = cell("char_stats", "mjob"), cell("char_stats", "sjob")
+    if job is not None and not 1 <= job < len(JOBS):
+        bad("its job is not one this world knows")
+    if sub is not None and not 0 <= sub < len(JOBS):
+        bad("its support job is not one this world knows")
+    for name, low in (("mlvl", 1), ("slvl", 0)):
+        value = cell("char_stats", name)
+        if value is not None and not low <= value <= MAX_LEVEL:
+            bad("its level is not a level")
+    block = tables.get("char_jobs")
+    if block and block["rows"]:
+        for name, value in zip(block["cols"], block["rows"][0]):
+            if name.upper() in JOBS[1:] and isinstance(value, int) and value > MAX_LEVEL:
+                bad("one of its job levels is not a level")
+    race, face, size = cell("char_look", "race"), cell("char_look", "face"), cell("char_look", "size")
+    if (race is not None and not 1 <= race <= 8) or (face is not None and face > 15) or (size is not None and size > 2):
+        bad("its looks are not ones the game has")
+    block = tables.get("char_storage")
+    if block and block["rows"]:
+        if any(isinstance(v, int) and v > MAX_SLOT for v in block["rows"][0]):
+            bad("one of its bags is larger than a bag can be")
+    places = list(zip(column("char_inventory", "location"), column("char_inventory", "slot")))
+    if any(location > MAX_CONTAINER or slot > MAX_SLOT for location, slot in places):
+        bad("it keeps items where there is no bag")
+    if len(set(places)) != len(places):
+        bad("two of its items are in the same bag slot")
+    items = set(column("char_inventory", "itemId"))
+    if items and table_columns(cur, "item_basic"):
+        marks = ", ".join("?" for _ in items)
+        known = {int(r[0]) for r in _all(cur, f"SELECT itemid FROM item_basic WHERE itemid IN ({marks})", tuple(sorted(items)))}
+        if _one(cur, "SELECT 1 FROM item_basic LIMIT 1") and items - known:
+            bad(f"it carries an item this world does not know (item {sorted(items - known)[0]}); leave it at home")
+    worn = column("char_equip", "equipslotid")
+    if any(v > MAX_EQUIP_SLOT for v in worn) or len(set(worn)) != len(worn) or \
+            any(v > MAX_CONTAINER for v in column("char_equip", "containerid")) or any(v > MAX_SLOT for v in column("char_equip", "slotid")):
+        bad("it wears things in places the game does not have")
+    names = column("char_vars", "varname")
+    if len(set(names)) != len(names):
+        bad("two of its settings have the same name")
+    if squad and passport.get("squad"):
+        mates = passport["squad"]["squad_mate"]
+        for name in ("mjob", "sjob"):
+            if name in mates["cols"]:
+                i = mates["cols"].index(name)
+                if any(not 0 <= r[i] < len(JOBS) for r in mates["rows"]):
+                    bad("a squad mate's job is not one this world knows")
+        for name, top in (("race", 8), ("face", 15)):
+            if name in mates["cols"]:
+                i = mates["cols"].index(name)
+                if any(r[i] is not None and r[i] > top for r in mates["rows"]):
+                    bad("a squad mate's looks are not ones the game has")
+        jobs = passport["squad"]["squad_job"]
+        if "level" in jobs["cols"]:
+            i = jobs["cols"].index("level")
+            if any(r[i] is not None and r[i] > MAX_LEVEL for r in jobs["rows"]):
+                bad("a squad mate's level is not a level")
+
+
+def _out_of_gaol(passport):
+    """A stranger's world can hand a character over standing in jail, where it could never leave by itself. Such a
+    character is put at its home point instead (in the passport: nothing is written here). Returns True when it was
+    moved; BadPassport when its home point is the jail too. Call after inspect_passport()."""
+    block = passport["tables"]["chars"]
+    cols, row = block["cols"], block["rows"][0]
+    at = {name: cols.index(name) for name in cols}
+    if "pos_zone" not in at:
+        return False
+    in_house = row[at["pos_zone"]] == 0 and "pos_prevzone" in at       # (in a Mog House the area is the one it was entered from)
+    if row[at["pos_zone"]] != GAOL and not (in_house and row[at["pos_prevzone"]] == GAOL):
+        return False
+    if "home_zone" not in at or row[at["home_zone"]] in (None, 0, GAOL):
+        raise BadPassport(f"{passport['name']} cannot be taken in: it is in jail and has no home point to go to.")
+    row[at["pos_zone"]] = row[at["home_zone"]]
+    for here, there in (("pos_rot", "home_rot"), ("pos_x", "home_x"), ("pos_y", "home_y"), ("pos_z", "home_z")):
+        if here in at and there in at:
+            row[at[here]] = row[at[there]]
+    if "pos_prevzone" in at:
+        row[at["pos_prevzone"]] = row[at["home_zone"]]
+    return True
 
 
 # ----- one player, several PCs: a character (and its squad) carried from one world to another (2026-11-20) -----

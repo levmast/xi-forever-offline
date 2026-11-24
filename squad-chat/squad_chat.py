@@ -1319,6 +1319,41 @@ def active_profiles() -> list[str]:
     return [name for name in party if name in PROFILES]
 
 
+# (2026-11-23, Sunie: with the squad in her linkshell, a line she said to a bot there got an answer from a squad mate,
+# and so did her follow-up) a line said to someone who is not in the squad - a bot player, a friend, anyone named at the
+# start of it ("Hrokok are you still there?") - is left to them, and so are her next lines for a minute and a half,
+# until she names a squad mate (or "all").
+PARTNER = {"name": "", "at": 0.0}
+PARTNER_SECONDS = 90
+NOT_NAMES = {
+    "where", "what", "how", "why", "who", "when", "which", "yeah", "yes", "yep", "no", "nope", "ok", "okay", "hey", "hi",
+    "hello", "thanks", "thank", "well", "so", "and", "but", "the", "this", "that", "these", "those", "there", "here", "i",
+    "you", "we", "they", "he", "she", "it", "my", "your", "our", "can", "could", "do", "did", "does", "is", "are", "was",
+    "will", "would", "should", "let", "lets", "come", "go", "look", "good", "nice", "great", "oh", "ah", "hmm", "sure",
+    "alright", "all", "everyone", "anyone", "anybody", "just", "maybe", "please", "sorry", "guys", "team", "party",
+    "squad", "lol", "haha", "wow", "damn", "man", "dude", "boss", "time", "now", "then", "not", "if", "in", "on", "at",
+}
+ADDRESS_WORDS = {"are", "is", "can", "could", "do", "did", "will", "would", "you", "what", "where", "how", "have", "got",
+                 "i", "u", "r", "wanna", "want", "come", "lets", "let's", "thanks", "thank"}
+
+
+def addressed_other(text: str, pool: list[str]) -> str:
+    """The name of someone outside the squad this line speaks to, or ''."""
+    squad = {name.lower() for name in pool}
+    world = CONTEXT.get("world") or {}
+    others = {n.lower(): n for key in ("near", "friends", "party") for n in (world.get(key) or []) if n.lower() not in squad}
+    lowered = text.lower()
+    for low, name in others.items():
+        if re.search(rf"\b{re.escape(low)}\b", lowered):
+            return name
+    words = re.findall(r"[A-Za-z']+|,", text)
+    if len(words) >= 2 and words[0][:1].isupper() and len(words[0]) >= 3:
+        first = words[0].lower()
+        if first not in squad and first not in NOT_NAMES and (words[1] == "," or words[1].lower() in ADDRESS_WORDS):
+            return words[0]
+    return ""
+
+
 def choose_responders(text: str) -> list[str]:
     pool = active_profiles()
     if not pool:
@@ -1326,6 +1361,7 @@ def choose_responders(text: str) -> list[str]:
 
     lowered = text.lower()
     if "@all" in lowered or lowered.strip() in {"all", "everyone", "everybody"}:
+        PARTNER["name"] = ""
         names = list(pool)
         random.shuffle(names)
         return names[: int(CONFIG["reply"]["max_responders_all"])]
@@ -1335,7 +1371,16 @@ def choose_responders(text: str) -> list[str]:
         if re.search(rf"\b{re.escape(name.lower())}\b", lowered)
     ]
     if mentioned:
+        PARTNER["name"] = ""
         return mentioned[:1]
+
+    other = addressed_other(text, pool)
+    if other:
+        PARTNER["name"], PARTNER["at"] = other, time.time()
+        return []
+    if PARTNER["name"] and time.time() - PARTNER["at"] < PARTNER_SECONDS:
+        PARTNER["at"] = time.time()          # (still talking with them)
+        return []
 
     # A question is always worth an answer; anything else is a dice roll, so the squad talks without
     # turning every stray line into a reply.

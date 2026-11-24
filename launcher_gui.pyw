@@ -7,6 +7,7 @@ HERE = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.
 sys.path.insert(0, HERE)
 import launcher_core as core
 import launcher_gamepad as gp
+import launcher_revamped as rv
 
 IS_WINDOWS = os.name == "nt"
 UI_FONT, MONO_FONT = core.ui_fonts()
@@ -438,9 +439,10 @@ class CheckList(tk.Frame):
                 gone = tk.Label(head, text="Remove", bg=PANEL, fg=DIM, font=(UI_FONT, 8, "underline"), cursor="hand2")
                 gone.pack(side="left", padx=(10, 0))
                 gone.bind("<Button-1>", lambda e, n=n, o=origin: self.remove(n, o))
-            if info["desc"]:
-                tk.Label(row, text=info["desc"], bg=PANEL, fg=DIM, font=(UI_FONT, 9), wraplength=720, justify="left",
-                         anchor="w").grid(row=1, column=1, sticky="w", pady=(0, 4))
+            warning = core.addon_warning(self.kind, n)       # (PikaFox, Neet) an add-on that does harm on this server
+            if warning or info["desc"]:
+                tk.Label(row, text=warning or info["desc"], bg=PANEL, fg=RED if warning else DIM, font=(UI_FONT, 9), wraplength=720,
+                         justify="left", anchor="w").grid(row=1, column=1, sticky="w", pady=(0, 4))
             row.columnconfigure(1, weight=1)
             if self.extra is not None:
                 self.extra.on_row(self, row, n)
@@ -448,6 +450,11 @@ class CheckList(tk.Frame):
             self.extra.more_rows(self, wanted, names)
 
     def toggle(self, name, var):
+        warning = core.addon_warning(self.kind, name)
+        if warning and var.get() and not messagebox.askyesno("Switch " + name + " on?", warning + "\n\nSwitch it on anyway?",
+                                                             default="no", icon="warning"):
+            var.set(False)
+            return
         try:
             self.scripts.set(self.kind, name, var.get())
         except Exception as e:
@@ -892,6 +899,8 @@ class HoverTip:
             self.tip.destroy()
             self.tip = None
 
+
+REVAMPED_GREY_TIP = "Comes with Gambits Revamped / Squads Revamped"
 
 # Squad faces: the game's face numbers 0-15 are 1A, 1B, 2A ... 8B (char_entity.h CharFace)
 FACE_LABELS = [f"{i // 2 + 1}{'AB'[i % 2]}  ({i + 1})" for i in range(16)]
@@ -1767,7 +1776,7 @@ class RatesTab(tk.Frame):
         for k in (3, 1, 4, 5, 34, 35, 6, 7, 8, 9, 10, 11, 12, 13, 14, 28, 36, 37, 38, 39):   # (28: bots pass all loot)
             R[k], row = row, row + 1
         row = header("Squad and AI", row)
-        for k in (15, 16, 19, 26, 29, 27, 21, 22, 17):   # (26: squad gear, you keep the item; 29: all gear; 27: training dummies)
+        for k in (15, 16, 19, 26, 29, 27, 21, 22, 17, 40):   # (26: squad gear, you keep the item; 29: all gear; 27: training dummies; 40: buff range)
             R[k], row = row, row + 1
         self.all_crafts = tk.BooleanVar(value=rates.get("all_crafts", True))
         tk.Checkbutton(inner, text="Every craft can reach 100 (off = only one, like the retail rule)", variable=self.all_crafts, bg=BG, fg=FG,
@@ -1818,14 +1827,37 @@ class RatesTab(tk.Frame):
         tk.Checkbutton(inner, text="Bot players: real characters (no game window) living in the nation towns - /sea, /check, invite them",
                        variable=self.bots, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
                        wraplength=520, justify="left").grid(row=R[11], column=0, columnspan=2, sticky="w", padx=6, pady=2)
-        tk.Label(inner, text="Bot roster (characters, 0-600)", bg=BG, fg=FG, anchor="w", width=38).grid(
+        tk.Label(inner, text="Bot roster (characters, 0-%d)" % core.BOTS_ROSTER_SAFE, bg=BG, fg=FG, anchor="w", width=38).grid(
             row=R[12], column=0, sticky="w", padx=6, pady=2)
         self.bots_roster = tk.StringVar(value=str(rates.get("bots_roster", 100)))
-        ttk.Spinbox(inner, from_=0, to=600, increment=50, textvariable=self.bots_roster, width=8).grid(row=R[12], column=1, padx=6, pady=2)
-        tk.Label(inner, text="Bots online at a time (0-550)", bg=BG, fg=FG, anchor="w", width=38).grid(
+        ttk.Spinbox(inner, from_=0, to=core.BOTS_ROSTER_MAX, increment=50, textvariable=self.bots_roster, width=8).grid(row=R[12], column=1, padx=6, pady=2)
+        tk.Label(inner, text="Bots online (0-%d; at most 60%% of the roster)" % core.BOTS_ONLINE_SAFE, bg=BG, fg=FG, anchor="w", width=42).grid(
             row=R[13], column=0, sticky="w", padx=6, pady=2)
         self.bots_online = tk.StringVar(value=str(rates.get("bots_online", 50)))
-        ttk.Spinbox(inner, from_=0, to=550, increment=10, textvariable=self.bots_online, width=8).grid(row=R[13], column=1, padx=6, pady=2)
+        ttk.Spinbox(inner, from_=0, to=core.BOTS_ONLINE_MAX, increment=10, textvariable=self.bots_online, width=8).grid(row=R[13], column=1, padx=6, pady=2)
+        # (2026-11-23, Meli) past the usual top value only after a warning (once per launcher session); "No" puts it back
+        self._bots_past_safe = False
+
+        def past_safe(var, safe, what):
+            def check(*_):
+                try:
+                    value = int(float(var.get()))
+                except (TypeError, ValueError):
+                    return
+                if value <= safe or self._bots_past_safe:
+                    return
+                if messagebox.askyesno("More bots than usual",
+                                       f"{value} {what} is more than the usual {safe}.\n\nEvery bot online is a character the "
+                                       "server moves, fights and talks for. Above the usual numbers a strong PC copes, "
+                                       "but the server can lag (monsters and mates react late) and starting takes longer.\n\n"
+                                       "Go past the usual top value?", icon="warning", parent=inner):
+                    self._bots_past_safe = True
+                else:
+                    var.set(str(safe))
+            var.trace_add("write", check)
+
+        past_safe(self.bots_roster, core.BOTS_ROSTER_SAFE, "bot characters")
+        past_safe(self.bots_online, core.BOTS_ONLINE_SAFE, "bots online")
         tk.Label(inner, text="Bots grow while you are away", bg=BG, fg=FG, anchor="w", width=38).grid(row=R[14], column=0, sticky="w", padx=6, pady=2)
         self.bots_growth = tk.StringVar(value=rates.get("bots_growth", "realistic"))
         ttk.Combobox(inner, values=["off", "realistic", "fast"], state="readonly", textvariable=self.bots_growth,
@@ -1838,6 +1870,10 @@ class RatesTab(tk.Frame):
         self.squad_call_cooldown = tk.StringVar(value=str(rates.get("squad_call_cooldown", 5)))
         ttk.Spinbox(inner, from_=0, to=30, increment=1, textvariable=self.squad_call_cooldown, width=8).grid(
             row=R[16], column=1, padx=6, pady=2)
+        tk.Label(inner, text="Buff range (retail or extended)", bg=BG, fg=FG, anchor="w", width=38).grid(row=R[40], column=0, sticky="w", padx=6, pady=2)
+        self.buff_range = tk.StringVar(value=rates.get("buff_range", "retail") if rates.get("buff_range") in core.BUFF_RANGES else "retail")
+        ttk.Combobox(inner, values=list(core.BUFF_RANGES), state="readonly", textvariable=self.buff_range, width=8).grid(
+            row=R[40], column=1, padx=6, pady=2)
         # One time per server: once a PLAY has used it, the switch is gone for good
         self.head_start_done = bool(rates.get("bots_head_start_done", False))
         self.bots_head_start = tk.BooleanVar(value=bool(rates.get("bots_head_start", False)) and not self.head_start_done)
@@ -1905,9 +1941,11 @@ class RatesTab(tk.Frame):
                        "given to them first. Off = gear has to be given once (trade it, or !squad give).",
                        variable=self.squad_all_gear, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
                        wraplength=520, justify="left").grid(row=R[29], column=0, columnspan=2, sticky="w", padx=6, pady=2)
-        self.training_dummies = tk.BooleanVar(value=rates.get("training_dummies", False))
+        self.training_dummies = tk.BooleanVar(value=rates.get("training_dummies", True))
+        self.training_dummies_explicit = bool(rates.get("training_dummies_explicit", False))   # set once the player flips the switch
+        self.training_dummies.trace_add("write", lambda *_: setattr(self, "training_dummies_explicit", True))
         tk.Checkbutton(inner, text="Training dummies (for testing): !sandbox puts dummies of level 1 to 99 in Rolanberry "
-                       "Fields that never die and never attack, to try out squads and gambits. Off = no dummies.",
+                       "Fields that never die and never attack, to try out squads and gambits. On by default; off = no dummies.",
                        variable=self.training_dummies, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
                        wraplength=520, justify="left").grid(row=R[27], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         self.short_quest_waits = tk.BooleanVar(value=rates.get("short_quest_waits", True))
@@ -2036,7 +2074,7 @@ class RatesTab(tk.Frame):
                  "event_harvest", "event_starlight", "event_egg_hunt", "event_horro", "event_sunbreeze") + tuple(core.EXTRAS_KEYS)
     TEXT_KEYS = (("crowds_per_zone", "crowds_size"), ("crowds_chat_amount", "crowds_chat_amount"),
                  ("crowds_field_parties", "crowds_field_parties"), ("bots_roster", "bots_roster"), ("bots_online", "bots_online"),
-                 ("bots_growth", "bots_growth"), ("squad_call_cooldown", "squad_call_cooldown"))
+                 ("bots_growth", "bots_growth"), ("buff_range", "buff_range"), ("squad_call_cooldown", "squad_call_cooldown"))
 
     def apply_values(self, values):
         """Puts a whole set of settings (a loaded profile) into the tab. Nothing is saved until PLAY."""
@@ -2134,7 +2172,10 @@ class RatesTab(tk.Frame):
         rates["bots"] = bool(self.bots.get())
         growth = self.bots_growth.get()
         rates["bots_growth"] = growth if growth in ("off", "realistic", "fast") else "realistic"
-        for key, var, lo, hi, default in (("bots_roster", self.bots_roster, 0, 600, 100), ("bots_online", self.bots_online, 0, 550, 50)):
+        buff = self.buff_range.get()
+        rates["buff_range"] = buff if buff in core.BUFF_RANGES else "retail"
+        for key, var, lo, hi, default in (("bots_roster", self.bots_roster, 0, core.BOTS_ROSTER_MAX, 100),
+                                          ("bots_online", self.bots_online, 0, core.BOTS_ONLINE_MAX, 50)):
             try:
                 rates[key] = max(lo, min(hi, int(float(var.get()))))
             except (TypeError, ValueError):
@@ -2146,6 +2187,7 @@ class RatesTab(tk.Frame):
         rates["spell_scrolls"] = bool(self.spell_scrolls.get())
         rates["squad_keep_gear"] = bool(self.squad_keep_gear.get())
         rates["training_dummies"] = bool(self.training_dummies.get())
+        rates["training_dummies_explicit"] = bool(self.training_dummies_explicit)
         rates["bots_pass_loot"] = bool(self.bots_pass_loot.get())
         for k in core.EXTRAS_KEYS:
             rates[k] = bool(getattr(self, k).get())
@@ -2345,6 +2387,19 @@ class GraphicsTab(tk.Frame):
             tk.Checkbutton(grid, text=text, variable=var, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG,
                            activeforeground=FG).grid(row=row, column=0, columnspan=4, sticky="w", pady=1)
             row += 1
+        # (2026-11-23, Dugahst) draw distance, through Ashita's drawdistance addon: a multiplier on the game's own
+        # (1 = as the game draws it, 0 = leave it alone). Far scenery and far people/monsters separately.
+        draw = core.load_draw(HERE)
+        self.draw_world = tk.StringVar(value=f"{draw['world']:g}")
+        self.draw_entity = tk.StringVar(value=f"{draw['entity']:g}")
+        label("Draw distance: scenery", row)
+        ttk.Spinbox(grid, from_=core.DRAW_LIMITS[0], to=core.DRAW_LIMITS[1], increment=0.5, textvariable=self.draw_world, width=7).grid(row=row, column=1, padx=4)
+        tk.Label(grid, text="0 = the game's own", bg=BG, fg=DIM, font=(UI_FONT, 8)).grid(row=row, column=2, columnspan=2, sticky="w", padx=4)
+        row += 1
+        label("Draw distance: characters", row)
+        ttk.Spinbox(grid, from_=core.DRAW_LIMITS[0], to=core.DRAW_LIMITS[1], increment=0.5, textvariable=self.draw_entity, width=7).grid(row=row, column=1, padx=4)
+        tk.Label(grid, text="x the game's own; 2-4 is plenty, more costs speed", bg=BG, fg=DIM, font=(UI_FONT, 8)).grid(row=row, column=2, columnspan=2, sticky="w", padx=4)
+        row += 1
 
         tk.Label(self, textvariable=self.warning, bg=BG, fg="#e0a030", wraplength=480, justify="left").pack(anchor="w", padx=10, pady=(2, 0))
         bar = tk.Frame(self, bg=BG)
@@ -2376,6 +2431,15 @@ class GraphicsTab(tk.Frame):
                 return
         messagebox.showinfo("Gamepad setup", "FFXI's gamepad setup tool (FFXiPadConfig.exe) was not found in the game "
                             "folder's Tools folders" + (f":\n{game}" if game else ".") , parent=self)
+
+    def collect_draw(self):
+        out = {}
+        for key, var in (("world", self.draw_world), ("entity", self.draw_entity)):
+            try:
+                out[key] = max(core.DRAW_LIMITS[0], min(core.DRAW_LIMITS[1], float(var.get())))
+            except (TypeError, ValueError):
+                out[key] = 0.0
+        return out
 
     def _reverse(self, table, text):
         return next((k for k, v in table.items() if v == text), None)
@@ -2618,6 +2682,52 @@ class UpdatesTab(tk.Frame):
         tk.Button(box, text="Run setup again...", command=self.setup_again, bg=PANEL2, fg=FG, relief="flat", padx=12, pady=5,
                   activebackground=BORDER, activeforeground=FG).pack(anchor="w", padx=12, pady=(0, 12))
 
+    # (2026-11-23) the Revamped switch: old Squads / old Gambits off, the Revamped versions on (launcher_revamped.py)
+    def build_revamped(self):
+        box = tk.Frame(self, bg=PANEL, highlightbackground=BORDER, highlightthickness=1)
+        box.pack(fill="x", padx=14, pady=(0, 6))
+        tk.Label(box, text="Revamped Squads and Gambits", bg=PANEL, fg=FG, font=(UI_FONT, 12, "bold")).pack(anchor="w", padx=12, pady=(10, 2))
+        self.revamped_text = tk.StringVar()
+        tk.Label(box, textvariable=self.revamped_text, bg=PANEL, fg=DIM, wraplength=880, justify="left",
+                 font=(UI_FONT, 9)).pack(anchor="w", padx=12, pady=(2, 4))
+        bar = tk.Frame(box, bg=PANEL)
+        bar.pack(anchor="w", padx=12, pady=(0, 12))
+        self.revamped_buttons = []
+        for text, value in (("Use the Revamped versions", "revamped"), ("Use the old versions", "stock")):
+            button = tk.Button(bar, text=text, command=lambda v=value: self.revamped_switch(v), bg=PANEL2, fg=FG, relief="flat",
+                               padx=12, pady=5, activebackground=BORDER, activeforeground=FG, disabledforeground=DIM)
+            button.pack(side="left", padx=(0, 8))
+            # (v0.3.3a) greyed out until a Revamped package is installed; the tip says where it comes from
+            HoverTip(button, lambda b=button: REVAMPED_GREY_TIP if str(b.cget("state")) == "disabled" else None)
+            self.revamped_buttons.append(button)
+        self.revamped_refresh()
+
+    def revamped_refresh(self):
+        kit, ashita = HERE, self.app.ashita
+        found = rv.detected(ashita)
+        if not found:
+            self.revamped_text.set("No Revamped Squads or Gambits package is installed, so nothing to switch. The old ones stay as they are.")
+            for button in self.revamped_buttons:
+                button.configure(state="disabled")
+            return
+        names = ", ".join("%s: %s" % (rv.TABLE[c]["label"], {"revamped": "Revamped", "stock": "old"}.get(rv.choice(kit, c), "not chosen")) for c in found)
+        self.revamped_text.set("Revamped is installed. Now: " + names + ". The old add-ons stay installed with their settings; "
+                               "only their lines in the start script are switched, and the change applies at the next launch.")
+        for button in self.revamped_buttons:
+            button.configure(state="normal")
+
+    def revamped_switch(self, value):
+        found = rv.detected(self.app.ashita)
+        if not found:
+            return
+        try:
+            done = rv.choose(HERE, self.app.ashita, found, value)
+        except Exception as e:
+            messagebox.showerror("Revamped", "Could not change the start script: %s" % e)
+            return
+        self.revamped_refresh()
+        messagebox.showinfo("Revamped", ("Done. " if done else "Already set. ") + "Takes effect the next time the game starts.")
+
     def build_clear_ah(self):
         """(delukard, 2026-11-22) An empty auction house for a world that plays without one: switching the simulator
         off only stops new stock, what it listed before stays."""
@@ -2717,6 +2827,8 @@ class UpdatesTab(tk.Frame):
         self.player = bool(app.cfg.get("mariadb_dir"))      # a player install (first-run setup); else this is the dev PC
         if self.player:
             self.build_setup_again()
+        if app.ashita and os.path.isdir(app.ashita):
+            self.build_revamped()
         self.build_clear_ah()
         try:                                                # (2026-11-22, Sunie) the AI hood: only where its switch file is
             import launcher_hood
@@ -3039,23 +3151,33 @@ class UpdatesTab(tk.Frame):
                  bg=BG, fg=DIM, wraplength=900, justify="left", font=(UI_FONT, 9)).pack(anchor="w", padx=14, pady=(0, 6))
         bar = tk.Frame(self, bg=BG)
         bar.pack(anchor="w", padx=14)
-        for text, command in (("Check for updates", lambda: self.player_check(False)), ("Update now", self.player_update)):
+        for text, command in (("Check for updates", lambda: self.player_check(False)), ("Update now", self.player_update),
+                              ("Repair...", self.player_repair)):
             button = tk.Button(bar, text=text, command=command, bg=PANEL, fg=FG, relief="flat", padx=14, pady=6)
             button.pack(side="left", padx=(0, 8))
             self.buttons.append(button)
         self.test_builds = tk.BooleanVar(value=bool(self.app.cfg.get("test_builds", False)))
         tk.Checkbutton(bar, text="Get test builds (pre-releases)", variable=self.test_builds, command=self.save_test_builds,
                        bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG).pack(side="left", padx=(8, 0))
+        tk.Label(bar, text="Beta groups:", bg=BG, fg=DIM).pack(side="left", padx=(14, 4))
+        groups = self.app.cfg.get("beta_groups") or ""
+        self.beta_groups = tk.StringVar(value=", ".join(groups) if isinstance(groups, list) else str(groups))
+        entry = tk.Entry(bar, textvariable=self.beta_groups, width=24, bg=PANEL, fg=FG, insertbackground=FG, relief="flat")
+        entry.pack(side="left")
+        entry.bind("<FocusOut>", lambda _e: self.save_test_builds())
+        entry.bind("<Return>", lambda _e: self.save_test_builds())
         self.update_info = None
 
     def save_test_builds(self):
         import json
         self.app.cfg["test_builds"] = bool(self.test_builds.get())
+        self.app.cfg["beta_groups"] = [g.strip() for g in self.beta_groups.get().split(",") if g.strip()]
         try:
             path = os.path.join(HERE, "config.json")
             with open(path, encoding="utf-8-sig") as handle:
                 cfg = json.load(handle)
             cfg["test_builds"] = self.app.cfg["test_builds"]
+            cfg["beta_groups"] = self.app.cfg["beta_groups"]
             with open(path, "w", encoding="utf-8") as handle:
                 json.dump(cfg, handle, indent=2)
         except (OSError, ValueError) as e:
@@ -3091,6 +3213,37 @@ class UpdatesTab(tk.Frame):
                                "Your settings, characters and squad mates are kept, and your database is saved first."):
             self.player_update()
 
+    def player_repair(self):
+        """(2026-11-23, Reika, Ryan: an update stopped halfway, then the server stopped at PLAY, or "you have ?" and
+        Update now did nothing) installs the newest launcher and server again over what is there, database update
+        included, as an update would. Settings, characters and squad mates are kept; the database is saved first."""
+        if self.app.running:
+            messagebox.showwarning("Close the game first", "The servers are running. Close the game (it stops the servers), then repair.")
+            return
+        if self.busy:
+            return
+        if not messagebox.askyesno("Repair", "Install the newest launcher and server again, over the ones you have?\n\n"
+                                   "Use this when an update stopped halfway, or the server stops at PLAY after one. Your "
+                                   "settings, characters and squad mates are kept, and your database is saved first. "
+                                   "The launcher restarts at the end.", parent=self):
+            return
+
+        def work():
+            try:
+                import launcher_update as lu
+                import launcher_thirdparty as tp
+                info = lu.check(HERE, self.app.cfg.get("server_dir"), bool(self.app.cfg.get("test_builds")), tp._get)
+            except Exception as e:
+                self.lines.put(("line", f"Could not reach the releases: {e}"))
+                return
+            for key in ("kit", "server"):
+                info[key]["newer"] = bool(info[key].get("release"))
+            self.update_info = info
+            self.lines.put(("line", "Repair: installing " + ", ".join(
+                f"{label} {info[key]['newest']}" for key, label in (("kit", "launcher"), ("server", "server")) if info[key]["newer"]) + " again..."))
+            self.after(0, self.player_update)
+        threading.Thread(target=work, daemon=True).start()
+
     def player_update(self):
         if self.app.running:
             messagebox.showwarning("Close the game first", "The servers are running. Close the game (it stops the servers), then update.")
@@ -3105,6 +3258,11 @@ class UpdatesTab(tk.Frame):
         for button in self.buttons:
             button.configure(state="disabled")
         cfg = self.app.cfg
+        try:        # (Hasuko: "Update stopped: [WinError 5] Access is denied ... xifo_theme...mp3") the theme song's file stays
+            import launcher_theme               # open while it plays and after it ends, and Windows will not replace an open
+            launcher_theme.PLAYER.stop()        # file. Stopped here, on the window's own thread (the player belongs to it).
+        except Exception:
+            pass
 
         def work():
             restart = False
@@ -3509,6 +3667,7 @@ class App(tk.Tk):
         self.build_ui()
         self.after(200, self.pump)
         self.after(1000, self.lights)
+        self.after(1800, self.revamped_prompt)
         self.after(PICTURE_SECONDS * 1000, self.next_picture)
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         if self.cfg.get("game_update_needed"):     # installed with Square Enix's installer: its first update comes first
@@ -3916,6 +4075,8 @@ class App(tk.Tk):
         With the CO-OP button in the bottom bar the window is a little wider, so the bar fits."""
         page = self.tabs.tab(getattr(self, "current_index", 0), "text").strip() if self.tabs.tabs() else ""
         width, height = (1100 if getattr(self, "coop_tab", None) is not None else 980), 810
+        if page.upper().startswith("CO-OP") or page.lower().startswith("co-op"):     # (2026-11-23) the worlds page is roomier
+            width, height = 1240, 900
         if linux is not None:     # the Steam Deck's screen is 1280 x 800: never taller (or wider) than the screen
             width = min(width, self.winfo_screenwidth())
             height = min(height, self.winfo_screenheight() - (0 if linux.in_game_mode() else 40))
@@ -3973,6 +4134,7 @@ class App(tk.Tk):
         scroll.pack(side="right", fill="y")
         self.dl_busy = False
         self.show_downloads()
+        self.after(5000, self.check_downloads_quietly)
 
     def show_downloads(self, newer=None):
         for widget in self.dl_rows.winfo_children():
@@ -3992,7 +4154,7 @@ class App(tk.Tk):
             tk.Label(self.dl_rows, text=item["name"], bg=BG, fg=FG, font=(UI_FONT, 10, "bold"), anchor="w").grid(
                 row=row * 2, column=0, sticky="w", pady=(6, 0))
             text = ("installed " + version) if installed else "not installed"
-            if newer and newer.get(item["id"]) and newer[item["id"]] != version:
+            if newer and newer.get(item["id"]) and tp.is_newer(newer[item["id"]], version):
                 text += f"  (newer: {newer[item['id']]})"
             tk.Label(self.dl_rows, text=text, bg=BG, fg=GREEN if installed else DIM, anchor="w").grid(
                 row=row * 2, column=1, sticky="w", padx=10, pady=(6, 0))
@@ -4020,12 +4182,38 @@ class App(tk.Tk):
                           command=lambda i=item: self.remove_ollama(i)).grid(row=row * 2 + 1, column=2, sticky="w")
             link = tk.Label(self.dl_rows, text="home page", bg=BG, fg=ACCENT, cursor="hand2")
             link.grid(row=row * 2, column=3, sticky="w", padx=10, pady=(6, 0))
+            if installed and not item.get("required") and (state.get(item["id"]) or {}).get("files"):
+                tk.Button(self.dl_rows, text="Uninstall", relief="flat", bg=PANEL, fg=FG, padx=10,
+                          command=lambda i=item: self.uninstall_download(i)).grid(row=row * 2, column=4, sticky="w", pady=(6, 0))
             link.bind("<Button-1>", lambda e, url=item["homepage"]: self.open_url(url))
+            if item["id"] == "xipivot":             # (2026-11-22) HD texture packs: what most players want XIPivot for
+                tk.Button(self.dl_rows, text="HD packs and music...", relief="flat", bg=PANEL, fg=GOLD, padx=10,
+                          command=self.open_hd_packs).grid(row=row * 2 + 1, column=3, sticky="w", padx=10)
             info = f"by {item['author']} - license: {item['license']}" + (f" - {item['note']}" if item.get("note") else "")
             # (the description spans the name and status columns only: across all four it was drawn over the
             #  buttons in column 2 of this row, e.g. XIPivot's on/off switch, sparkiie 2026-11-17)
             tk.Label(self.dl_rows, text=info, bg=BG, fg=DIM, font=(UI_FONT, 9), anchor="w", wraplength=520,
                      justify="left").grid(row=row * 2 + 1, column=0, columnspan=2, sticky="w")
+
+    def open_hd_packs(self):
+        """(2026-11-22, the user) HD texture packs through XIPivot: the player downloads a pack from Nexus Mods himself;
+        the window (launcher_hd_gui.py) finds the file, unpacks it into Ashita's XIPivot folder and switches it on."""
+        try:
+            import launcher_hd_gui
+            window = launcher_hd_gui.open_window(
+                self, HERE, self.ashita, self.boot_ini,
+                {"bg": BG, "panel": PANEL, "fg": FG, "dim": DIM, "accent": ACCENT, "green": GREEN, "red": RED, "gold": GOLD, "font": UI_FONT},
+                say=self.say, running=lambda: bool(getattr(self, "running", False)), core=core)
+
+            def closed(event):                      # XIPivot's own switch on this page may have changed meanwhile
+                if event.widget is window:
+                    try:
+                        self.show_downloads()
+                    except Exception:
+                        pass
+            window.bind("<Destroy>", closed, add="+")
+        except Exception as e:
+            messagebox.showerror("HD texture packs", f"The HD texture packs window could not be opened: {e}")
 
     def toggle_polplugin(self, item, on):
         try:
@@ -4096,6 +4284,9 @@ class App(tk.Tk):
         if self.dl_busy:
             self.say("A download is already running.")
             return
+        # (2026-11-23) a big download (XISpeaks, about 2.9 GB) asks first, so nobody fetches gigabytes by one stray click
+        if item.get("confirm") and not messagebox.askyesno("Downloads", item["confirm"]):
+            return
         if item.get("into") == "server" and self.running:
             messagebox.showinfo("Downloads", "Stop the servers first (close the game), then update the server.")
             return
@@ -4112,7 +4303,9 @@ class App(tk.Tk):
         def work():
             # (Altair 2026-11-19: Reinstall / update showed nothing, its lines only went to the LOGS panel on the Play page)
             try:
-                version = tp.install(item, HERE, self.ashita, log=self.say, server=self.cfg.get("server_dir"))
+                version = tp.install(item, HERE, self.ashita, log=self.say, server=self.cfg.get("server_dir"),
+                                     keep_download=bool(self.cfg.get("keep_downloads", False)),
+                                     remove_old=bool(self.cfg.get("remove_old_files", True)))
                 done = f"{item['name']} {version} is ready."
             except Exception as e:
                 done = f"{item['name']}: not installed ({e})."
@@ -4121,6 +4314,19 @@ class App(tk.Tk):
             self.after(0, self.show_downloads)
             self.after(0, lambda: messagebox.showinfo("Add-ons", done))
         threading.Thread(target=work, daemon=True).start()
+
+    def uninstall_download(self, item):
+        if self.running:
+            messagebox.showinfo("Downloads", "Close the game first.")
+            return
+        if not messagebox.askyesno("Downloads", f"Remove {item['name']}? The files it installed are copied to backups\\thirdparty first; "
+                                   "your own settings and files are left alone."):
+            return
+        try:
+            tp.uninstall(item, HERE, self.ashita, server=self.cfg.get("server_dir"), log=self.say)
+        except Exception as e:
+            messagebox.showinfo("Downloads", f"{item['name']}: not removed ({e}).")
+        self.show_downloads()
 
     def apply_download_patch(self, item):
         try:
@@ -4147,16 +4353,37 @@ class App(tk.Tk):
                 self.say(f"Era-DATs: not installed ({e}).")
         threading.Thread(target=work, daemon=True).start()
 
-    def check_download_updates(self):
+    def check_download_updates(self, quiet=False):
+        """The "Check for newer versions" button (always asks GitHub), and the quiet check at launcher start (quiet=True:
+        asks at most every 6 hours, speaks only in the log, never in a pop-up)."""
         def work():
-            newer = {}
-            for item in tp.load_manifest(HERE):
-                tag = tp.latest_version(item)
-                if tag:
-                    newer[item["id"]] = tag
-            self.say("Checked the release pages for newer versions.")
-            self.after(0, lambda: self.show_downloads(newer))
+            try:
+                items = tp.load_manifest(HERE)
+                versions = tp.installed_versions(items, HERE, self.ashita, self.cfg.get("server_dir"))
+                newer, problems, asked = tp.check_downloads(HERE, items, versions, force=not quiet)
+            except Exception as e:
+                newer, problems, asked = {}, [f"The check stopped: {e}"], True
+            for line in problems:                 # (a limit GitHub sets, no network, ...) said out loud, never "nothing newer"
+                self.say(line)
+            if quiet:
+                if newer:
+                    names = {i["id"]: i["name"] for i in items}
+                    self.say("Newer versions are out for: " + ", ".join(names.get(k, k) for k in newer)
+                             + " (Downloads: Reinstall / update).")
+            else:
+                self.say("Checked the release pages for newer versions." if not problems else
+                         "The check for newer versions could not be finished (see above).")
+                if problems:
+                    self.after(0, lambda: messagebox.showinfo("Check for newer versions", "\n\n".join(problems)))
+            if not quiet or asked or newer:
+                self.after(0, lambda: self.show_downloads(newer))
         threading.Thread(target=work, daemon=True).start()
+
+    def check_downloads_quietly(self):
+        """At launcher start (player installs, like the launcher's own update check): are there newer versions of the
+        downloads the player has installed? Off with "check_downloads_on_start": false in config.json."""
+        if self.cfg.get("check_downloads_on_start", True) and self.cfg.get("mariadb_dir"):
+            self.check_download_updates(quiet=True)
 
     def add_note(self, tabs, title, text):
         page = tk.Frame(tabs, bg=BG)
@@ -4277,7 +4504,67 @@ class App(tk.Tk):
         else:
             self.summary.set("World asleep")
             self.summary_dot.configure(fg=GREY)
+        self.stinkshell_tick()
+        self.companion_tick()
         self.after(1000, self.lights)
+
+    def companion_tick(self):
+        """(2026-11-23, XISpeaks) Downloads with a "companion" program (thirdparty.json): it runs while the world is up and
+        the item's add-on is ticked on the Addons page, and is closed when either stops. Started at most 3 times per
+        session, so a companion that keeps failing is not restarted forever. Checked every 5 seconds."""
+        if getattr(self, "_stink_count", 0) % 5 or not self.ashita:
+            return
+        try:
+            procs = self.__dict__.setdefault("companions", {})
+            tries = self.__dict__.setdefault("companion_tries", {})
+            items = [i for i in tp.load_manifest(HERE) if i.get("companion")]
+            if not items and not procs:
+                return
+            on = core.ScriptManager(self.ashita, self.cfg.get("ashita_boot", core.DEFAULT_BOOT)).enabled("addon") if items else set()
+            for item in items:
+                place = tp.place(item)
+                exe = os.path.join(self.ashita, *item["companion"].split("/"))
+                proc = procs.get(item["id"])
+                alive = proc is not None and proc.poll() is None
+                want = bool(self.running) and place is not None and place[1] in on and os.path.isfile(exe)
+                if want and not alive and tries.get(item["id"], 0) < 3:
+                    tries[item["id"]] = tries.get(item["id"], 0) + 1
+                    procs[item["id"]] = subprocess.Popen([exe], cwd=os.path.dirname(exe),
+                                                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                    self.q.put(("log", f"{item['name']}: started its voice program."))
+                elif not want and alive:
+                    proc.terminate()
+                    procs.pop(item["id"], None)
+        except Exception as e:
+            print("companion:", e)
+
+    def stop_companions(self):
+        for proc in list(getattr(self, "companions", {}).values()):
+            try:
+                if proc.poll() is None:
+                    proc.terminate()
+            except Exception:
+                pass
+
+    def stinkshell_tick(self):
+        """(2026-11-23) Stinkshell, the online chat room: its bridge runs only while the stinkshell add-on is switched on
+        (OPTIONS > Addons; off by default). Checked every 5 seconds."""
+        self._stink_count = getattr(self, "_stink_count", 0) + 1
+        if self._stink_count % 5 or not self.ashita:
+            return
+        try:
+            import launcher_stinkshell as stink
+            on = stink.addon_on(self.ashita, self.cfg.get("ashita_boot", core.DEFAULT_BOOT))
+            bridge = getattr(self, "stink_bridge", None)
+            if on and bridge is None:
+                self.stink_bridge = stink.Bridge(HERE, self.ashita, log=lambda text: self.q.put(("log", text)))
+                self.stink_bridge.start()
+                self.q.put(("log", "Stinkshell is on: the chat room is connected through the internet."))
+            elif not on and bridge is not None:
+                bridge.stop()
+                self.stink_bridge = None
+        except Exception as e:
+            print("stinkshell:", e)
 
     # ----- buttons -----
     def start(self):
@@ -4289,6 +4576,9 @@ class App(tk.Tk):
             if visit == "cancel":
                 return
         if self.cfg.get("game_update_needed"):
+            if self.offer_game_files("Your game hasn't had its first update yet (Square Enix's installer puts in an "
+                                     "older version)."):
+                return
             if messagebox.askyesno("Update the game first", "Your game hasn't had its first update yet (Square Enix's "
                                    "installer puts in an older version). Show the steps?\n\nNo = play anyway.", parent=self):
                 PolUpdateGuide(self)
@@ -4306,12 +4596,31 @@ class App(tk.Tk):
                 core.save_graphics(HERE, self.graphics)
             except OSError:
                 pass
+            try:                               # (2026-11-23) draw distance: a block at the end of the start script
+                draw = self.graphics_tab.collect_draw()
+                core.save_draw(HERE, draw)
+                if self.scripts is not None:
+                    core.apply_draw(self.scripts.path, draw)
+            except Exception as e:
+                self.say(f"Could not set the draw distance ({e}) - starting anyway.")
         if self.pad_tab is not None:
             self.gamepad = self.pad_tab.collect()
             try:
                 gp.save(HERE, self.gamepad)
             except OSError:
                 pass
+        try:                                   # (2026-11-23) small fixes to downloaded add-ons (thirdparty.json "fixups")
+            for item in tp.load_manifest(HERE):
+                if item.get("fixups") and self.ashita:
+                    tp.apply_fixups(item, self.ashita, self.say)
+        except Exception:
+            pass
+        try:                                   # (2026-11-23) XIPivot's root_path left pointing at a folder that moved
+            import launcher_hd
+            if self.ashita and launcher_hd.fix_root(self.ashita):
+                self.say("XIPivot was looking for its packs in a folder that is gone (the game folder moved): fixed.")
+        except Exception:
+            pass
         self.running, self.stop_requested = True, False
         self.pending_visit = visit
         self.play_btn.configure(state="disabled")
@@ -4332,17 +4641,21 @@ class App(tk.Tk):
         if not info.get("too_old"):
             return False
         have, need = lg.build_text(info["build"]), lg.MONTHS[lg.MIN_GAME_BUILD[1] - 1] + f" {lg.MIN_GAME_BUILD[0]}"
+        where = "XI: Forever Offline's copy of FINAL FANTASY XI" if info.get("copy") else "Your FINAL FANTASY XI"
+        if self.offer_game_files(f"{where} is the {have} version, older than the {need} update the server needs (older "
+                                 "games crash opening Equipment and can freeze at some NPCs)."):
+            return True
         if linux is not None:                 # Linux: the game is updated on the Windows PC, then copied over again
             if not info.get("copy"):
                 messagebox.showinfo("Update FINAL FANTASY XI", f"Your FINAL FANTASY XI is the {have} version, older than "
                                     f"the {need} update the server needs (older games crash opening Equipment). Update it "
-                                    "on the Windows PC (PlayOnline), copy its SquareEnix folder over this one again, "
-                                    "then press PLAY.", parent=self)
+                                    "where you installed it (PlayOnline, on Windows or through Steam / Proton here), copy "
+                                    "its SquareEnix folder over this one again, then press PLAY.", parent=self)
                 return False
             if messagebox.askyesno("Update your game copy", f"XI: Forever Offline's copy of FINAL FANTASY XI is the {have} "
                                    f"version, older than the {need} update the server needs (older games crash opening "
-                                   "Equipment and can freeze at some NPCs).\n\nUpdate the game on the Windows PC "
-                                   "(PlayOnline), copy its SquareEnix folder here again, then choose it: only changed files "
+                                   "Equipment and can freeze at some NPCs).\n\nUpdate the game where you installed it "
+                                   "(PlayOnline, on Windows or through Steam / Proton here), copy its SquareEnix folder here again, then choose it: only changed files "
                                    "are copied; your era files stay.\n\nChoose the updated folder now? No = play anyway.",
                                    parent=self):
                 folder = filedialog.askdirectory(title="The updated SquareEnix folder", parent=self)
@@ -4383,6 +4696,52 @@ class App(tk.Tk):
             return True
         return False
 
+    def offer_game_files(self, why):
+        """(2026-11-23) Offers to bring the game up to date from XI: Forever Offline's own release of the game files
+        (launcher_gamefiles.py). True when the update was started (PLAY waits for it); False when the release can't be
+        reached or the player said no, so the PlayOnline ways are offered as before."""
+        try:
+            import launcher_game as lg
+            import launcher_gamefiles as gf
+            ffxi, viewer = self.cfg.get("ffxi_client_dir", ""), lg.viewer_dir(self.cfg)
+            if not ffxi or not viewer or not os.path.isdir(ffxi):
+                return False
+            manifest = gf.fetch_manifest(context=tp.ssl_context(), timeout=10)
+        except Exception:
+            return False
+        most = sum(b["size"] for b in manifest["bundles"]) / 2**30
+        if not messagebox.askyesno("Update FINAL FANTASY XI", f"{why}\n\nDownload the newest game files from XI: "
+                                   f"Forever Offline now? Only the files that changed are downloaded (at most "
+                                   f"{most:.1f} GB). Your era files and your game settings stay.\n\nNo = other ways "
+                                   "to update.", parent=self):
+            return False
+        self.play_btn.configure(state="disabled")
+        self.progress.start(14)
+
+        def work():
+            done = False
+            try:
+                gf.update(HERE, ffxi, viewer, log=self.say, context=tp.ssl_context(), manifest=manifest)
+                done = True
+                self.say("The game is up to date. Press PLAY.")
+            except Exception as e:
+                self.say(f"Could not update the game: {e}  Press PLAY to try again (finished parts are kept).")
+
+            def finish():
+                self.progress.stop()
+                self.play_btn.configure(state="normal")
+                self.age_checked = False
+                if done:
+                    self.cfg.pop("game_update_needed", None)
+                    try:
+                        save_config_value("game_update_needed", None)
+                    except (OSError, ValueError):
+                        pass
+            self.after(0, finish)
+
+        threading.Thread(target=work, daemon=True).start()
+        return True
+
     def refresh_game_copy(self, retail):
         import launcher_game as lg
         self.play_btn.configure(state="disabled")
@@ -4409,6 +4768,7 @@ class App(tk.Tk):
             if not self.coop_tab.may_close():      # visitors' characters are still in this world
                 return
             self.coop_tab.shutdown()
+        self.stop_companions()
         # (2026-11-21, Tasou: "Squad gets all gear" was unticked again after a restart) the Rules page is kept on quit too,
         # not only when PLAY is pressed
         try:
@@ -4481,6 +4841,11 @@ class App(tk.Tk):
             _upd.prune_updates(HERE, log=self.say)
         except Exception as e:
             self.say(f"Could not tidy the old update downloads ({e}).")
+        try:                                  # downloads/<id> folders an install left behind (nothing touched them for 7 days)
+            if not cfg.get("keep_downloads"):
+                tp.prune_downloads(HERE, log=self.say)
+        except Exception as e:
+            self.say(f"Could not tidy the old downloads ({e}).")
 
         try:                                  # (2026-11-19) Gambits -> autobox, GambitsV2 -> Gambits: once, every install
             import launcher_setup as _names
@@ -4662,7 +5027,13 @@ class App(tk.Tk):
             self.launch_ashita()
         finally:
             self.visit_mode = False
-        self.say(f"{visit['name']} stays in {world} until you press COME HOME on the CO-OP page.")
+        # (2026-11-23, the user: "when you log out it takes your character back, I don't want you to have to press a
+        #  button") the game closed: the character comes home by itself
+        if getattr(self, "coop_tab", None) is not None and self.cfg.get("coop_auto_home", True):
+            self.say(f"Bringing {visit['name']} home from {world}...")
+            self.coop_tab.home_after_game(visit)
+        else:
+            self.say(f"{visit['name']} stays in {world} until you press COME HOME on the CO-OP page.")
 
     def wait_for_map(self):
         """Waits for the map server to say it is ready, showing the seconds so far. It waits as long as the map log keeps growing (the first
@@ -4710,6 +5081,7 @@ class App(tk.Tk):
             except Exception as e:
                 self.say(f"Could not apply the graphics settings ({e}) - starting with the boot file as it is.")
         self.apply_gamepad()
+        self.apply_revamped()
         self.say("Starting the game through Ashita...")
         alog = open(os.path.join(LOGS, "ashita.log"), "wb")
         self.logfiles.append(alog)
@@ -4738,6 +5110,35 @@ class App(tk.Tk):
             time.sleep(2)
         self.say("Game closed.")
         self.explain_quick_close(began)
+
+    def apply_revamped(self):
+        """Before every game start: the start scripts follow the saved Revamped choice (launcher_revamped.py)."""
+        try:
+            for line in rv.apply(HERE, self.ashita):
+                self.say("Revamped switch: " + line)
+        except Exception as e:
+            self.say("Could not apply the Revamped choice (%s) - starting with the scripts as they are." % e)
+
+    def revamped_prompt(self):
+        """Once, at launcher start, when a Revamped package (not just a shell) is installed and nothing was chosen."""
+        try:
+            if not self.ashita:
+                return
+            ask = rv.to_ask(HERE, self.ashita)
+            if not ask:
+                return
+            if messagebox.askyesno("Revamped", rv.question(ask) + "\n\nYes: the old ones stop loading and the Revamped ones load at every "
+                                   "start (the old add-ons stay installed). No: nothing changes and this is not asked again; "
+                                   "SYSTEM has a button to switch later."):
+                for line in rv.choose(HERE, self.ashita, ask, "revamped"):
+                    print("Revamped switch: " + line)
+            else:
+                rv.declined(HERE, self.ashita)
+            page = getattr(self, "updates_tab", None)
+            if page is not None and hasattr(page, "revamped_refresh"):
+                page.revamped_refresh()
+        except Exception as e:
+            print("Revamped question skipped: %s" % e)
 
     def apply_game_lang(self, boot):
         """(2026-11-22, Sirloinofbeef) Windows: an EU or JP game is named to the loader and Ashita in the boot file, so
@@ -4865,6 +5266,7 @@ class App(tk.Tk):
             linux.start_game(HERE, self.cfg, self.ashita, boot, log)
             return
         self.apply_game_lang(boot)
+        self.apply_revamped()
         subprocess.Popen([cli, boot], cwd=self.ashita, stdout=log, stderr=subprocess.STDOUT, creationflags=core.NO_WINDOW)
 
     def apply_gamepad(self):
@@ -4891,6 +5293,16 @@ class App(tk.Tk):
 
     def start_gm(self):
         """Opens the game as the GM account (set up on the Settings page). With the servers off it starts them too, like PLAY."""
+        if not self.cfg.get("ashita_boot_gm"):
+            # (2026-11-23, Oldboy: "The GM account is not set up yet" right after setting it up) 'Set up GM account' writes
+            # config.json from its own process; this window still had the settings it read when it opened
+            try:
+                fresh = core.load_config(os.path.join(HERE, "config.json"))
+                for key in ("ashita_boot_gm", "game_user_gm", "game_pass_gm"):
+                    if fresh.get(key) and not self.cfg.get(key):
+                        self.cfg[key] = fresh[key]
+            except Exception:
+                pass
         boot = self.cfg.get("ashita_boot_gm")
         path = os.path.join(self.ashita, "config", "boot", boot) if (self.ashita and boot) else ""
         if not path or not os.path.exists(path):
@@ -5439,9 +5851,10 @@ class SetupWizard(tk.Tk):
         self.text("This sets up everything here: the game files, the game add-on loader (Ashita), Proton (runs the "
                   "Windows game on Linux), the game server and a small database. It takes a while and needs an internet "
                   "connection for the downloads (about 2 GB).")
-        self.text("FINAL FANTASY XI comes from a Windows PC: copy its SquareEnix folder (inside PlayOnline in Program Files, "
-                  "with PlayOnlineViewer and FINAL FANTASY XI in it) to a USB stick or this machine, then choose it below. "
-                  "Update the game on the Windows PC first (PlayOnline, once).", fg=FG)
+        self.text("FINAL FANTASY XI: choose its SquareEnix folder (the one with PlayOnlineViewer and FINAL FANTASY XI in it). "
+                  "It can come from a Windows PC (inside PlayOnline in Program Files, copied to a USB stick or this machine), "
+                  "or from the game installed on this machine: the Steam version, or the official installer from "
+                  "playonline.com run through Proton or Wine. Update the game first (PlayOnline, once).", fg=FG)
         for key, label, about in (
                 ("copy", "Copy the game into XI: Forever Offline's folder (recommended)",
                  "The folder you choose stays as it is (a USB stick can be unplugged afterwards). Needs about 16 GB free."),
@@ -5554,8 +5967,8 @@ class SetupWizard(tk.Tk):
         if self.page == 0 and linux is not None:
             ffxi, viewer = linux.find_game_parts(self.ffxi.get())
             if not ffxi or not viewer:
-                return ("Choose the folder with both FINAL FANTASY XI and PlayOnlineViewer in it (the SquareEnix folder "
-                        "copied from a Windows PC).")
+                return ("Choose the folder with both FINAL FANTASY XI and PlayOnlineViewer in it (the SquareEnix folder, "
+                        "from a Windows PC or from the game installed here through Steam or Proton).")
             return None
         if self.page == 0:
             if self.game.get() != "official" and not self.setup.valid_ffxi(self.ffxi.get()):
@@ -5718,7 +6131,10 @@ def main():
             import launcher_theme
             launcher_theme.start(app)
         except Exception:
-            pass
+            try:                                  # (2026-11-23) the reason the song (and theme strip) did not come, in logs\theme-music.log
+                launcher_theme.note("start failed: " + traceback.format_exc().strip().replace("\n", " | "))
+            except Exception:
+                pass
         app.mainloop()
     except Exception:
         os.makedirs(LOGS, exist_ok=True)
