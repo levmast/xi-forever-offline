@@ -862,8 +862,23 @@ def world_rules(kit):
             return float(rates.get(key, default))
         except (TypeError, ValueError):
             return default
-    return {"exp": number("map.EXP_RATE"), "drops": number("map.DROP_RATE_MULTIPLIER"), "skill": number("map.SKILLUP_CHANCE_MULTIPLIER"),
-            "bots": bool(rates.get("bots", False)), "bots_online": int(number("bots_online", 0))}
+    out = {"exp": number("map.EXP_RATE"), "drops": number("map.DROP_RATE_MULTIPLIER"), "skill": number("map.SKILLUP_CHANCE_MULTIPLIER"),
+           "bots": bool(rates.get("bots", False)), "bots_online": int(number("bots_online", 0))}
+    try:                                        # (2026-11-23) HARDCORE menu: this world takes hardcore visitors only
+        import launcher_hardcore
+        out["hardcore_only"] = bool(launcher_hardcore.settings(kit).get("hardcore_only"))
+    except Exception:
+        pass
+    try:                                        # bot chat through Google (crowds/ai_cloud.py, the hub): visitors are told
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("ai_cloud", os.path.join(kit, "crowds", "ai_cloud.py"))
+        cloud = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cloud)
+        if cloud.ready(kit) and out["bots"]:
+            out["ai_chat"] = "google"
+    except Exception:
+        pass
+    return out
 
 
 def describe_rules(rules):
@@ -872,6 +887,10 @@ def describe_rules(rules):
         return ("%g" % float(value)) + "x"
     parts = [f"experience {times(rules.get('exp', 1))}", f"drops {times(rules.get('drops', 1))}", f"skill-ups {times(rules.get('skill', 1))}"]
     parts.append("bot players on" if rules.get("bots") else "no bot players")
+    if rules.get("hardcore_only"):
+        parts.insert(0, "HARDCORE: Iron, Steel, Silver and Randomized characters only")
+    if rules.get("ai_chat") == "google":
+        parts.append("bot chat by Google's Gemma AI")
     return ", ".join(parts)
 
 

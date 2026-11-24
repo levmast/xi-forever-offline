@@ -28,6 +28,10 @@
 !/launcher_hd_gui.py
 # Stinkshell, the online chat room (off by default; its relay is dev/stinkshell/stinkshell_relay.py)
 !/launcher_stinkshell.py
+# Hardcore modes (Iron / Steel / Silver): the menu, and the three rate profiles (hardcore.json / hardcore_state.json stay yours)
+!/launcher_hardcore.py
+!/launcher_hardcore_gui.py
+!/hardcore_profiles.json
 !/launcher_revamped.py
 !/launcher_thirdparty.py
 !/launcher_setup.py
@@ -142,6 +146,7 @@
 !/addons-src/journal-era/
 !/addons-src/stinkshell/
 !/addons-src/autora/
+!/addons-src/hcicons/
 
 # ---- server modules (copies kept with the kit) ----
 !/squad-behavior/
@@ -227,3 +232,4 @@ Thumbs.db
 /art-src/faces/
 /dev/incoming/
 drawdistance.json
+/crowds/bots/modules/

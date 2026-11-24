@@ -8,6 +8,10 @@ key (X-Stink-Key); the relay keeps only a hash of it.
                                                          anyone else gets Name2, Name3...
   POST /say   {"name", "text"}    -> {"ok"} or {"error"} a line, or a /command (see below)
   GET  /poll?since=N              -> {"seq", "lines": [...], "people": [...]}  waits up to 25 s for something new
+  POST /announce {"kind", "name", "mode", "job", "level", "extra", "world"}   (2026-11-23) a hardcore milestone, Steel
+                                  delevel, Silver death or new hardcore run from a player's world: the relay writes the line
+                                  itself (no free text) as kind "hardcore", shown in the room and to the hub
+  GET  /announcements?since=N     -> {"seq", "lines": [...]}  the hardcore lines only, no waiting (the hub's launcher)
 Commands (typed in the chat): /who; owner and moderators: /mute Name [minutes], /unmute Name, /ban Name, /unban Name,
 /kick Name; owner only: /modcode (a new one-time moderator code), /unmod Name. Anyone: /login CODE (the owner code
 printed at the first start, or a moderator code).
@@ -33,6 +37,7 @@ ONLINE_FOR = 70            # seconds since the last poll: still in the room
 POLL_WAIT = 25
 RATE = (5, 10)             # at most 5 lines in 10 seconds
 NAME_RE = re.compile(r"^[A-Za-z]{2,15}$")
+HC_KINDS = ("milestone", "delevel", "death", "start", "grant")
 
 
 def clean(text, limit=MAX_TEXT):
@@ -50,6 +55,7 @@ class Room:
         self.data = data
         self.lock = threading.Condition()
         self.lines = []          # {seq, t, kind, screen, text, to}
+        self.announced = {}      # key hash -> times of its hardcore announcements (the last hour)
         self.seq = 0
         self.seen = {}           # keyhash -> {"screen", "t"}
         self.sent = {}           # keyhash -> [times]
@@ -143,6 +149,51 @@ class Room:
             return False
         self.sent[kh] = times + [now]
         return True
+
+    # ---------------------------------------------------------------- hardcore announcements (2026-11-23)
+    def announce(self, kh, body):
+        """A hardcore line from a player's world. The text is made here from checked fields, so nobody can post free
+        text this way. At most 12 an hour per launcher."""
+        if self.banned(kh):
+            return {"error": "banned"}
+        now = time.time()
+        times = [t for t in self.announced.get(kh, []) if now - t < 3600]
+        if len(times) >= 12:
+            self.announced[kh] = times
+            return {"error": "Slow down a little."}
+        kind = str(body.get("kind", ""))
+        name = str(body.get("name", ""))
+        mode = str(body.get("mode", ""))
+        job = str(body.get("job", ""))
+        try:
+            level = int(body.get("level", 0))
+        except (TypeError, ValueError):
+            level = 0
+        extra = clean(str(body.get("extra", "")), 20)
+        world = clean(str(body.get("world", "")), 30)
+        if (kind not in HC_KINDS or not NAME_RE.match(name) or mode not in ("Iron", "Steel", "Silver", "Randomized") or
+                not re.fullmatch(r"[A-Z]{3}", job) or not 0 <= level <= 99):
+            return {"error": "bad announcement"}
+        where = f" in {world}" if world else ""
+        if kind == "milestone":
+            text = f"{name} ({mode}) reached level {level} on {job}{where}."
+        elif kind == "delevel":
+            text = f"{name} (Steel) fell on {job} at level {level}{where}. Back to level 1."
+        elif kind == "grant":
+            text = f"{name} (Randomized) was given {job} at level {level}{where}."
+        elif kind == "death":
+            text = f"{name} (Silver) has fallen: {job} {level}{', hardcore for ' + extra if extra else ''}{where}. Rest well."
+        elif mode == "Randomized":
+            text = f"{name} has begun a Randomized journey as a {job}{where}."
+        else:
+            text = f"{name} has begun a {mode} hardcore journey{where}."
+        self.announced[kh] = times + [now]
+        self.add("hardcore", "", text)
+        return {"ok": True}
+
+    def announcements(self, since):
+        return [{k: v for k, v in line.items() if k != "to"} for line in self.lines
+                if line["seq"] > since and line["kind"] == "hardcore"]
 
     # ---------------------------------------------------------------- commands
     def command(self, kh, screen, text):
@@ -274,6 +325,10 @@ def make_handler(room):
                 return self.reply(200, answer)
             if path == "/say":
                 return self.reply(200, room.say(kh, body.get("name", ""), body.get("text", "")))
+            if path == "/announce":
+                with room.lock:
+                    answer = room.announce(kh, body)
+                return self.reply(200, answer)
             return self.reply(404, {"error": "unknown"})
 
         def do_GET(self):
@@ -281,6 +336,14 @@ def make_handler(room):
             if url.path.rstrip("/") == "/health":
                 return self.reply(200, {"ok": True, "people": len(room.people())})
             kh = self.key()
+            if kh and url.path.rstrip("/") == "/announcements":
+                try:
+                    since = int(parse_qs(url.query).get("since", ["0"])[0])
+                except ValueError:
+                    since = 0
+                with room.lock:
+                    body = {"seq": room.seq, "lines": room.announcements(since)[-50:]}
+                return self.reply(200, body)
             if not kh or url.path.rstrip("/") != "/poll":
                 return self.reply(403, {"error": "no key"})
             if room.banned(kh):

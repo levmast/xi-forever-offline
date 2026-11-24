@@ -25,7 +25,7 @@ hidden=("${std[@]}" bcrypt certifi mariadb PIL.Image PIL.ImageTk PIL._tkinter_fi
         launcher_core launcher_squad launcher_rules launcher_icons launcher_personality
         launcher_thirdparty launcher_revamped launcher_setup launcher_game launcher_gamefiles launcher_client launcher_update launcher_linux
         launcher_passport launcher_coop launcher_coop_gui launcher_contrib
-        launcher_pages launcher_widgets launcher_settings launcher_gamepad launcher_theme launcher_hood launcher_hd launcher_hd_gui launcher_stinkshell)
+        launcher_pages launcher_widgets launcher_settings launcher_gamepad launcher_theme launcher_hood launcher_hd launcher_hd_gui launcher_stinkshell launcher_hardcore launcher_hardcore_gui)
 opts=(--noconfirm --onefile --name XI-Forever-Offline
       --distpath "$PWD" --workpath "$PWD/build/pyinstaller" --specpath "$PWD/build/pyinstaller"
       --collect-all mariadb --collect-data certifi)

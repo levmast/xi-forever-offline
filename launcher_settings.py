@@ -40,10 +40,10 @@ S("crowd_meet", "world", "Town crowds", SWITCH, "Stop for each other",
   tip="Two adventurers walking past each other may stop, turn and wave before going on.")
 S("crowds_field_parties", "world", "Field parties", COUNT, "Parties per area", dev=True, lo=0, hi=3, step=1,
   tip="Players get this from their world choice.")
-S("bots_online", "world", "Bot players", COUNT, "Online at a time", lo=0, hi=550, step=10,
-  tip="How many bot players are logged in at once. Lower it if the game stutters. 0-550.")
-S("bots_roster", "world", "Bot players", COUNT, "Roster size", lo=0, hi=600, step=50,
-  tip="How many bot characters exist in your world. 0-600.")
+S("bots_online", "world", "Bot players", COUNT, "Online at a time", lo=0, hi=1500, step=10,
+  tip="How many bot players are logged in at once. Lower it if the game stutters. Usually 0-550; up to 1500 for strong PCs (the launcher asks first). At most 60% of the roster.")
+S("bots_roster", "world", "Bot players", COUNT, "Roster size", lo=0, hi=2000, step=50,
+  tip="How many bot characters exist in your world. Usually 0-600; up to 2000 for strong PCs (the launcher asks first).")
 S("bots_growth", "world", "Bot players", CHOICE, "Bot growth",
   options=(("off", "Off"), ("realistic", "Realistic"), ("fast", "Fast")),
   tip="Bots level, craft and earn gil while you are not playing.")
@@ -189,6 +189,9 @@ S("map.BLUE_LEARN_MULTIPLIER", "rules", "Skills and crafting", RATE, "Learning b
 S("map.CRAFT_CHANCE_MULTIPLIER", "rules", "Skills and crafting", RATE, "Crafting skill-ups")
 S("map.CRAFT_HQ_CHANCE_MULTIPLIER", "rules", "Skills and crafting", RATE, "High-quality crafts")
 S("map.FISHING_SKILL_MULTIPLIER", "rules", "Skills and crafting", RATE, "Fishing skill-ups")
+S("main.DIG_SKILL_RATE", "rules", "Skills and crafting", RATE, "Chocobo digging skill",
+  tip="How much each find while chocobo digging counts toward your digging skill. 1x = the era (months to reach 100), "
+      "2x = twice as fast. There is no daily digging limit on your own world. (delukard)")
 S("map.FISHING_MINIGAME", "rules", "Skills and crafting", FLAG, "Fishing minigame",
   tip="On = today's fishing, where you fight the fish on screen. Off = era fishing: the bite line tells you what is on "
       "the hook, then you reel in (confirm) or let it go (cancel). The fishing screen still opens, but there is nothing "
@@ -234,7 +237,7 @@ S("main.EPHEMERAL_MOOGLES", "rules", "Comforts", FLAG, "Ephemeral Moogles",
       "On by default. (Gilder, stanky kong)")
 S("main.ANCESTRY_MOOGLES", "rules", "Comforts", FLAG, "Ancestry Moogles",
   tip="The Ancestry Moogles in Port San d'Oria, Port Bastok and Windurst Walls (from Seekers of Adoulin) change your "
-      "race, face, hair and size, free and as often as you like. Off by default. (Yenkei)")
+      "race, face, hair and size, free and as often as you like. On for a new install. (Yenkei)")
 S("main.TREASURE_WAIT_MULTIPLIER", "rules", "Comforts", RATE, "Chest and coffer wait", step=0.25,
   tip="After a treasure chest or coffer is opened, the next one in that area is an illusion (no loot) for 15 to 60 "
       "minutes. 1x = the era, 0.5x = half as long, 0 = every chest and coffer gives its loot. (Rysan, Frost)")
@@ -275,7 +278,7 @@ S("main.SQUAD_UNLIMITED_JUICE", "rules", "Squad", FLAG, "Unlimited juice",
       "only the juices you trade to it. (Frost)")
 S("training_dummies", "rules", "Squad", SWITCH, "Training dummies",
   tip="For testing: !sandbox puts dummies of level 1 to 99 in Rolanberry Fields that never die and never attack. "
-      "On by default; off = no dummies.")
+      "Off for a new install; on = the dummies are there.")
 
 # ---------------------------------------------------------------- Rules > Party buffs (2026-11-23)
 BUFF_RANGE_WARNING = ("Extended keeps the old party-wide reach: buffs land on every party member and squad mate at any distance. "

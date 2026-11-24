@@ -305,7 +305,7 @@ def init_mariadb(mariadb_dir, root_password, port, run=subprocess.run):
         base = no_space_path(mariadb_dir)          # (the script can't take paths with spaces)
         cmd = mariadb_cmd(base, "mariadb-install-db") + [
             f"--basedir={base}", f"--datadir={os.path.join(base, 'data')}", "--auth-root-authentication-method=normal",
-            "--skip-test-db"] + (["--user=root"] if _as_root() else [])
+            "--skip-test-db", "--loose-innodb-buffer-pool-size-max=2G"] + (["--user=root"] if _as_root() else [])   # (passed on to the server: see start_mariadb)
     result = run(cmd, capture_output=True, text=True, errors="replace", creationflags=NO_WINDOW,
                  **({} if IS_WINDOWS else {"env": mariadb_env(mariadb_dir), "cwd": base}))
     if result.returncode != 0:
@@ -381,7 +381,12 @@ def start_mariadb(mariadb_dir, port, popen=subprocess.Popen, wait=30, _retry=Tru
     data = os.path.join(mariadb_dir, "data")
     linux = [] if IS_WINDOWS else [f"--basedir={mariadb_dir}", f"--socket={socket_path(mariadb_dir, port)}",
                                    f"--pid-file={os.path.join(data, 'mariadb.pid')}",
-                                   f"--log-error={os.path.join(data, 'mariadb.err')}"] + (["--user=root"] if _as_root() else [])
+                                   f"--log-error={os.path.join(data, 'mariadb.err')}",
+                                   # (2026-11-23, ザックス: "Cannot map innodb_buffer_pool_size_max=8388608m") newer 11.4 builds
+                                   # reserve address space for an 8 TB buffer pool by default, which a system with limited
+                                   # virtual memory refuses; 2 GB is far more than this server uses. "loose-": a build without
+                                   # the option ignores it instead of refusing to start.
+                                   "--loose-innodb-buffer-pool-size-max=2G"] + (["--user=root"] if _as_root() else [])
     proc = popen(mariadb_cmd(mariadb_dir, "mariadbd") + linux + [
                   f"--datadir={data}", f"--port={port}",
                   "--bind-address=127.0.0.1",
@@ -682,7 +687,7 @@ def update_config(kit, values, drop=()):
 # ----- the kit's own addons -----
 # (2026-11-19) "Gambits" is now the squad Rule Set editor (wildcabbagepatch's Gambits v2, first shipped as GambitsV2);
 # the addon that had the name before (your own character's rules, Parser, EXP Watch, Enemy Info) is "autobox".
-OWN_ADDONS = ("Gambits", "autobox", "followme", "servermenu", "squadpanel", "stinkshell", "autora")
+OWN_ADDONS = ("Gambits", "autobox", "followme", "servermenu", "squadpanel", "stinkshell", "autora", "hcicons")
 STOCK_ADDONS = ("distance", "fps", "move", "timestamp", "tparty", "checker", "drawdistance", "allmaps")
 STOCK_PLUGINS = ("minimap",)
 START_ADDONS = ("Gambits", "servermenu", "crystalboy")          # loaded at startup on a new install
@@ -810,6 +815,20 @@ def enable_new_addons(kit, ashita_dir, boot_name, log=print):
     os.makedirs(os.path.dirname(marker), exist_ok=True)
     with open(marker, "w", encoding="utf-8") as handle:
         handle.write(time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
+    return True
+
+
+def enable_hcicons(ashita_dir, boot_name, log=print):
+    """(2026-11-23) The hardcore / randomized icons (addons-src/hcicons) are part of the game modes, like the server's
+    rules: the launcher puts the add-on back on at every PLAY (the user: it has to always be on)."""
+    import launcher_core as core
+    if not os.path.isdir(os.path.join(ashita_dir, "addons", "hcicons")):
+        return False
+    manager = core.ScriptManager(ashita_dir, boot_name)
+    manager.prepare()
+    if "hcicons" not in {a.lower() for a in manager.enabled("addon")}:
+        manager.set("addon", "hcicons", True)
+        log("Hardcore icons are on (Iron / Steel / Silver / Random over their heads).")
     return True
 
 

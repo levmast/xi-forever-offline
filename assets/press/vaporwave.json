@@ -1,0 +1,26 @@
+{
+  "name": "Vaporwave",
+  "about": "The Vaporwave look, kept for good after its limited time (Ranyxia, 2026-11-23): a theme that is always there to pick on the Theme page once vaporwave__until-2026-12-02.json has passed (until then that one, with the same short name, stands in for it). Its buttons are the pictures in the vaporwave-ui folder, its banners the xifo_wave_*__theme-vaporwave pictures, its song \"No Signal, All Vibes\" by JØ.",
+  "colours": {
+    "BG": "#120a24",
+    "PANEL": "#1c1036",
+    "PANEL2": "#2a174e",
+    "FG": "#f7ecff",
+    "DIM": "#a994cf",
+    "BORDER": "#43217a",
+    "LINE": "#5b3098",
+    "OFF": "#8069a8",
+    "GOLD": "#ff5ccb",
+    "GOLD_LIT": "#ff9ee3",
+    "GOLD_DIM": "#7a2a6e",
+    "PARCH": "#f3e3ff",
+    "ACCENT": "#3fe8e0",
+    "GREEN": "#3df2b4",
+    "RED": "#ff4f7b",
+    "GREY": "#54446e"
+  },
+  "art": {
+    "folder": "vaporwave-ui"
+  },
+  "sound": "no_signal_all_vibes.mp3"
+}

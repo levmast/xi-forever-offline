@@ -2,10 +2,30 @@
 
 Newest first. The launcher shows this file on SYSTEM > Patch notes; the same notes go to #patch-notes on Discord.
 
+## v0.3.7 · 23 November 2026
+
+### Fixes
+• Bot players: on the new-look RULES page the roster and bots online still stopped at 600 / 550. They now go up to 2000 / 1500 there too (past the usual numbers the launcher asks first). (krazy)
+
+## v0.3.6 · 23 November 2026
+
+### Fixes
+• CO-OP: while your world was open to visitors (or had visitors on its list), the launcher kept showing an error ("'BooleanVar' object is not callable") and the visitors list stopped updating. A setting on the new OPEN WORLDS listing had the same name as the code that reads your visitors. (Hasuko)
+
 ## v0.3.5 · 23 November 2026
 
 ### New
-• RULES > Comforts: Ancestry Moogles (off by default). The race-change moogles in Port San d'Oria, Port Bastok and Windurst Walls change your race, face, hair and size, free and as often as you like. (Yenkei)
+• New installs start on the "era default" set: Fields/Grounds pages experience 0.128, treasure caskets 15%, era fishing (no minigame), guild shops that never run out, auction house from anywhere, Ancestry Moogles, 3 minutes between seals, the auction house simulator on, no training dummies, and 300 bot players with up to 180 online. An install you already have keeps every setting it has.
+• HARDCORE, beside DUALBOX: Iron, Steel and Silver characters. Pick a mode on the new menu before your character's first level; its rates are locked to that mode's profile wherever it goes (co-op worlds and The Hub too). Every mode: no auction house, no bazaars, no trades or deliveries with other characters, squad gear only by trading it to your mates. Iron (1x experience) parties with anyone and can step down to a regular character. Steel (2x) and Silver (3.5x): no Home Point or Survival Guide teleports, parties only with hardcore characters (your squad, no bot players), and they can step down to Iron. A Steel character that is knocked out sends that job back to level 1 (everything you completed stays, squad mates keep their levels). A Silver character that is knocked out is gone: it rests on the memorial and is deleted 7 days later. Every 10 levels on a job: random cosmetics in your delivery box, 1 for Iron, 2 for Steel, 3 for Silver. Milestones, Steel falls and Silver deaths are announced in your world, on The Hub and in Stinkshell (switch it off in the Hardcore menu). Badges over hardcore characters' heads (the hcicons add-on), and hosts can take hardcore visitors only. !hardcore shows your run.
+• RANDOMIZED, the fourth card on the HARDCORE menu: you pick only the name, and there is no character creation screen. The launcher makes the character: Fate rolls your race, face, size and nation (and which of its three cities you start in), then one of the 18 jobs at your first login, and you arrive dressed in a random set of level 1 gear for that job with 10,000 gil in your pocket; another random job comes at 18, 33 and 65, and those are the only jobs that character can play (job quests still unlock jobs for your squad mates). Every drop from your claim is a random item that fits the area, and NMs drop from one shared NM pool; quest items, crystals, seals and Rare/Ex items stay as they are. Its own rates (2.5x experience, no experience lost on death), the auction house and trading allowed, normal deaths, and it can join any party, Steel and Silver included. Randomized characters may visit hardcore-only worlds. Treasure chests, coffers and caskets are random too (the area's items), and battlefield crates give what fights of the same level cap give. Its own auction house: the stock changes every 6 hours (crystals are always there) and each item's price swings up to 20% more than usual.
+• Mode titles, always worn while you play the mode: Iron "Forged in Solitude", Steel "Tempered by Ruin", Silver "Bearer of a Single Flame", Randomized "Altana's Wild Card". Titles you earn still go on your list; they just stay off until you step down. The launcher adds the four names to the game's title list at PLAY.
+• Hardcore icons in the party list: a small column beside your party list shows each member's mode. Place it once with /hcicons party move (it fits the game's party list or XIUI's); /hcicons party row N lines it up.
+• Squads menu: the Job and Sub lists show each job's level, like WHM (34). (Dugahst)
+• Run speed: the running animation now speeds up with it, the way Flee does, instead of sliding. (Ricc)
+• RULES > Skills and crafting: Chocobo digging skill (1x = the era). How much each find counts toward your digging skill; there is still no daily digging limit on your own world. (delukard)
+• The Vaporwave look stays: after its limited time ends on December 2 it is a theme you can pick on the Theme page for good, with its song and banners. (Ranyxia)
+• GM characters: !capallskills <name> caps another character's skills (a logged-out one too). (Garrett)
+• RULES > Comforts: Ancestry Moogles (on for a new install, off otherwise until you switch it on). The race-change moogles in Port San d'Oria, Port Bastok and Windurst Walls change your race, face, hair and size, free and as often as you like. (Yenkei)
 • RULES > Comforts: Chest and coffer wait. After a chest or coffer is opened, the next one in that area is an illusion for 15-60 minutes; 1x = the era, 0 = every one gives its loot. (Rysan, Frost)
 • GM characters: the GM commands that change a character (!addquest, !completemission, !addkeyitem, !givegil, !setplayerlevel, !setrank, !additem and more) also work on your characters that are logged out. The change is saved and made when that character next logs in.
 • Character transfer: the quest and mission logs come across too (completed quests, quests in progress, nation, Zilart, Promathia and Aht Urhgan missions, Assault). Zone once with charcapture loaded before /capture. A quest in progress starts again from its first step, and fame still can't be carried (the game never sends it).
@@ -26,6 +46,10 @@ Newest first. The launcher shows this file on SYSTEM > Patch notes; the same not
 • SYSTEM > Updates: "Repair..." installs the newest launcher and server again over what you have (database update included), for an update that stopped halfway. (Reika, Ryan)
 
 ### Fixes
+• Squad range: a mate set to mid range stands 15 yalms from the monster and far 20 (were 6 and 12, still inside most area attacks). (Jaymz)
+• Squad mates missing from the party list after zoning (still in the party): the list is sent again a few seconds after they appear. (Hasuko)
+• Linux: setup or PLAY could stop at the database with "Cannot map innodb_buffer_pool_size_max" on systems with limited virtual memory; MariaDB is now told to reserve at most 2 GB. (ザックス)
+• Closing the launcher now stops all of the Ollama it started, model runner included; on Linux it kept running. (Sunie)
 • Auction house from anywhere: with the switch on, AHGo still hung on "placing bid" outside the cities; it bids and sells from any area now. (Emeric, Velderen, sparkiie)
 • A Paladin can Cover a squad mate. (sparkiie)
 • CO-OP: TEST CONNECTION now also checks port 51240 (PlayOnline's chat, which the game loader passes on to the world), and a world set up on a Linux server opens it in that server's firewall. Without it the game stopped right after logging in with "Failed to reach the server on port 51240". (The Hub's visitors)

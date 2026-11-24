@@ -522,6 +522,13 @@ class PlayPage:
             app.dual_btn.imgs = small
             tk.Canvas.configure(app.dual_btn, width=small["normal"].width(), height=small["normal"].height())
             app.dual_btn._show()
+        try:                             # (2026-11-23) HARDCORE beside DUALBOX (launcher_hardcore_gui.py)
+            import launcher_hardcore_gui
+            launcher_hardcore_gui.attach(app, self)
+            if getattr(app, "hardcore_btn", None) is not None:
+                self.made.append(app.hardcore_btn)
+        except Exception:
+            log_problem("The HARDCORE button could not be made")
         self.strip.pack(in_=row, side="left", fill="x", expand=True)
         self.strip.lift()
         self.status_label.pack_forget()

@@ -24,8 +24,9 @@ server ("cloud world") and a home PC that keeps its world open all use it.
   From the packaged launcher:  XI-Forever-Offline --run launcher_world.py run
 
 It does for the server side what PLAY does in the launcher's window (launcher_gui.pyw, launch), from the same settings:
-config.json, the RULES page's rates.json and the CO-OP page's coop.json. Nothing of the game client is touched, and no
-AI helper is started (the auction house simulator is, when the rules have it on). While it runs it keeps a banned
+config.json, the RULES page's rates.json and the CO-OP page's coop.json. Nothing of the game client is touched. The
+auction house simulator is started when the rules have it on, and the bots' chat helper when this world chats through
+Google's Gemma (crowds/ai_cloud.py: ai-cloud.json and a key in the kit; the hub). No local AI is ever started. While it runs it keeps a banned
 visitor out, clears kept places whose time is up, and writes its state to a file every half minute. If one of the
 game servers stops by itself, the world is stopped as a whole and the program ends with exit code 1, so the service
 that runs it starts it again.
@@ -255,9 +256,19 @@ class World:
         home PC behind a router), so the address in its settings is taken as it is."""
         return (lambda _address: True) if self.settings.get("mode") == "direct" else None
 
+    def cloud_chat(self):
+        """True when the bots chat through Google here (crowds/ai_cloud.py is set up with a key)."""
+        try:
+            sys.path.insert(0, os.path.join(self.kit, "crowds"))
+            import ai_cloud
+            return bool(ai_cloud.ready(self.kit)) and bool(self.rates.get("bots") or self.rates.get("crowds"))
+        except Exception:
+            return False
+
     def apply_rates(self):
         try:
-            for note in core.apply_rates(self.cfg["server_dir"], dict(self.rates, coop_hosting=self.hosting)):
+            # the bots' AI chat is on exactly when its helper will run (else the server would wait for answers in vain)
+            for note in core.apply_rates(self.cfg["server_dir"], dict(self.rates, coop_hosting=self.hosting, crowds_chat_ai=self.cloud_chat())):
                 self.say(note)
         except Exception as e:
             self.say(f"Could not apply the rates ({e}) - starting with the server's normal settings.")
@@ -303,6 +314,18 @@ class World:
                 self.say("Auction house simulator started.")
             except Exception as e:
                 self.say(f"Auction house simulator did not start: {e}")
+        script = os.path.join(self.kit, "crowds", "crowd_chat_ai.py")
+        if self.cloud_chat() and os.path.exists(script):
+            crowds = bool(self.rates.get("crowds") and self.rates.get("crowds_chat", True))
+            try:
+                log = open(os.path.join(self.logs, "crowd-chat-ai.log"), "wb")
+                self.logfiles.append(log)
+                args = core.py_cmd(script, "--server", self.cfg["server_dir"], *([] if crowds else ["--bots-only"]), unbuffered=True)
+                self.helpers["chat_ai"] = subprocess.Popen(args, cwd=os.path.dirname(script), stdout=log, stderr=subprocess.STDOUT,
+                                                           creationflags=core.NO_WINDOW)
+                self.say("Bot chat through Google's Gemma started.")
+            except Exception as e:
+                self.say(f"Bot chat helper did not start: {e}")
 
     def open_door(self):
         """The co-op service visitors' launchers talk to."""

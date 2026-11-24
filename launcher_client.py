@@ -11,6 +11,8 @@
      Magic Fruit) and job abilities (Cover, Accomplice, Collaborator, Martyr, Devotion, Shikikoyo, Healing Waltz,
      Healing Ruby) get the "NPC" target, so the game lets you aim them at a squad mate (the game's spell and ability
      tables in ROM\\118\\114.DAT; client-patches\\spell_targets.json).
+  7. Mode titles: the four game-mode titles (Iron, Steel, Silver, Randomized) in empty slots 1078 - 1081 of the game's
+     English title list (ROM\\180\\78.DAT), so the title the server puts on those characters has a name.
 
 Every step checks first and only writes what is missing, so this runs at the end of first-run setup and again on
 every PLAY of a player install (an update or a reinstalled era pack is caught the next time). A step that cannot be
@@ -19,6 +21,7 @@ it never stops the game from starting. Originals are kept in <kit>\\backups.
 """
 import json
 import os
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -322,15 +325,98 @@ def spell_targets(kit, game, log=print):
         shown, (" (%d left as they were)" % odd) if odd else "")
 
 
+# ----- 7. Mode titles -----
+# (2026-11-23) The game's English title list is a "d_msg" file: a 0x40-byte header, then one 0x100-byte entry a title,
+# in title id order, every byte XOR 0xFF. An entry holds one text: [count 1][where it is, kind 0][1, 24 zero bytes,
+# the text]. Slots 1078 - 1115 are empty in the game's own file and the server uses none of them; the server gives
+# these four to the game modes (hardcoreutils::modeTitle) and keeps them on.
+TITLE_FILE = ("ROM", "180", "78.DAT")
+TITLE_ENTRY = 0x100
+MODE_TITLES = {1078: "Forged in Solitude", 1079: "Tempered by Ruin", 1080: "Bearer of a Single Flame",
+               1081: "Altana's Wild Card"}
+
+
+def _title_text(data, title_id):
+    """The text of one title, or None when the entry is not laid out as expected."""
+    at = 0x40 + title_id * TITLE_ENTRY
+    entry = bytes(c ^ 0xFF for c in data[at:at + TITLE_ENTRY])
+    if len(entry) != TITLE_ENTRY:
+        return None
+    count, offset, kind = struct.unpack_from("<III", entry, 0)
+    if count != 1 or kind != 0 or offset + 0x1C >= TITLE_ENTRY:
+        return None
+    start = offset + 0x1C
+    end = entry.find(b"\0", start)
+    return entry[start:end if end >= 0 else TITLE_ENTRY].decode("latin-1")
+
+
+def _title_entry(text):
+    blob = struct.pack("<IIII", 1, 0x0C, 0, 1) + b"\0" * 24 + text.encode("latin-1") + b"\0"
+    if len(blob) > TITLE_ENTRY:
+        raise ValueError("title too long: " + text)
+    return bytes(c ^ 0xFF for c in blob.ljust(TITLE_ENTRY, b"\0"))
+
+
+def mode_titles(kit, game, log=print):
+    path = os.path.join(game, *TITLE_FILE)
+    if not os.path.exists(path):
+        return "Mode titles: the game's title file is missing, so the game-mode titles show without a name."
+    with open(path, "rb") as handle:
+        data = bytearray(handle.read())
+    if (data[:5] != b"d_msg" or struct.unpack_from("<I", data, 0x20)[0] != TITLE_ENTRY
+            or len(data) < 0x40 + (max(MODE_TITLES) + 1) * TITLE_ENTRY or _title_text(data, 1) != "Fodderchief Flayer"):
+        return "Mode titles: the game's title file is not the expected one; it was left as it is."
+    # the layout is understood: an entry rebuilt from its own text gives the same bytes
+    if bytes(data[0x40 + TITLE_ENTRY:0x40 + 2 * TITLE_ENTRY]) != _title_entry("Fodderchief Flayer"):
+        return "Mode titles: the game's title file is laid out differently; it was left as it is."
+    todo = []
+    for title_id, text in sorted(MODE_TITLES.items()):
+        now = _title_text(data, title_id)
+        if now == text:
+            continue
+        if now != "" and now not in MODE_TITLES.values():
+            return "Mode titles: slot %d of the game's title list is already used by '%s'; nothing was changed." % (title_id, now)
+        todo.append((title_id, text))
+    if not todo:
+        return None
+    keep = os.path.join(kit, "backups", "mode-titles-dat", "78.DAT.original")
+    if not os.path.exists(keep):
+        os.makedirs(os.path.dirname(keep), exist_ok=True)
+        with open(keep, "wb") as handle:
+            handle.write(data)
+    for title_id, text in todo:
+        at = 0x40 + title_id * TITLE_ENTRY
+        data[at:at + TITLE_ENTRY] = _title_entry(text)
+    tmp = path + ".mt-tmp"
+    with open(tmp, "wb") as handle:
+        handle.write(data)
+    os.replace(tmp, path)
+    with open(path, "rb") as handle:
+        back = handle.read()
+    if any(_title_text(back, title_id) != text for title_id, text in MODE_TITLES.items()):
+        return "Mode titles: the title file did not read back as written; restore it from %s." % keep
+    return "Mode titles: %s are in the game's title list." % ", ".join('"%s"' % t for _i, t in todo)
+
+
+def restore_mode_titles(kit, game):
+    keep = os.path.join(kit, "backups", "mode-titles-dat", "78.DAT.original")
+    if os.path.exists(keep):
+        import shutil
+        shutil.copy2(keep, os.path.join(game, *TITLE_FILE))
+        return True
+    return False
+
+
 def apply_all(kit, game, server, log=print):
-    """Runs the six steps; returns the messages. Never raises."""
+    """Runs the seven steps; returns the messages. Never raises."""
     messages = []
     for name, step in (("Home Points", lambda: homepoints(kit, game, server, log)),
                        ("Crystal Boy", lambda: crystalboy(kit, game, log)),
                        ("Chariot Band", lambda: chariot_band(kit, game, log)),
                        ("Item stacks", lambda: item_stacks(kit, game, server, log)),
                        ("Forever Beta Shirt", lambda: forever_beta_shirt(kit, game, log)),
-                       ("Spells on squad mates", lambda: spell_targets(kit, game, log))):
+                       ("Spells on squad mates", lambda: spell_targets(kit, game, log)),
+                       ("Mode titles", lambda: mode_titles(kit, game, log))):
         try:
             message = step()
         except PermissionError:

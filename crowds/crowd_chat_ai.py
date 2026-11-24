@@ -21,6 +21,12 @@ import time
 import urllib.error
 import urllib.request
 
+try:  # a world on a server with no AI of its own (the hub): Google's Gemma through crowds/ai_cloud.py
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import ai_cloud
+except Exception:
+    ai_cloud = None
+
 try:  # the bot players' tells and party chat (crowds/bots/bots_chat_ai.py): answered between pool rounds, first
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "bots"))
     import bots_chat_ai
@@ -180,6 +186,9 @@ def squad_config():
         cfg["fallback_model"] = sc.get("fallback_model", cfg["fallback_model"])
     except (OSError, ValueError):
         pass
+    if ai_cloud is not None and ai_cloud.ready(KIT):      # (ai-cloud.json and a key: the hub, never a player's PC)
+        cfg.update(provider="google", model=ai_cloud.load_config(KIT)["models"][0], ollama_url="Google's Gemini API")
+        return cfg
     cfg["model"] = pick_model(cfg["model"], cfg["fallback_model"], cfg["ollama_url"])
     return cfg
 
@@ -282,9 +291,15 @@ def ask_model(cfg, category, avoid):
         "options": model_options(cfg["model"], {"temperature": 0.95, "top_p": 0.9, "num_ctx": 2048, "num_predict": 700}),
     }
     payload.update(model_extra(cfg["model"]))
+    started = time.time()
+    if cfg.get("provider") == "google":
+        content = ai_cloud.chat(payload["messages"], {"temperature": 1.0, "top_p": 0.95, "top_k": 64, "num_predict": 700},
+                                kind="background", fmt="json", kit=KIT)
+        log(f"google {category}: {time.time() - started:.1f}s")
+        hood(f"town crowd lines ({category})", cfg["model"], payload["messages"], content, time.time() - started)
+        return content
     req = urllib.request.Request(cfg["ollama_url"].rstrip("/") + "/api/chat", data=json.dumps(payload).encode("utf-8"),
                                  headers={"Content-Type": "application/json"}, method="POST")
-    started = time.time()
     with urllib.request.urlopen(req, timeout=180) as resp:
         body = json.loads(resp.read().decode("utf-8"))
     content = body.get("message", {}).get("content")
@@ -435,11 +450,17 @@ def main():
             else:
                 full = one_round(cfg, server, pool, stub=args.stub)
                 wait = FULL_PAUSE if full else PAUSE
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            log(f"Ollama not reachable ({exc}) - trying again in 2 minutes")
-            wait = 120
-        except ValueError as exc:
-            log(f"bad answer from the model ({exc})")
+        except Exception as exc:
+            if ai_cloud is not None and isinstance(exc, ai_cloud.CloudBusy):
+                log(f"town small talk waits: {exc}")          # (answers to players still go first)
+                wait = 300
+            elif isinstance(exc, (urllib.error.URLError, TimeoutError, OSError)):
+                log(("Google" if cfg.get("provider") == "google" else "Ollama") + f" not reachable ({exc}) - trying again in 2 minutes")
+                wait = 120
+            elif isinstance(exc, ValueError):
+                log(f"bad answer from the model ({exc})")
+            else:
+                raise
         if args.once:
             return 0
         # wait for the next pool round, answering the bots' tells as they come (about every second)

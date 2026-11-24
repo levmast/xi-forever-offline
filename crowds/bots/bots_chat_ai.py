@@ -16,6 +16,11 @@ import time
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+try:  # a world on a server with no AI of its own (the hub): Google's Gemma (crowds/ai_cloud.py)
+    sys.path.insert(0, os.path.dirname(HERE))
+    import ai_cloud
+except Exception:
+    ai_cloud = None
 KIT = os.path.dirname(os.path.dirname(HERE))
 MEMORY = os.path.join(HERE, "chat_memory")
 MAX_AGE = 60          # seconds: older requests (the server waited already, or a new run) are skipped
@@ -248,7 +253,8 @@ def profile_of(cfg, bot, info, mem, stub=False):
     if not stub:
         try:
             prof = json.loads(ollama_chat(cfg, [{"role": "user", "content": PROFILE_PROMPT.format(facts=describe(info))}],
-                                          {"temperature": 0.95, "num_ctx": 2048, "num_predict": 220}, timeout=60, fmt="json") or "{}")
+                                          {"temperature": 0.95, "num_ctx": 2048, "num_predict": 220}, timeout=60, fmt="json",
+                                          kind="background") or "{}")
         except Exception as exc:
             log(f"no profile for {bot} yet ({exc})")
     if not isinstance(prof, dict) or not prof.get("player"):
@@ -292,7 +298,14 @@ def hood(source, model, messages, reply, seconds):
         pass
 
 
-def ollama_chat(cfg, messages, options, timeout=40, fmt=None):
+def ollama_chat(cfg, messages, options, timeout=40, fmt=None, kind="reply"):
+    """One answer from the model. kind 'reply' (to a real player) or 'background' only matters for Google, which
+    answers players first when its limits are tight."""
+    if cfg.get("provider") == "google" and ai_cloud is not None:
+        started = time.time()
+        content = ai_cloud.chat(messages, model_options("gemma", options), kind=kind, fmt=fmt, kit=KIT)
+        hood("bot players", cfg["model"], messages, content, time.time() - started)
+        return content
     payload = {"model": cfg["model"], "stream": False, "keep_alive": "30m", "messages": messages,
                "options": model_options(cfg["model"], options)}
     payload.update(model_extra(cfg["model"]))
@@ -320,7 +333,8 @@ def sum_up(cfg, bot, to, mem):
               f"Your recent chat with them:\n{convo}\n\nIn one or two short sentences, what do you now know and think about "
               f"{to} (who they are in the game, what you did or talked about, how you feel about them)? Plain ASCII, no quotes.")
     try:
-        text = ollama_chat(cfg, [{"role": "user", "content": prompt}], {"temperature": 0.4, "num_ctx": 2048, "num_predict": 90}, timeout=60)
+        text = ollama_chat(cfg, [{"role": "user", "content": prompt}], {"temperature": 0.4, "num_ctx": 2048, "num_predict": 90}, timeout=60,
+                           kind="background")
     except Exception as exc:
         log(f"{bot}: could not sum up {to} ({exc})")
         return

@@ -88,6 +88,12 @@ song that plays and who made it.
 - DotGothic16 font (the pixel and Japanese lettering on the vaporwave banners): Fontworks (SIL Open Font License).
 - Galmuri11 font (the launcher's lettering in the 8-Bit theme; `assets/press/fonts` holds a Latin-only cut of its Regular
   and Bold, with the licence): Lee Minseo (quiple) (SIL Open Font License).
+- Selawik font (the lettering on the Aero theme's buttons and banners; `art-src/fonts`, with the licence): Microsoft
+  Corporation (SIL Open Font License).
+- **Aero theme** pictures (`assets/press/aero-ui`, `assets/press/aero_*__theme-aero.jpg`): drawn in code by
+  `art-src/scripts/aero_buttons.py` and `aero_banners.py` around official FINAL FANTASY XI art from the art pack (the 2002
+  character designs, the Behemoth concept drawing, and in-game screenshots of Trion, Excenmille and two beaches),
+  © SQUARE ENIX. The window frames, taskbar and orb are original drawings in the style of the time, not Microsoft's.
 
 ## Crystal Boy mini games
 

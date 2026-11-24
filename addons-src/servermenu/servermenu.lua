@@ -37,7 +37,7 @@ Settings (button place, last tab): config/addons/servermenu/settings.cfg
 
 addon.name    = 'servermenu';
 addon.author  = 'XI: Forever Offline';
-addon.version = '1.26l';   -- (1.26l) Spells and abilities window on the profile (Frost); (1.26k) the Auto-equip tip names "Squad gets all gear"; (1.26j) Attack my target / Stop; (1.26i) the menu opens again (opacity helper stood below the menu); (1.26h) a click right after a refresh is no longer dropped by the game; (1.26g) opacity, one gear button
+addon.version = '1.26m';   -- (1.26m) each job's level in the Job and Sub lists (Dugahst); (1.26l) Spells and abilities window on the profile (Frost); (1.26k) the Auto-equip tip names "Squad gets all gear"; (1.26j) Attack my target / Stop; (1.26i) the menu opens again (opacity helper stood below the menu); (1.26h) a click right after a refresh is no longer dropped by the game; (1.26g) opacity, one gear button
 addon.desc    = 'The XI: Forever Offline menu: squad mates, and the dualbox character with his gambits.';
 addon.link    = '';
 
@@ -603,6 +603,15 @@ local function onLine(payload)
         table.insert(S.incomingBeh, { key = bkey, state = bstate, label = blabel });
         return;
     end
+    -- (1.26m, Dugahst) jl|<slot>|<JOB>:<level>,...: each job's own level, shown in the Job and Sub lists
+    local jlSlot, jlList = payload:match('^jl|(%d+)|(.+)$');
+    if jlSlot then
+        S.jobLevels = S.jobLevels or {};
+        local levels = {};
+        for job, lv in jlList:gmatch('(%u+):(%d+)') do levels[job] = tonumber(lv); end
+        S.jobLevels[tonumber(jlSlot)] = levels;
+        return;
+    end
     local mate = parseMate(payload);
     if mate then
         S.incoming = S.incoming or {};
@@ -1003,14 +1012,16 @@ local function button(label, id, w, h, look)
 end
 
 -- a drop-down list; falls back to a row of buttons when this ImGui has no combo boxes
-local function combo(id, current, items, width, help, tip)
+-- (1.26m) labels: what to show for an item ("WHM (34)"), the item itself is still what is returned
+local function combo(id, current, items, width, help, tip, labels)
     local chosen = nil;
     tip = tip or tooltip;   -- (role clarity) the Role and Mode lists pass ROLE_INFO.tip (wrapped)
+    labels = labels or {};
     if has('BeginCombo') and has('Selectable') and has('EndCombo') then
         if has('PushItemWidth') then imgui.PushItemWidth(px(width)); end
-        if imgui.BeginCombo('##' .. id, current or '?') then
+        if imgui.BeginCombo('##' .. id, labels[current] or current or '?') then
             for _, item in ipairs(items) do
-                if imgui.Selectable(item .. '##' .. id .. item, item == current) then chosen = item; end
+                if imgui.Selectable((labels[item] or item) .. '##' .. id .. item, item == current) then chosen = item; end
                 if help and help[item] then tip(help[item]); end
             end
             imgui.EndCombo();
@@ -1020,7 +1031,7 @@ local function combo(id, current, items, width, help, tip)
     else
         for i, item in ipairs(items) do
             if i > 1 then imgui.SameLine(0, 3); end
-            if button(item, id .. item, 0, 0, item == current and 'selected' or nil) then chosen = item; end
+            if button(labels[item] or item, id .. item, 0, 0, item == current and 'selected' or nil) then chosen = item; end
         end
     end
     if chosen == current then chosen = nil; end
@@ -1151,8 +1162,8 @@ local RANGES = { 'auto', 'melee', 'mid', 'far' };
 local RANGE_HELP = {
     auto  = 'The usual distance for its job (casters and ranged jobs stand back, the rest melee)',
     melee = 'Stands next to the monster',
-    mid   = 'Stands about 6 yalms from the monster',
-    far   = 'Stands about 12 yalms from the monster',
+    mid   = 'Stands about 15 yalms from the monster',
+    far   = 'Stands about 20 yalms from the monster',
 };
 local WS_WHEN = { 'chain', '1000', '1500', '2000', '2500', '3000' };
 local WS_WHEN_HELP = {
@@ -1500,13 +1511,16 @@ local function squadTab()
                 if S.more[mate.slot] then
                     gap(2);
                     dimText('Job '); imgui.SameLine(0, 8);
-                    local job = combo('job' .. mate.slot, mate.main, JOBS, 120);
+                    local jl = (S.jobLevels or {})[mate.slot] or {};
+                    local jobLabels = {};
+                    for _, j in ipairs(JOBS) do if jl[j] then jobLabels[j] = string.format('%s (%d)', j, jl[j]); end end
+                    local job = combo('job' .. mate.slot, mate.main, JOBS, 120, nil, nil, jobLabels);
                     if job then changeMate(mate, 'job', job); end
                     imgui.SameLine(0, 18);
                     dimText('Sub '); imgui.SameLine(0, 8);
                     local subs = { 'none' };
                     for _, j in ipairs(JOBS) do if j ~= mate.main then subs[#subs + 1] = j; end end
-                    local sub = combo('sub' .. mate.slot, mate.sub == '-' and 'none' or mate.sub, subs, 120);
+                    local sub = combo('sub' .. mate.slot, mate.sub == '-' and 'none' or mate.sub, subs, 120, nil, nil, jobLabels);
                     if sub then changeMate(mate, 'sub', sub); end
                     dimText('A job your character has not unlocked is refused by the server (it says so in chat).');
                     if opt and opt.size == 0 then

@@ -66,6 +66,11 @@ if player:
     cfg["mariadb_dir"] = os.path.join(kit, "mariadb")
 if classic:
     cfg["classic_ui"] = True
+if os.environ.get("XIF_RENDER_THEME"):       # look at the pages in one theme, e.g. XIF_RENDER_THEME=aero
+    cfg["theme"] = os.environ["XIF_RENDER_THEME"]
+    _events = sorted(n[:-5] for n in os.listdir(os.path.join(KIT, "assets", "press")) if n.endswith(".json") and "__until-" in n)
+    if _events:                             # picked while today's limited-time theme was in date, so the pick holds
+        cfg["theme_event"] = _events[-1]
 if "contributor" in flags:                  # a team member's install: signed in, may send Rule Sets
     cfg.update({"contributor": "tester", "contributor_areas": ["gambits"]})
 with open(os.path.join(kit, "config.json"), "w") as f:
@@ -95,7 +100,7 @@ if "broken" in flags:                       # the newer pages fail while being m
         raise RuntimeError("broken on purpose")
     sys.modules["launcher_pages"].RulesPage.build_top = _broken
 app = gui.App()
-prefix = (("player-" if player else "dev-") + ("classic-" if classic else "") + ("windows-" if "windows" in flags else "")
+prefix = (os.environ.get("XIF_RENDER_THEME", "") + ("-" if os.environ.get("XIF_RENDER_THEME") else "") + ("player-" if player else "dev-") + ("classic-" if classic else "") + ("windows-" if "windows" in flags else "")
           + ("contributor-" if "contributor" in flags else ""))
 
 
