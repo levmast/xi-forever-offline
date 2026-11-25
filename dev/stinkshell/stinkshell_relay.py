@@ -12,6 +12,10 @@ key (X-Stink-Key); the relay keeps only a hash of it.
                                   delevel, Silver death or new hardcore run from a player's world: the relay writes the line
                                   itself (no free text) as kind "hardcore", shown in the room and to the hub
   GET  /announcements?since=N     -> {"seq", "lines": [...]}  the hardcore lines only, no waiting (the hub's launcher)
+Website visitors (2026-11-23): the chat room page on xiforever.com talks to the relay straight from the browser (CORS,
+only for the site's own address). A visitor picks a nickname and shows as "website: Nick", so nobody on the website can
+take a character's name. Their key lives in the browser; a ban of a website name also bans that visitor's network
+address (kept only as a hash), so clearing the browser does not get round it.
 Commands (typed in the chat): /who; owner and moderators: /mute Name [minutes], /unmute Name, /ban Name, /unban Name,
 /kick Name; owner only: /modcode (a new one-time moderator code), /unmod Name. Anyone: /login CODE (the owner code
 printed at the first start, or a moderator code).
@@ -38,6 +42,9 @@ POLL_WAIT = 25
 RATE = (5, 10)             # at most 5 lines in 10 seconds
 NAME_RE = re.compile(r"^[A-Za-z]{2,15}$")
 HC_KINDS = ("milestone", "delevel", "death", "start", "grant")
+WEB_PREFIX = "website: "
+WEB_NAME_RE = re.compile(r"^[A-Za-z0-9_]{2,15}$")
+SITE_ORIGINS = {"https://xiforever.com", "https://www.xiforever.com"}
 
 
 def clean(text, limit=MAX_TEXT):
@@ -50,6 +57,19 @@ def keyhash(key):
     return hashlib.sha256(("stinkshell|" + str(key)).encode()).hexdigest()[:32]
 
 
+def iphash(ip):
+    return hashlib.sha256(("stinkshell-ip|" + str(ip)).encode()).hexdigest()[:24]
+
+
+def web_target(args):
+    """'/ban website: Nick' or '/ban website:Nick' -> ['website: Nick', ...] (moderators name website visitors this way)."""
+    if args and args[0].lower() in ("website:", "web:") and len(args) > 1:
+        return [WEB_PREFIX + args[1]] + args[2:]
+    if args and args[0].lower().startswith("website:") and len(args[0]) > 8:
+        return [WEB_PREFIX + args[0][8:]] + args[1:]
+    return args
+
+
 class Room:
     def __init__(self, data):
         self.data = data
@@ -59,7 +79,7 @@ class Room:
         self.seq = 0
         self.seen = {}           # keyhash -> {"screen", "t"}
         self.sent = {}           # keyhash -> [times]
-        self.state = {"names": {}, "bans": {}, "mutes": {}, "mods": {}, "codes": {}}
+        self.state = {"names": {}, "bans": {}, "mutes": {}, "mods": {}, "codes": {}, "webips": {}, "ipbans": {}}
         os.makedirs(data, exist_ok=True)
         try:
             with open(os.path.join(data, "state.json"), encoding="utf-8") as handle:
@@ -81,16 +101,18 @@ class Room:
         os.replace(path + ".part", path)
 
     # ---------------------------------------------------------------- who is who
-    def screen_for(self, kh, name):
-        """The name shown for this launcher: the character's name if no other launcher has it, else Name2, Name3..."""
+    def screen_for(self, kh, name, web=False):
+        """The name shown for this launcher: the character's name if no other launcher has it, else Name2, Name3...
+        A website visitor: "website: Nick" (Nick2, Nick3... the same way)."""
         base = clean(name, MAX_NAME)
-        if not NAME_RE.match(base):
-            base = "Adventurer"
+        if not (WEB_NAME_RE if web else NAME_RE).match(base):
+            base = "Guest" if web else "Adventurer"
+        prefix = WEB_PREFIX if web else ""
         names = self.state["names"]
-        n, screen = 1, base
+        n, screen = 1, prefix + base
         while names.get(screen.lower(), kh) != kh:
             n += 1
-            screen = (base[:MAX_NAME - len(str(n))] + str(n))
+            screen = prefix + (base[:MAX_NAME - len(str(n))] + str(n))
         if names.get(screen.lower()) != kh:
             names[screen.lower()] = kh
             self.save()
@@ -102,7 +124,13 @@ class Room:
         return "mod" if kh in self.state["mods"] else "player"
 
     def key_of(self, screen):
-        return self.state["names"].get(clean(screen, MAX_NAME + 3).lower())
+        return self.state["names"].get(clean(screen, MAX_NAME + len(WEB_PREFIX) + 3).lower())
+
+    def note_ip(self, kh, ip):
+        """A website visitor's network address (as a hash), so a ban also covers a cleared browser."""
+        if ip and self.state["webips"].get(kh) != ip:
+            self.state["webips"][kh] = ip
+            self.save()
 
     def people(self):
         now = time.time()
@@ -135,7 +163,8 @@ class Room:
                 self.add("leave", v["screen"], v["screen"] + " has left the room.")
 
     def banned(self, kh):
-        return kh in self.state["bans"]
+        ip = self.state["webips"].get(kh)
+        return kh in self.state["bans"] or (ip is not None and ip in self.state["ipbans"])
 
     def muted(self, kh):
         until = self.state["mutes"].get(kh, 0)
@@ -198,7 +227,7 @@ class Room:
     # ---------------------------------------------------------------- commands
     def command(self, kh, screen, text):
         parts = text.split()
-        word, args = parts[0].lower(), parts[1:]
+        word, args = parts[0].lower(), web_target(parts[1:])
         me = self.role(kh)
 
         def tell(msg):
@@ -228,10 +257,11 @@ class Room:
         if word in ("/mute", "/unmute", "/ban", "/unban", "/kick", "/unmod") and args:
             target = self.key_of(args[0])
             if not target:
-                return tell(f"Nobody called {clean(args[0], 20)} has been in this room.")
+                return tell(f"Nobody called {clean(args[0], 30)} has been in this room.")
             if target == self.state.get("owner") or (target in self.state["mods"] and me != "owner"):
                 return tell("You cannot do that to a moderator.")
-            name = clean(args[0], 20)
+            name = clean(args[0], MAX_NAME + len(WEB_PREFIX) + 3)
+            ip = self.state["webips"].get(target)
             if word == "/mute":
                 minutes = int(args[1]) if len(args) > 1 and args[1].isdigit() else 30
                 self.state["mutes"][target] = time.time() + minutes * 60
@@ -241,10 +271,14 @@ class Room:
                 self.add("system", "", f"{name} can talk again.")
             elif word == "/ban":
                 self.state["bans"][target] = int(time.time())
+                if ip:
+                    self.state["ipbans"][ip] = int(time.time())
                 self.seen.pop(target, None)
                 self.add("system", "", f"{name} has been banned from the room.")
             elif word == "/unban":
                 self.state["bans"].pop(target, None)
+                if ip:
+                    self.state["ipbans"].pop(ip, None)
                 tell(f"{name} is no longer banned.")
             elif word == "/kick":
                 self.seen.pop(target, None)
@@ -258,9 +292,9 @@ class Room:
         return tell("Commands: /who /mute Name [minutes] /unmute Name /kick Name /ban Name /unban Name" +
                     (" /modcode /unmod Name" if me == "owner" else ""))
 
-    def say(self, kh, name, text):
+    def say(self, kh, name, text, web=False):
         with self.lock:
-            screen = self.screen_for(kh, name)
+            screen = self.screen_for(kh, name, web)
             if self.banned(kh):
                 return {"error": "You are banned from this room."}
             text = clean(text)
@@ -285,13 +319,44 @@ def make_handler(room):
         def log_message(self, *args):
             pass
 
+        def site(self):
+            """True when the request comes from the website's own chat room page (a browser on xiforever.com)."""
+            return self.headers.get("Origin", "") in SITE_ORIGINS
+
+        def cors(self):
+            if self.site():
+                self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin"))
+                self.send_header("Vary", "Origin")
+
         def reply(self, code, body):
             data = json.dumps(body).encode()
             self.send_response(code)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
+            self.cors()
             self.end_headers()
             self.wfile.write(data)
+
+        def do_OPTIONS(self):
+            if not self.site():
+                self.send_response(403)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            self.send_response(204)
+            self.cors()
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Stink-Key")
+            self.send_header("Access-Control-Max-Age", "600")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def web_ip(self, kh):
+            """Website visitors only: note their address (Caddy passes it on in X-Forwarded-For)."""
+            if self.site():
+                ip = (self.headers.get("X-Forwarded-For") or self.client_address[0]).split(",")[0].strip()
+                with room.lock:
+                    room.note_ip(kh, iphash(ip))
 
         def key(self):
             key = self.headers.get("X-Stink-Key", "")
@@ -313,19 +378,23 @@ def make_handler(room):
                 return self.reply(403, {"error": "no key"})
             body = self.body()
             path = urlparse(self.path).path.rstrip("/")
+            web = self.site()          # (a browser on the website is always a website visitor)
+            self.web_ip(kh)
             if path == "/hello":
                 with room.lock:
                     banned = room.banned(kh)
                     if not banned:
-                        screen = room.screen_for(kh, body.get("name", ""))
+                        screen = room.screen_for(kh, body.get("name", ""), web)
                         room.touch(kh, screen)
                         answer = {"screen": screen, "seq": max(0, room.seq - JOIN_HISTORY)}
                 if banned:
                     return self.reply(200, {"error": "You are banned from this room."})
                 return self.reply(200, answer)
             if path == "/say":
-                return self.reply(200, room.say(kh, body.get("name", ""), body.get("text", "")))
+                return self.reply(200, room.say(kh, body.get("name", ""), body.get("text", ""), web))
             if path == "/announce":
+                if web:
+                    return self.reply(403, {"error": "not from the website"})
                 with room.lock:
                     answer = room.announce(kh, body)
                 return self.reply(200, answer)
@@ -346,6 +415,7 @@ def make_handler(room):
                 return self.reply(200, body)
             if not kh or url.path.rstrip("/") != "/poll":
                 return self.reply(403, {"error": "no key"})
+            self.web_ip(kh)
             if room.banned(kh):
                 return self.reply(200, {"error": "You are banned from this room.", "seq": room.seq, "lines": [], "people": []})
             try:

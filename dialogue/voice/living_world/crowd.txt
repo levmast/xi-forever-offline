@@ -558,3 +558,16 @@ P67|ok
 P68|ok|place=notjeuno
 P69|ok|place=ferry
 P70|x|bats in town
+
+# ---- our own crowd lines:  +id|category|opts|casual|polite (optional) ----
+# Living Vana'diel, Writing Contribution #001, by J-NULL (JO), 2026-11-23: townsfolk lines (said by the crowd in that town)
++jo1_sandy_knight|say_town|place=sandoria|A polished sword means little if the hand holding it trembles.
++jo1_sandy_merchant|say_town|place=sandoria|Adventurers always have stories. Rarely enough gil.
++jo1_bastok_miner|say_town|place=bastok|The mountain gives nothing away for free.
++jo1_bastok_smith|say_town|place=bastok|Another broken sword? What are you people fighting out there?
++jo1_windy_student|say_town|place=windurst|I tried a new spell yesterday. The ceiling is still missing.
++jo1_windy_traveler|say_town|place=windurst|Funny how the smallest people have the biggest ambitions.
++jo1_jeuno_adv|say_town|place=jeuno|Everyone comes here chasing something.
++jo1_jeuno_merchant|say_town|place=jeuno|You can tell how far someone's traveled by the state of their boots.
++jo1_selbina_fisher|say_town|place=ferry|Some days the sea gives you dinner. Other days it gives you patience.
++jo1_mhaura_sailor|say_town|place=ferry|Every departure is somebody else's homecoming.

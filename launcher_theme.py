@@ -34,6 +34,8 @@ config.json keeps the choices:
     "theme_music": false    the song is off          "theme_volume": 0.0 to 1.0    how loud it is
     "theme_plays": {"opener": 3}    how often a song with __plays- in its name has opened the launcher here (by its name up to the first tag)
 ("limited_look": false, written by the first Theme page for "off", still counts as Default.)
+A theme whose .json says "standard": true (aero.json, from 2026-11-23) is what a PC wears when nothing is picked, ahead of any
+limited-time theme: it takes the place of the launcher's own look, which stays on the Theme page as "Classic" (key "default").
 
 The three files that define the launcher's colours (launcher_gui.pyw, launcher_widgets.py, launcher_coop_gui.py) each call colours()
 right after their own, launcher_pages.build() calls add_page(app, tabs) and launcher_gui's main() calls start(app). Nothing in here
@@ -220,6 +222,14 @@ def looks():
     return found
 
 
+def standard_look(found=None):
+    """The theme a PC wears when nothing is picked ("standard": true in its .json, undated), or None."""
+    for look in (looks() if found is None else found):
+        if look.get("standard") is True and not look["until"]:
+            return look
+    return None
+
+
 def event_look(found=None):
     """The limited-time theme in date today (the first dated one), or None."""
     for look in (looks() if found is None else found):
@@ -243,14 +253,15 @@ def picked(cfg, event):
 def load_look():
     """The look the launcher wears this time: the theme picked on the Theme page, else the limited-time one in date, else None (its own)."""
     found = looks()
+    standard = standard_look(found)
     event = event_look(found)
-    pick = picked(config(), event)
+    pick = picked(config(), None if standard is not None else event)     # with a standard theme a limited-time one never turns itself on
     if pick == DEFAULT:
         return None
     for look in found:
         if look["key"] == pick:
             return look
-    return event
+    return standard or event
 
 
 def switched_off():
@@ -267,7 +278,9 @@ def worn():
 
 def themes():
     """What the Theme page offers: Default (the launcher's own look), then every theme there is today."""
-    return [{"key": DEFAULT, "name": "Default", "until": "", "colours": dict(OWN)}] + looks()
+    found = looks()
+    name = "Classic" if standard_look(found) is not None else "Default"
+    return [{"key": DEFAULT, "name": name, "until": "", "colours": dict(OWN)}] + found
 
 
 def load_font(look):
@@ -504,7 +517,13 @@ class Player:
                 kind = "waveaudio" if path.lower().endswith(".wav") else "mpegvideo"
                 code = self._mci(f'open "{path}" type {kind} alias {self.ALIAS}')[0]
                 if code:
-                    self.why = "Windows could not open the song (" + self._mci_error(code) + ")"
+                    first = self._mci_error(code)
+                    # (2026-11-24, lilibun, Hexblood, Sterling: "MCI error 277" on Windows 10 Pro / 11) the old MCI player
+                    # needs Windows' DirectShow MP3 decoder, which codec packs or a broken registry entry can knock out
+                    # while every music app still plays the file. Then Windows Media Foundation plays it instead.
+                    if self._play_mf(path, volume):
+                        return True
+                    self.why = "Windows could not open the song (" + first + "; " + (self.why or "the other player failed too") + ")"
                     return False
                 self.open = True
                 self._mci(f"setaudio {self.ALIAS} volume to {int(max(0.0, min(1.0, volume)) * 1000)}")
@@ -526,6 +545,39 @@ class Player:
             self.stop()
         return False
 
+    # Windows Media Foundation through WPF's MediaPlayer, in a hidden PowerShell that lives as long as the song
+    MF_SCRIPT = (
+        "$ErrorActionPreference='Stop';"
+        "Add-Type -AssemblyName PresentationCore,System.Windows.Forms;"
+        "$p=New-Object System.Windows.Media.MediaPlayer;"
+        "$p.Volume=[double]$env:XIFO_SONG_VOLUME;"
+        "$p.Open([Uri]::new($env:XIFO_SONG));"
+        "$t=0;while(-not $p.NaturalDuration.HasTimeSpan -and $t -lt 100){[System.Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 100;$t++};"
+        "if(-not $p.NaturalDuration.HasTimeSpan){exit 3};"
+        "$p.Play();"
+        "$end=(Get-Date).AddSeconds($p.NaturalDuration.TimeSpan.TotalSeconds+1);"
+        "while((Get-Date) -lt $end){[System.Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 250}")
+
+    def _play_mf(self, path, volume):
+        """The fallback player: True when the song started (the process still runs after a short wait)."""
+        try:
+            env = dict(os.environ, XIFO_SONG=os.path.abspath(path),
+                       XIFO_SONG_VOLUME=str(max(0.0, min(1.0, volume))))
+            proc = subprocess.Popen(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                                     "-WindowStyle", "Hidden", "-Command", self.MF_SCRIPT],
+                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env,
+                                    creationflags=0x08000000)          # CREATE_NO_WINDOW
+            try:
+                code = proc.wait(timeout=12)                         # still running after 12 s: it is playing
+            except subprocess.TimeoutExpired:
+                self.proc = proc
+                return True
+            err = (proc.stderr.read() or b"").decode("utf-8", "replace").strip().splitlines()
+            self.why = "Windows Media Foundation could not play it either" + (f" ({err[-1][:160]})" if err else f" (code {code})")
+        except Exception as e:
+            self.why = f"Windows Media Foundation: {type(e).__name__}: {e}"
+        return False
+
     def volume(self, level):
         """Louder or quieter while it plays (Windows; elsewhere the new level counts from the next time)."""
         try:
@@ -536,7 +588,7 @@ class Player:
 
     def playing(self):
         try:
-            if os.name == "nt":
+            if os.name == "nt" and self.proc is None:
                 return self.open and self._mci(f"status {self.ALIAS} mode")[1] == "playing"
             return self.proc is not None and self.proc.poll() is None
         except Exception:
@@ -544,11 +596,10 @@ class Player:
 
     def stop(self):
         try:
-            if os.name == "nt":
-                if self.open:
-                    self._mci(f"stop {self.ALIAS}")
-                    self._mci(f"close {self.ALIAS}")
-            elif self.proc is not None and self.proc.poll() is None:
+            if os.name == "nt" and self.open:
+                self._mci(f"stop {self.ALIAS}")
+                self._mci(f"close {self.ALIAS}")
+            if self.proc is not None and self.proc.poll() is None:
                 self.proc.terminate()
         except Exception:
             pass
@@ -700,6 +751,10 @@ class Controls:
         self.app = app
         self.themes = themes()                         # Default first, then every theme there is today
         self.event = event_look(self.themes[1:])       # the limited-time one, if one is in date
+        standard = standard_look(self.themes[1:])
+        self.fallback = standard["key"] if standard is not None else DEFAULT    # what a PC wears with nothing picked
+        if standard is not None:
+            self.event = None                          # it does not turn itself on: it is simply one to pick
         self.worn = LOOK["key"] if LOOK is not None else DEFAULT       # what the launcher wears this time
         self.pick = self.worn                          # what is picked: it counts from the next start
         self.sound = music_file()                      # the worn look's opening theme
@@ -793,7 +848,7 @@ class Controls:
             self.refresh()
             return
         self.pick = key
-        by_itself = self.event["key"] if self.event is not None else DEFAULT
+        by_itself = self.event["key"] if self.event is not None else self.fallback
         if key == by_itself:                          # what the launcher wears with no pick at all: nothing to keep
             self.remember({"theme": None, "theme_event": None, "limited_look": None})
         else:
@@ -855,11 +910,12 @@ def add_page(app, tabs):
             var = page.theme_vars[key] = tk.BooleanVar(app, key == c.pick)
             line = tk.Frame(card.body, bg=w.PANEL)
             line.pack(fill="x", pady=3)
-            switch = page.theme_switches[key] = w.Switch(line, var, command=lambda key=key, var=var: c.set_theme(key if var.get() else DEFAULT))
+            switch = page.theme_switches[key] = w.Switch(line, var, command=lambda key=key, var=var: c.set_theme(key if var.get() else c.fallback))
             switch.pack(side="right")
             swatch(line, theme, w.PANEL, w.LINE).pack(side="left", padx=(0, 10))
             tk.Label(line, text=theme["name"], bg=w.PANEL, fg=w.FG, font=(w.UI_FONT, 10), anchor="w").pack(side="left")
-            about = "The launcher's own look" if key == DEFAULT else f"Limited time: until {last_day_text(theme['until'])}" if theme["until"] else ""
+            about = ("The launcher's original look" if c.fallback != DEFAULT else "The launcher's own look") if key == DEFAULT else \
+                "The standard look" if key == c.fallback else f"Limited time: until {last_day_text(theme['until'])}" if theme["until"] else ""
             if about:
                 tk.Label(line, text=about, bg=w.PANEL, fg=w.DIM, font=(w.UI_FONT, 9), anchor="w").pack(side="left", padx=(12, 0))
         words = "A theme changes the launcher's colours and buttons, and the launcher restarts to change it."

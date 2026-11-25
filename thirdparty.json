@@ -138,7 +138,15 @@
           "addons/xiui/"
         ]
       ],
-      "check": "addons/xiui/XIUI.lua"
+      "check": "addons/xiui/XIUI.lua",
+      "fixups": [
+        [
+          "addons/xiui/handlers/notificationhandler.lua",
+          "if slot == nil or slot >= 10 then return end",
+          "if slot == nil or slot >= 10 or struct.unpack('B', e.data, 0x15 + 1) == 1 then return end -- (XI: Forever Offline) Entry 1 = an item already in the pool, sent again when the party changes: not a new drop",
+          "loot pop-ups showed twice or three times when squad mates joined or zoned (Hasuko)"
+        ]
+      ]
     },
     {
       "id": "xiuiplus",

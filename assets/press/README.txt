@@ -21,6 +21,9 @@ back by themselves and the dated ones are simply skipped, so nothing has to be r
 Themes work the same way (launcher_theme.py). A theme is a .json in here with a "colours" table:
     vaporwave__until-2026-12-02.json   a limited-time theme: it turns itself on when it arrives and is gone the day after its date
     8bit.json                          (no date in the name) a theme that is always there to pick; never on unless a player picks it
+    aero.json                          an undated theme with "standard": true: what every PC wears when nothing is picked on the
+                                       Theme page, ahead of any limited-time theme (only one theme should say it). The launcher's
+                                       own look is then called "Classic" there and stays pickable.
     title__center__theme-8bit.png      a theme's own banner (__theme- and the theme's short name, here 8bit): shown only while that
                                        theme is worn, and then in place of the usual banners. art-src\scripts\bit_banners.py makes
                                        the 8-Bit theme's twelve (1056 x 424: on most screens the Play page shows them pixel for pixel)

@@ -680,10 +680,20 @@ def import_gguf(gguf_path, name=None, log=print, run=None):
     with open(modelfile, "w", encoding="utf-8") as f:
         f.write(f'FROM "{os.path.abspath(gguf_path)}"\n')
     log(f"Importing {os.path.basename(gguf_path)} into Ollama as {name} (this can take a few minutes)...")
-    out = (run or subprocess.run)([exe, "create", name, "-f", modelfile], capture_output=True, text=True, errors="replace",
-                                  creationflags=NO_WINDOW)
+    run = run or subprocess.run
+    # (2026-11-24, AerynGunn on Linux: "could not connect to ollama server") ollama create needs Ollama running, as pull
+    # does: start it when it isn't (Windows starts it with the desktop; a Linux install has nothing that does)
+    if run([exe, "list"], capture_output=True, text=True, errors="replace", timeout=20, creationflags=NO_WINDOW).returncode != 0:
+        subprocess.Popen([exe, "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=NO_WINDOW,
+                         **({} if os.name == "nt" else {"start_new_session": True}))
+        time.sleep(5)
+    out = run([exe, "create", name, "-f", modelfile], capture_output=True, text=True, errors="replace",
+              creationflags=NO_WINDOW)
     if out.returncode != 0:
-        raise RuntimeError(((out.stderr or out.stdout or "").strip()[-300:]) or "ollama create failed")
+        # Ollama draws a progress spinner with terminal codes: only its last real line is worth showing
+        said = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", (out.stderr or "") + "\n" + (out.stdout or "")).replace("\r", "\n")
+        said = [l.strip() for l in said.splitlines() if l.strip() and "gathering model components" not in l]
+        raise RuntimeError(f"ollama create {name} did not work." + (f"\n\nOllama said: {said[-1][:300]}" if said else ""))
     log(f"AI model {name} is ready.")
     return name
 

@@ -195,10 +195,13 @@ def write_server_files(kit, server_dir, is_open=False, world_name=""):
     return problems
 
 
-def add_pending(kit, server_dir, name, mode):
+def add_pending(kit, server_dir, name, mode, charid=None):
     s = settings(kit)
     s["pending"] = [e for e in s["pending"] if isinstance(e, dict) and str(e.get("name", "")).lower() != name.lower()]
-    s["pending"].append({"name": name, "mode": int(mode), "at": int(time.time())})
+    entry = {"name": name, "mode": int(mode), "at": int(time.time())}
+    if charid:
+        entry["charid"] = int(charid)
+    s["pending"].append(entry)
     save_settings(kit, s)
     if server_dir:
         with open(os.path.join(_module_dir(server_dir), "hardcore_pending.lua"), "w", encoding="utf-8", newline="\n") as handle:
@@ -218,6 +221,48 @@ def forget_pending(kit, names):
 def _all(cur, sql, params=()):
     cur.execute(sql, params)
     return cur.fetchall()
+
+
+def prune_pending(kit, conn, bot_base=21000000):
+    """(2026-11-24) Drops waiting entries whose character was deleted, so a deleted character doesn't stay on the
+    Hardcore list as "waiting for its first log in" (Kandra), and a new character that later takes the same name isn't
+    turned hardcore by an old entry. An entry's character is remembered (charid) the first time it is seen.
+    - Randomized (mode 4): the launcher makes the character before the entry is added, so no character = deleted.
+    - Iron / Steel / Silver: the player may not have made the character yet (it is made on the game's creation
+      screen), so the entry is only dropped once its character was seen and is now gone (or the name is someone else's).
+    A character counts while its chars row has a player account (0 < accid < bot_base). Returns the names dropped."""
+    s = settings(kit)
+    cur = conn.cursor()
+    try:
+        keep, dropped, changed = [], [], False
+        for e in s["pending"]:
+            if not isinstance(e, dict):
+                changed = True
+                continue
+            name = str(e.get("name", ""))
+            rows = _all(cur, "SELECT charid FROM chars WHERE charname LIKE ? AND accid > 0 AND accid < ? LIMIT 1", (name, bot_base))
+            now_id = int(rows[0][0]) if rows else None
+            seen = e.get("charid")
+            if now_id is None:
+                if int(e.get("mode", 0)) == 4 or seen:
+                    dropped.append(name)
+                    changed = True
+                    continue
+            elif seen and int(seen) != now_id:
+                dropped.append(name)
+                changed = True
+                continue
+            elif not seen:
+                e["charid"] = now_id
+                changed = True
+            keep.append(e)
+        if changed:
+            s["pending"] = keep
+            save_settings(kit, s)
+        return dropped
+    finally:
+        cur.close()
+        conn.rollback()
 
 
 def _columns(cur, table):
@@ -327,6 +372,11 @@ def create_randomized(conn, login, name, server_dir=None, rng=None):
         if not row:
             raise CreateError(f"The game account '{login}' is not in this world's database.")
         accid, slots = int(row[0][0]), int(row[0][1] or 16)
+        # (2026-11-24, datadecay) a character deleted in the game stays in the table under its name (accid = 0): free
+        # the name the way free_names.py does (Del<id><name>), as making a character in the game already does
+        for row in _all(cur, "SELECT charid FROM chars WHERE charname LIKE ? AND accid = 0", (name,)):
+            cur.execute("UPDATE chars SET charname = ? WHERE charid = ? AND accid = 0",
+                        (("Del" + str(int(row[0])) + name)[:15], int(row[0])))
         if _all(cur, "SELECT 1 FROM chars WHERE charname LIKE ? LIMIT 1", (name,)):
             raise CreateError(f"The name {name} is already taken in this world.")
         count = int(_all(cur, "SELECT COUNT(*) FROM chars WHERE accid = ?", (accid,))[0][0])

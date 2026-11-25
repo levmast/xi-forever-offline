@@ -321,3 +321,45 @@ tank|Agreed. Slower and steadier.
 +scene:return_wonder|s.scene_return|60
 healer|There you are. We were starting to wonder.
 tank|Wondering, not worrying. Mostly.
+
+# ---- Living Vana'diel, Writing Contribution #001, by J-NULL (JO), 2026-11-23 ----
+# (contractions written out, like the rest of the squad's lines; otherwise as written)
++jo1_b_pull|s.battle|voice=bold|Hope everyone is awake. I am bringing company.
++jo1_b_lowhp|s.lowhp|voice=bold|I have walked away from worse.
++jo1_b_after|s.after|voice=bold|Now that is how you earn your gil.
++jo1_b_town|s.idle_town|voice=bold|Enough sightseeing. Let us find some trouble.
++jo1_b_field|s.idle_field|voice=bold|I wonder what is waiting beyond that hill.
++jo1_c_pull|s.battle|voice=calm|Ready yourselves. One at a time.
++jo1_c_lowhp|s.lowhp|voice=calm|A little healing would be appreciated.
++jo1_c_after|s.after|voice=calm|Well done. Let us recover before moving on.
++jo1_c_town|s.idle_town|voice=calm|It is nice to hear something other than battle for a while.
++jo1_c_field|s.idle_field|voice=calm|The world feels peaceful when we stop running through it.
++jo1_h_pull|s.battle|voice=cheerful|Here comes our next bit of experience!
++jo1_h_lowhp|s.lowhp|voice=cheerful|I would really prefer not to become a ghost today.
++jo1_h_after|s.after|voice=cheerful|Same time, same monster?
++jo1_h_town|s.idle_town|voice=cheerful|Anyone hungry? I am always hungry.
++jo1_h_field|s.idle_field|voice=cheerful|Think we will find something rare today?
++jo1_g_pull|s.battle|voice=gruff|Weapons out. Less talking.
++jo1_g_lowhp|s.lowhp|voice=gruff|Healer. Whenever you are ready.
++jo1_g_after|s.after|voice=gruff|Ugly thing. Good riddance.
++jo1_g_town|s.idle_town|voice=gruff|Too many people. Not enough places to sit.
++jo1_g_field|s.idle_field|voice=gruff|Keep your eyes open. Quiet does not mean safe.
+# Short Scene 001 - A Close Call (after a fight where a mate fell under 30% HP: s.scene_after)
++scene:jo1_close_call|s.scene_after|60
+tank|Thought you were going to let me die back there.
+healer|I considered it.
+tank|Very funny.
+healer|Next time, wait until I have MP.
+tank|Fair enough.
+# Short Scene 002 - One More Level (resting with you)
++scene:jo1_one_more_level|s.scene_rest|90
+support|Just one more level!
+damage|You said that two levels ago.
+support|This time I mean it.
+healer|I will believe you when we are back in town.
+# Short Scene 003 - A Place to Return (resting with you)
++scene:jo1_place_to_return|s.scene_rest|90
+healer|Do you ever miss home?
+damage|Sometimes.
+support|Then why do we keep traveling?
+damage|So we will have stories when we return.

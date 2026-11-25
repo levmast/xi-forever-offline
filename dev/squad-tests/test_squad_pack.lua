@@ -335,6 +335,40 @@ for round = 1, 40 do
 end
 check('resting with a tank and a damage dealer: now and then a short scene between them', restScene)
 
+-- J-NULL's writing contribution #001 (2026-11-23): 20 voice lines and the close-call scene after a hard fight
+local jo, joVoice = 0, true
+for _, l in ipairs(data.lines) do
+    if l.id:find('^fo_sq_jo1_') then
+        jo = jo + 1
+        if #l.voices ~= 1 then joVoice = false end
+    end
+end
+check('J-NULL #001: 20 squad lines, each for one voice', jo == 20 and joVoice, jo)
+local closeSeen, closeWrong, noCloseSeen = false, false, false
+for k = 1, 60 do
+    P._reset(); said = {}
+    pl = newPlayer('Hurami'); ms = { newMate(pl, 'Tank', 7, 40), newMate(pl, 'Heal', 3, 40) }; pl.party = ms
+    for _, mt in ipairs(ms) do P.remember(mt.name, 1, mt.job, mt.lvl) end
+    xi.squad.aiSaidAt = 0
+    P.tick(ms[1])
+    local close = k % 2 == 0
+    pl.engaged = true
+    for s = 1, 3 do NOW = NOW + 1; P.tick(ms[1]) end
+    if close then ms[1].hp = 20 end
+    for s = 1, 3 do NOW = NOW + 1; P.tick(ms[1]) end
+    ms[1].hp = 100
+    pl.engaged = false
+    said = {}
+    for s = 1, 40 do NOW = NOW + 1; P.tick(ms[1]) end
+    local scene = false
+    for _, x in ipairs(said) do if x.text == 'Thought you were going to let me die back there.' then scene = true; if x.name ~= 'Tank' then closeWrong = true end end end
+    if scene and close then closeSeen = true end
+    if scene and not close then noCloseSeen = true end
+    NOW = NOW + 2 * 3600
+end
+check('after a close fight (a mate under 30% HP): now and then "A Close Call", the tank opening', closeSeen and not closeWrong)
+check('... never after an easy fight', not noCloseSeen)
+
 -- state survives a restart
 P._reset(); said = {}
 pl = newPlayer('Hurami'); local m = newMate(pl, 'Newbie', 1, 1); pl.party = { m }

@@ -11,7 +11,9 @@ already made here (make it in the lobby first, then log out), like this:
 
 What comes across: job levels (capped at this world's level cap; jobs after Treasures of Aht Urhgan are left out),
 main and support job, combat and crafting skills, spells, key items, gil, every bag with augments, the gear you wore,
-race, face and size, nation, rank and title. Not: quests, missions, fame, merits, linkshells, mog house layout.
+race, face and size, nation, rank and title; quests and missions (every log: current and finished, Assault and
+Campaign included), currencies (conquest points, seals, tabs, assault points...), merits and merit points.
+Not: fame, linkshells, mog house layout, or a quest's own progress inside it (the game never sends those).
 The character's own jobs, skills, spells, key items and bags here are REPLACED. A backup of the character is written
 to backups/ first (and the launcher's Characters page can put it back).
 """
@@ -38,6 +40,7 @@ CONTAINERS = {0: "inventory", 1: "safe", 9: "safe", 4: "locker", 5: "satchel", 6
 FILL_ORDER = (0, 1, 9, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16)
 KEY_TABLES, KEY_TABLE_BITS = 8, 512
 TITLE_BYTES = 143
+LINKSHELL_ITEMS = frozenset((513, 514, 515))   # Linkshell, Pearlsack, Linkpearl
 
 # charcapture, pinned to the commit Hurami was given permission for
 CAPTURE_REPO, CAPTURE_REF = "VanaDreams/vanadreams-launcher", "24bf06c9c77b60a50568a2feb4e6ae1f747ad951"
@@ -82,6 +85,92 @@ def _known(cur, sql, ids):
         cur.execute(sql.format(",".join("?" * len(chunk))), chunk)
         found.update(int(r[0]) for r in cur.fetchall())
     return found
+
+
+# ---------------------------------------------------------------- quests and missions (2026-11-24, Hasuko)
+# The capture keeps the game's own quest/mission log packets (0x056), keyed by their "port" in hex. They map straight
+# onto the server's blobs (chars.quests / missions / assault / campaign, src/common/mmo.h):
+#   quests:   11 areas x (32 bytes current + 32 bytes finished)
+#   missions: 15 logs x (uint16 current, statusUpper, statusLower, 64 x bool finished)
+#   assault:  uint16 current, 128 x bool;  campaign: uint16 current, 512 x bool
+QUEST_AREAS = 11
+QUEST_OFFER = {0x50: 0, 0x58: 1, 0x60: 2, 0x68: 3, 0x70: 4, 0x78: 5, 0x80: 6, 0x88: 7, 0xE0: 8, 0xF0: 9, 0x100: 10}
+QUEST_DONE = {0x90: 0, 0x98: 1, 0xA0: 2, 0xA8: 3, 0xB0: 4, 0xB8: 5, 0xC0: 6, 0xC8: 7, 0xE8: 8, 0xF8: 9, 0x108: 10}
+MISSION_LOGS, MISSION_SIZE = 15, 70          # Sandoria 0 Bastok 1 Windurst 2 Zilart 3 ToAU 4 WoTG 5 CoP 6 ... RoV 13
+LOG_NAMES = ("San d'Oria", "Bastok", "Windurst", "Rise of the Zilart", "Treasures of Aht Urhgan", "Wings of the Goddess",
+             "Chains of Promathia")
+
+
+def _packets(snap):
+    out = {}
+    for key, value in (snap.get("quest_mission_packets") or {}).items():
+        try:
+            data = bytes.fromhex(value)
+            out[int(key, 16)] = data.ljust(32, b"\0")[:32]
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _bits(data, count):
+    return [bool(data[i // 8] >> (i % 8) & 1) for i in range(count)]
+
+
+def story(snap):
+    """The character's quest, mission, assault and campaign logs as the server's four blobs, or None when the snapshot
+    has no quest/mission packets (an older charcapture)."""
+    import struct
+    packets = _packets(snap)
+    if not packets:
+        return None
+    quests = bytearray(QUEST_AREAS * 64)
+    seen_q = 0
+    for port, area in QUEST_OFFER.items():
+        if port in packets:
+            data = packets[port][:16] if area == 6 else packets[port]   # Aht Urhgan: bytes 16-31 are the mission logs
+            quests[area * 64:area * 64 + len(data)] = data
+            seen_q += 1
+    for port, area in QUEST_DONE.items():
+        if port in packets:
+            data = packets[port][:16] if area == 6 else packets[port]   # Aht Urhgan: bytes 16-31 are Assaults done
+            quests[area * 64 + 32:area * 64 + 32 + len(data)] = data
+            seen_q += 1
+
+    current = [0xFFFF if i < 3 else 0 for i in range(MISSION_LOGS)]
+    upper, lower = [0] * MISSION_LOGS, [0] * MISSION_LOGS
+    done = [[False] * 64 for _ in range(MISSION_LOGS)]
+    main = packets.get(0xFFFF)
+    if main:
+        nation, nation_mission, zilart, cop, cop2 = struct.unpack_from("<IIIII", main, 0)
+        addons, _tales = struct.unpack_from("<HH", main, 20)
+        if nation in (0, 1, 2):
+            current[nation] = nation_mission & 0xFFFF
+        current[3], current[6] = zilart & 0xFFFF, cop & 0xFFFF
+        upper[6], lower[6] = (cop2 >> 16) & 0xFFFF, cop2 & 0xFFFF
+        current[9], current[10], current[11] = addons & 0xF, (addons >> 4) & 0xF, (addons >> 8) & 0xF
+    if 0xD0 in packets:                                    # finished nation and Zilart missions: 2 words per log
+        bits = _bits(packets[0xD0], 256)
+        for log in range(4):
+            done[log] = bits[log * 64:log * 64 + 64]
+    if 0xD8 in packets:                                    # finished ToAU (words 0-1) and WoTG (words 2-3)
+        bits = _bits(packets[0xD8], 128)
+        done[4], done[5] = bits[0:64], bits[64:128]
+    assault_current, campaign_current = 0, 0
+    if 0x80 in packets:                                    # Aht Urhgan quests in progress also carry these
+        assault_current, current[4], current[5], campaign_current = struct.unpack_from("<IIII", packets[0x80], 16)
+        current[4], current[5] = current[4] & 0xFFFF, current[5] & 0xFFFF
+    missions = bytearray()
+    for log in range(MISSION_LOGS):
+        missions += struct.pack("<HHH", current[log], upper[log], lower[log]) + bytes(done[log])
+    assault = struct.pack("<H", assault_current & 0xFFFF) + bytes(_bits(packets[0xC0][16:], 128) if 0xC0 in packets else [0] * 128)
+    campaign_bits = (_bits(packets[0x30], 256) if 0x30 in packets else [False] * 256) + \
+                    (_bits(packets[0x38], 256) if 0x38 in packets else [False] * 256)
+    campaign = struct.pack("<H", campaign_current & 0xFFFF) + bytes(campaign_bits)
+    finished = sum(bin(b).count("1") for area in range(QUEST_AREAS) for b in quests[area * 64 + 32:area * 64 + 64]
+                   if area != 6) + sum(bin(b).count("1") for b in quests[6 * 64 + 32:6 * 64 + 48])
+    missions_done = {LOG_NAMES[log]: sum(done[log]) for log in range(7) if any(done[log])}
+    return {"quests": bytes(quests), "missions": bytes(missions), "assault": bytes(assault), "campaign": bytes(campaign),
+            "quests_done": finished, "missions_done": missions_done, "logs_seen": seen_q}
 
 
 def plan(conn, snap, charid, max_level=75):
@@ -166,6 +255,12 @@ def plan(conn, snap, charid, max_level=75):
     if above:
         report["left_out"].append(f"{len(above)} pieces of gear above level {max_level}")
     wanted = [r for r in raw if r[2] in known and r[2] not in too_high]
+    # (2026-11-24, Hasuko) a linkshell, pearl or pearlsack belongs to a linkshell of the other game: here it is only a
+    # broken item that can't even be thrown away safely, so it stays behind
+    shells = [r for r in wanted if r[2] in LINKSHELL_ITEMS]
+    if shells:
+        wanted = [r for r in wanted if r[2] not in LINKSHELL_ITEMS]
+        report["left_out"].append(f"{len(shells)} linkshell(s) and pearls (they belong to the other game's linkshells)")
 
     cur.execute("SELECT * FROM char_storage WHERE charid = ?", (charid,))
     row = cur.fetchone()
@@ -213,8 +308,37 @@ def plan(conn, snap, charid, max_level=75):
     nation = int(char.get("nation") or 0) if int(char.get("nation") or 0) in (0, 1, 2) else 0
     rank = max(1, min(10, int(char.get("rank") or 1)))
     report["kept"].append(f"nation {('San d''Oria', 'Bastok', 'Windurst')[nation]}, rank {rank}")
-    report["left_out"].append("quests, missions, fame, merits, linkshells and the mog house layout (never carried)")
-    return {"charid": charid, "levels": levels, "main": main, "sub": sub, "genkai": genkai, "unlocked": unlocked,
+    # quests and missions, currencies, merits (2026-11-24, Hasuko: they stayed as the character here had them)
+    logs = story(snap)
+    if logs:
+        report["kept"].append(f"quests and missions: {logs['quests_done']} quests finished"
+                              + "".join(f", {n} {c}" for n, c in logs["missions_done"].items()))
+    else:
+        report["left_out"].append("quests and missions (this snapshot is from an older charcapture: /capture again)")
+    try:
+        cur.execute("SHOW COLUMNS FROM char_points")
+        point_cols = {str(r[0]) for r in cur.fetchall()} - {"charid"}
+    except Exception:
+        point_cols = set()
+    points = {k: max(0, int(v or 0)) for k, v in (snap.get("currencies") or {}).items()
+              if k in point_cols and isinstance(v, (int, float))}
+    if any(points.values()):
+        report["kept"].append(f"{sum(1 for v in points.values() if v)} currencies (conquest points, seals, tabs...)")
+    merit_upgrades = {}
+    for key, value in (snap.get("merit_upgrades") or {}).items():
+        try:
+            if int(value) > 0:
+                merit_upgrades[int(key)] = int(value)
+        except (TypeError, ValueError):
+            continue
+    merit_points = max(0, int(((jobs.get("merits") or {}).get("points")) or 0))
+    limit_points = max(0, int(jobs.get("limit_points") or 0)) if not isinstance(jobs.get("limit_points"), dict) else 0
+    if merit_upgrades or merit_points:
+        report["kept"].append(f"merits: {sum(merit_upgrades.values())} upgrades, {merit_points} unspent points")
+    report["left_out"].append("fame, linkshells and the mog house layout (the game never sends them)")
+    return {"story": logs, "points": points, "merit_upgrades": merit_upgrades, "merit_points": merit_points,
+            "limit_points": limit_points,
+            "charid": charid, "levels": levels, "main": main, "sub": sub, "genkai": genkai, "unlocked": unlocked,
             "skills": skills, "spells": spells, "keys": keys, "items": placed, "gil": gil, "equip": equip,
             "race": int(char.get("race") or 0), "face": int(char.get("face") or 0), "size": int(char.get("size") or 0),
             "look": look, "title": title, "nation": nation, "rank": rank, "rank_points": int(char.get("rank_points") or 0),
@@ -284,6 +408,24 @@ def apply(conn, p):
         for equipslot, container, slot in p["equip"]:
             cur.execute("INSERT INTO char_equip (charid, slotid, equipslotid, containerid) VALUES (?, ?, ?, ?)",
                         (charid, slot, equipslot, container))
+        # quests and missions REPLACE the character's own logs (the old ones were the ones it had made here)
+        logs = p.get("story")
+        if logs:
+            cur.execute("UPDATE chars SET quests = ?, missions = ?, assault = ?, campaign = ? WHERE charid = ?",
+                        (logs["quests"], logs["missions"], logs["assault"], logs["campaign"], charid))
+        if p.get("points"):
+            cur.execute("SELECT 1 FROM char_points WHERE charid = ?", (charid,))
+            if cur.fetchone() is None:
+                cur.execute("INSERT INTO char_points (charid) VALUES (?)", (charid,))
+            cols = sorted(p["points"])
+            cur.execute("UPDATE char_points SET " + ", ".join(f"`{c}` = ?" for c in cols) + " WHERE charid = ?",
+                        [p["points"][c] for c in cols] + [charid])
+        if p.get("merit_upgrades") is not None and (p.get("merit_upgrades") or p.get("merit_points")):
+            cur.execute("DELETE FROM char_merit WHERE charid = ?", (charid,))
+            for merit, count in sorted(p["merit_upgrades"].items()):
+                cur.execute("INSERT INTO char_merit (charid, meritid, upgrades) VALUES (?, ?, ?)", (charid, merit, count))
+            cur.execute("UPDATE char_exp SET merits = ?, limits = ? WHERE charid = ?",
+                        (min(p.get("merit_points", 0), 255), min(p.get("limit_points", 0), 65535), charid))
         conn.commit()
     except Exception:
         conn.rollback()
@@ -299,8 +441,23 @@ def find_character(conn, name):
     charid = int(row[0])
     cur.execute("SELECT 1 FROM accounts_sessions WHERE charid = ? LIMIT 1", (charid,))
     if cur.fetchone():
-        raise ImportError_(f"{name} is logged in. Log out (or press STOP), then import.")
+        # (2026-11-24, Hasuko) a crash or a killed server leaves the login row behind, and then the character is
+        # "logged in" forever. With the map server not running nobody can be logged in: clear the leftover row.
+        if not map_server_running():
+            cur.execute("DELETE FROM accounts_sessions WHERE charid = ?", (charid,))
+            conn.commit()
+        else:
+            raise ImportError_(f"{name} is logged in. Log out (or press STOP), then import.")
     return charid
+
+
+def map_server_running():
+    """True when xi_map runs, or when that can not be checked (then the login row is trusted)."""
+    try:
+        import launcher_core
+        return launcher_core.is_running("xi_map")
+    except Exception:
+        return True
 
 
 def backup_first(conn, charid, name):

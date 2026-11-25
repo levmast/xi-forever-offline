@@ -2,9 +2,54 @@
 
 Newest first. The launcher shows this file on SYSTEM > Patch notes; the same notes go to #patch-notes on Discord.
 
-## v0.3.7 · 23 November 2026
+## v0.3.10 · 24 November 2026
+
+### New
+• Squad backup and restore: on the Squads page, "Back up squad" saves a character's whole squad to one file (every mate's look, jobs, levels, gear, unlocked items, which Rule Set each job uses, personality and greetings). "Restore..." puts it back, on the same character or another one; the squad it replaces is saved first. Thanks Rennie.
+• Updates show their download size ("Download: about 410 MB") before you start. Thanks Jaymz.
+• GM command !skipmissions <log> <mission> (for example !skipmissions cop THE_ROAD_FORKS): marks every earlier mission in that log done, makes the one you name your current mission, and gives the key items those missions hand out. Nation rank and final reward gear stay as they are (use !setrank and !additem). Needs a GM character. Thanks Blitzace, Quaiton and Mikoto.
+• New Discord forum: #squad-personalities, for sharing your squad mates' personalities and backstories. Thanks AerynGunn.
+• Character transfer now brings your quests and missions (every log, current and finished, CoP, ToAU, Assault and Campaign included), your currencies (conquest points, seals, tabs, assault points...) and your merits and merit points. Linkshells and pearls stay behind: they belong to the other game's linkshells. Thanks Hasuko.
 
 ### Fixes
+• Bot players: a healer synced down by level sync kept trying spells above its synced level and never healed. Bots now only pick spells their job can cast at their current level. Thanks Mikoto.
+• Throwing away a linkshell brought over by a character transfer crashed the server. Thanks Hasuko.
+• XIUI: loot pop-ups no longer show twice or three times when a squad mate is called or zones. Thanks Hasuko.
+• Each server update saves a copy of your database first. Only the newest 3 copies are kept now; the older ones are removed (they only piled up).
+• Hardcore icons: the "!hcicons" line no longer shows in your chat when you zone. The server always answered it; the line was only the game's own copy of what the add-on asks (hcicons 1.6). Thanks Rysan, notsensible and everyone who reported it.
+• GM commands on a logged-out character: giving an item (!giveitem) is now handed over at that character's next log in. It said "could not be" before. Thanks Ricc.
+• HARDCORE menu: a Randomized character can now take the name of a character you deleted, as the game's own character creation already allows. Thanks datadecay.
+• DUALBOX works right after setup_dualbox.py, without restarting the launcher first. Thanks Miniberg.
+• setup_gm.py promote: a character already at that GM level is no longer reported as "not found". Thanks Keithvalentine.
+• Character transfer: "is logged in" after a crash or a hard server stop. The import now clears the leftover login itself when the server is not running; no Repair needed. Thanks Hasuko.
+• Launcher music: on PCs where Windows' old player fails ("MCI error 277"), the theme now plays through Windows Media Foundation instead. Thanks lilibun, Hexblood and Sterling.
+• Your own .gguf AI model: the import now starts Ollama's service itself when it is not running, and shows a readable error if something else goes wrong. Thanks AerynGunn.
+• San d'Oria mission 6-1: after the cutscene, a chat line now says which key item King Destin wants (a Dreamrose) and where to find it (Western Altepa Desert). Thanks lilibun.
+
+## v0.3.8 · 24 November 2026
+
+### New
+• New installs without FINAL FANTASY XI: "Download FINAL FANTASY XI" now gets the whole game, already up to date (about 7.5 GB), from XI: Forever Offline's own download. No Square Enix installer, account or login. At the first PLAY, Windows asks once for permission to register the game. If the download can't be reached, setup uses Square Enix's installer as before.
+
+### Fixes
+• New installs: the game's first update comes from XI: Forever Offline's own download, with no Square Enix login. Setup said you needed a Square Enix account, and a game that still needed its first update opened the PlayOnline login steps instead of offering the download. The login steps now only show when the download can't be reached.
+• Hardcore and Randomized marks: the custom shields now show beside your name. The game keeps eight copies of its icon sheet, including a high-resolution one that large nameplates use, and the launcher was only patching one, so the game's own icons showed instead (a green goblet on Randomized characters). All eight are patched now, with sharper 32-pixel shields for large nameplates. New hardcore and Randomized characters also lose the new-player "?", which covered the shield, and characters made before this fix lose it at their next login.
+
+## v0.3.7 · 23 November 2026
+
+### New
+• A new look for the launcher: Aero, sky, water and glossy glass, mid-2000s style. It is now the standard look; the look you had before is "Classic" on OPTIONS > Theme, and a theme you picked yourself stays picked.
+• Living Vana'diel, Writing Contribution #001 by JØ and Nox: new lines for squad mates (all four voices), three squad scenes, bot players and linkshells, and town talk in San d'Oria, Bastok, Windurst, Jeuno, Selbina and Mhaura. (JØ, Nox)
+• Music: the Aero look has its own song, "TOMORROW.EXE" by JØ and Nox (a song about the launcher itself). (JØ, Nox)
+• Hardcore marks beside the name: Iron, Steel, Silver and Randomized characters show their mode's shield where the game shows its own flags, so everyone sees it (the hcicons badge over the head is off by default now; /hcicons names float brings it back). New players' ? is now XI: Forever's own crystal ?. (Yenkei)
+• RANDOMIZED: the launcher makes the character for you (random race, face, size, nation and starting city, no creation screen), you start in a random level 1 set of gear for your job with 10,000 gil, and its rates are now 2.5x experience, no experience lost, 3x drops and gil.
+• CO-OP: short invite codes. Hosting for friends now shows a code like KUPOMG-482-TRX (6 letters, 3 numbers, 3 letters) instead of the long one, whenever The Hub's server can be reached. Your friend types it under VISIT A FRIEND as before (spaces, dashes and small letters are fine). The Hub only keeps a sealed copy it can't open: your address and the code's secret never leave your launcher. No internet, or The Hub is down: the long code shows as before and always works, and COPY LONG CODE copies it even while a short code is shown (for a friend on your home network). NEW CODE and STOP HOSTING retire the short code too.
+
+### Fixes
+• Squad mates vanishing for a while after setting a camp or zoning (they came back once they moved): the outfit refresh now carries the mate's position and HP. (wildthing; reported by Ricc, K-Andy)
+• Squad mates did not cast Protectra and other area spells when you asked in chat. (wildthing; reported by Ricc)
+• Squad tanks: checks for who holds the monster's attention read the mate's own target. (wildthing)
+• Squad mates' bolts, arrows and bullets now give their additional effects too (Acid Bolt's Defense Down, Sleep Bolt and the like), as a player's do. (Syfin)
 • Bot players: on the new-look RULES page the roster and bots online still stopped at 600 / 550. They now go up to 2000 / 1500 there too (past the usual numbers the launcher asks first). (krazy)
 
 ## v0.3.6 · 23 November 2026
@@ -16,9 +61,10 @@ Newest first. The launcher shows this file on SYSTEM > Patch notes; the same not
 
 ### New
 • New installs start on the "era default" set: Fields/Grounds pages experience 0.128, treasure caskets 15%, era fishing (no minigame), guild shops that never run out, auction house from anywhere, Ancestry Moogles, 3 minutes between seals, the auction house simulator on, no training dummies, and 300 bot players with up to 180 online. An install you already have keeps every setting it has.
-• HARDCORE, beside DUALBOX: Iron, Steel and Silver characters. Pick a mode on the new menu before your character's first level; its rates are locked to that mode's profile wherever it goes (co-op worlds and The Hub too). Every mode: no auction house, no bazaars, no trades or deliveries with other characters, squad gear only by trading it to your mates. Iron (1x experience) parties with anyone and can step down to a regular character. Steel (2x) and Silver (3.5x): no Home Point or Survival Guide teleports, parties only with hardcore characters (your squad, no bot players), and they can step down to Iron. A Steel character that is knocked out sends that job back to level 1 (everything you completed stays, squad mates keep their levels). A Silver character that is knocked out is gone: it rests on the memorial and is deleted 7 days later. Every 10 levels on a job: random cosmetics in your delivery box, 1 for Iron, 2 for Steel, 3 for Silver. Milestones, Steel falls and Silver deaths are announced in your world, on The Hub and in Stinkshell (switch it off in the Hardcore menu). Badges over hardcore characters' heads (the hcicons add-on), and hosts can take hardcore visitors only. !hardcore shows your run.
+• HARDCORE, beside DUALBOX: Iron, Steel and Silver characters. Pick a mode on the new menu before your character's first level; its rates are locked to that mode's profile wherever it goes (co-op worlds and The Hub too). Every mode: no auction house, no bazaars, no trades or deliveries with other characters, squad gear only by trading it to your mates. Iron (1x experience) parties with anyone and can step down to a regular character. Steel (2x) and Silver (3.5x): no Home Point or Survival Guide teleports, parties only with hardcore characters (your squad, no bot players), and they can step down to Iron. A Steel character that is knocked out sends that job back to level 1 (everything you completed stays, squad mates keep their levels). A Silver character that is knocked out is gone: it rests on the memorial and is deleted 7 days later. Every 10 levels on a job: random cosmetics in your delivery box, 1 for Iron, 2 for Steel, 3 for Silver. Milestones, Steel falls and Silver deaths are announced in your world, on The Hub and in Stinkshell (switch it off in the Hardcore menu). Each mode's shield shows beside the character's name, drawn by the game itself like the bazaar mark, so everyone sees it (also on The Hub), and hosts can take hardcore visitors only. !hardcore shows your run.
 • RANDOMIZED, the fourth card on the HARDCORE menu: you pick only the name, and there is no character creation screen. The launcher makes the character: Fate rolls your race, face, size and nation (and which of its three cities you start in), then one of the 18 jobs at your first login, and you arrive dressed in a random set of level 1 gear for that job with 10,000 gil in your pocket; another random job comes at 18, 33 and 65, and those are the only jobs that character can play (job quests still unlock jobs for your squad mates). Every drop from your claim is a random item that fits the area, and NMs drop from one shared NM pool; quest items, crystals, seals and Rare/Ex items stay as they are. Its own rates (2.5x experience, no experience lost on death), the auction house and trading allowed, normal deaths, and it can join any party, Steel and Silver included. Randomized characters may visit hardcore-only worlds. Treasure chests, coffers and caskets are random too (the area's items), and battlefield crates give what fights of the same level cap give. Its own auction house: the stock changes every 6 hours (crystals are always there) and each item's price swings up to 20% more than usual.
 • Mode titles, always worn while you play the mode: Iron "Forged in Solitude", Steel "Tempered by Ruin", Silver "Bearer of a Single Flame", Randomized "Altana's Wild Card". Titles you earn still go on your list; they just stay off until you step down. The launcher adds the four names to the game's title list at PLAY.
+• A new XI: Forever new-player mark: the red ? beside new characters' names is now a crystal one (it comes and goes as before). Iron, Steel, Silver and Randomized characters show their shield instead. The launcher puts the four shields and the new mark into the game's icon sheet at PLAY.
 • Hardcore icons in the party list: a small column beside your party list shows each member's mode. Place it once with /hcicons party move (it fits the game's party list or XIUI's); /hcicons party row N lines it up.
 • Squads menu: the Job and Sub lists show each job's level, like WHM (34). (Dugahst)
 • Run speed: the running animation now speeds up with it, the way Flee does, instead of sliding. (Ricc)

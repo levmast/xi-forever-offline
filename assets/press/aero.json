@@ -1,11 +1,27 @@
 {
   "name": "Aero",
-  "about": "A theme that is always there to pick on the Theme page (see launcher_theme.py and README.txt in this folder): the launcher as a mid-2000s Frutiger Aero desktop: sky, water, grass, bubbles and glossy glass. Its buttons are the pictures in the aero-ui folder and its banners the aero_*__theme-aero pictures (art-src\\scripts\\aero_buttons.py and aero_banners.py draw them, from art in art-src that no other part of the launcher or the website uses). Lettering in the pictures is Selawik (art-src\\fonts, SIL Open Font License); the launcher's own text stays in the usual font (Segoe UI on Windows).",
+  "standard": true,
+  "about": "A theme that is always there to pick on the Theme page (see launcher_theme.py and README.txt in this folder): the launcher as a mid-2000s Frutiger Aero desktop: sky, water, grass, bubbles and glossy glass. Its buttons are the pictures in the aero-ui folder and its banners the aero_*__theme-aero pictures (art-src\\scripts\\aero_buttons.py and aero_banners.py draw them, from art in art-src that no other part of the launcher or the website uses). Lettering in the pictures is Selawik (art-src\\fonts, SIL Open Font License); the launcher's own text stays in the usual font (Segoe UI on Windows). \"standard\": true makes it what players wear when nothing is picked on the Theme page (the user, 2026-11-23); the launcher's own look is then \"Classic\" there.",
   "colours": {
-    "BG": "#d9eef9", "PANEL": "#f3faff", "PANEL2": "#c4e3f5", "FG": "#0b2a44", "DIM": "#4a6b84",
-    "BORDER": "#8dc0e0", "LINE": "#6aa9d4", "OFF": "#93aec2",
-    "GOLD": "#0a6fc2", "GOLD_LIT": "#1f95ea", "GOLD_DIM": "#a8d2ee", "PARCH": "#0d4a8c",
-    "ACCENT": "#2f9a18", "GREEN": "#24963a", "RED": "#cc3333", "GREY": "#a7bccb"
+    "BG": "#d9eef9",
+    "PANEL": "#f3faff",
+    "PANEL2": "#c4e3f5",
+    "FG": "#0b2a44",
+    "DIM": "#4a6b84",
+    "BORDER": "#8dc0e0",
+    "LINE": "#6aa9d4",
+    "OFF": "#93aec2",
+    "GOLD": "#0a6fc2",
+    "GOLD_LIT": "#1f95ea",
+    "GOLD_DIM": "#a8d2ee",
+    "PARCH": "#0d4a8c",
+    "ACCENT": "#2f9a18",
+    "GREEN": "#24963a",
+    "RED": "#cc3333",
+    "GREY": "#a7bccb"
   },
-  "art": {"folder": "aero-ui"}
+  "art": {
+    "folder": "aero-ui"
+  },
+  "sound": "tomorrow_exe.mp3"
 }

@@ -742,7 +742,13 @@ class PlayPage:
         info, newer = self.update_info()
         if newer and not self.notice_shown:
             newest = max((info[k].get("newest") or "" for k in newer))
-            self.notice_text.configure(text=f"Version {newest.lstrip('v')} is ready." if newest else "An update is ready.")
+            try:                  # (2026-11-24, Jaymz) the download size, for slow connections
+                import launcher_update as lu
+                size = lu.size_text(lu.download_size(info))
+            except Exception:
+                size = ""
+            self.notice_text.configure(text=(f"Version {newest.lstrip('v')} is ready." if newest else "An update is ready.")
+                                       + (f" Download: {size}." if size else ""))
             self.notice.pack(fill="x", pady=(0, 12), before=self.top)
         elif not newer and self.notice_shown:
             self.notice.pack_forget()

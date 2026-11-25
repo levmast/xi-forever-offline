@@ -45,6 +45,28 @@ class RelayTests(unittest.TestCase):
         self.assertEqual(sum(1 for a in answers if a.get("ok")), 5)
         self.assertEqual(answers[-1]["error"], "Slow down a little.")
 
+    def test_website_visitors(self):
+        """xiforever.com/chat.html (2026-11-23): "website: Nick", never a character name; mods name them in full;
+        a ban also covers the visitor's network address."""
+        web, game = self.kh(20), self.kh(21)
+        self.assertEqual(self.room.screen_for(game, "Hurami"), "Hurami")
+        self.assertEqual(self.room.screen_for(web, "Hurami", web=True), "website: Hurami")
+        self.assertEqual(self.room.screen_for(self.kh(22), "Hurami", web=True), "website: Hurami2")
+        self.assertEqual(self.room.screen_for(self.kh(23), "<i>", web=True), "website: Guest")
+        self.assertEqual(relay.web_target(["website:", "Hurami", "5"]), ["website: Hurami", "5"])
+        self.assertEqual(relay.web_target(["website:Hurami"]), ["website: Hurami"])
+        owner = self.kh(24)
+        self.room.say(owner, "Owner", "/login " + self.room.owner_code)
+        self.room.note_ip(web, relay.iphash("10.0.0.9"))
+        self.room.say(owner, "Owner", "/ban website: Hurami")
+        self.assertTrue(self.room.banned(web))
+        fresh = self.kh(25)                      # the same visitor after clearing the browser
+        self.room.note_ip(fresh, relay.iphash("10.0.0.9"))
+        self.assertTrue(self.room.banned(fresh))
+        self.assertFalse(self.room.banned(game))  # the player called Hurami is untouched
+        self.room.say(owner, "Owner", "/unban website:Hurami")
+        self.assertFalse(self.room.banned(fresh))
+
     def test_owner_mod_codes_mute_ban(self):
         owner, mod, troll = self.kh(1), self.kh(2), self.kh(3)
         self.room.say(troll, "Troll", "hello")

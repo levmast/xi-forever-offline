@@ -288,6 +288,44 @@ class GameTests(unittest.TestCase):
         self.assertEqual(reg.v, before)
         self.assertFalse(os.path.exists(state))
 
+    def test_missing_ffxi_dll_put_back_for_windows_installer(self):
+        # the player deleted their own install after making the copy: Windows Installer checked FFXi.dll there on every
+        # start and asked for FINAL_FANTASY_XI.msi (Hurami, 2026-11-24). Hold puts the copy's file back first.
+        gone = os.path.join(self.kit, "old", "SquareEnix", "FINAL FANTASY XI")
+        also = os.path.join(self.kit, "msi", "FINAL FANTASY XI")
+        self._touch(self.copy["ffxi"], "FFXi.dll")
+        reg = retail()
+        reg.set(rf"SOFTWARE\Classes\CLSID\{lg.FFXI_CLSID}\InprocServer32", "", os.path.join(gone, "ffxi.dll"))
+        before = dict(reg.v)
+        state = os.path.join(self.kit, lg.STATE_FILE)
+        with open(state, "w") as h:
+            json.dump({"lang": "US", "viewer": self.copy["viewer"], "ffxi": self.copy["ffxi"]}, h)
+        lg.hold(state, reg, lambda: False, sleep=lambda s: None, start_wait=2,
+                msi_paths=lambda: [os.path.join(also, "FFXi.dll"), os.path.join(gone, "ffxi.dll")])
+        self.assertTrue(os.path.isfile(os.path.join(gone, "ffxi.dll")))
+        self.assertTrue(os.path.isfile(os.path.join(also, "FFXi.dll")))
+        self.assertEqual(reg.v, before)                     # the registry is still put back as before
+
+    def test_fill_missing_ffxi_dll_never_overwrites_or_strays(self):
+        self._touch(self.copy["ffxi"], "FFXi.dll")
+        have = os.path.join(self.kit, "have", "FINAL FANTASY XI")
+        self._touch(have, "FFXi.dll")
+        with open(os.path.join(have, "FFXi.dll"), "w") as h:
+            h.write("retail")
+        odd = os.path.join(self.kit, "somewhere", "FFXi.dll")                    # not in a FINAL FANTASY XI folder
+        wrong = os.path.join(self.kit, "x", "FINAL FANTASY XI", "FFXiMain.dll")  # not FFXi.dll
+        written = lg.fill_missing_ffxi_dll([os.path.join(have, "FFXi.dll"), odd, wrong, None, "",
+                                            os.path.join(self.copy["ffxi"], "FFXi.dll"),
+                                            r"C:\Program Files (x86)\PlayOnline\SquareEnix\FINAL FANTASY XI\FFXi.dll"],
+                                           self.copy["ffxi"])
+        self.assertEqual(written, [])
+        with open(os.path.join(have, "FFXi.dll")) as h:
+            self.assertEqual(h.read(), "retail")
+        self.assertFalse(os.path.exists(odd) or os.path.exists(wrong))
+        # no FFXi.dll in the copy: nothing to put back
+        self.assertEqual(lg.fill_missing_ffxi_dll([os.path.join(self.kit, "g", "FINAL FANTASY XI", "FFXi.dll")],
+                                                  os.path.join(self.kit, "nocopy")), [])
+
     def test_hold_restores_a_value_that_was_missing(self):
         reg = retail()
         reg.delete(rf"SOFTWARE\Classes\CLSID\{lg.FFXI_CLSID}\InprocServer32", "")

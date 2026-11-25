@@ -8,6 +8,7 @@ import copy
 import json
 import os
 import queue
+import secrets
 import threading
 import time
 import tkinter as tk
@@ -171,7 +172,7 @@ class CoopTab(tk.Frame):
             self.after(300, self.pump)
 
     def fail(self, error):
-        self.keeping = self.listing = self.closing_job = self.looking = False
+        self.keeping = self.listing = self.closing_job = self.looking = self.shorting = False
         if isinstance(error, (co.CoopError, pp.PassportError)):
             self.note(str(error))
             messagebox.showwarning("Co-op", str(error), parent=self)
@@ -359,6 +360,7 @@ class CoopTab(tk.Frame):
         row.pack(fill="x", pady=(4, 2))
         self.copy_btn = self.button(row, "coop_copy", self.copy_invite, "COPY INVITE")
         self.code_btn = self.button(row, "coop_newcode", self.new_code, "NEW CODE")
+        self.long_btn = self.button(row, "coop_copylong", self.copy_long, "COPY LONG CODE")   # (shown with a short code)
         self.link_btn = self.button(row, "coop_copylink", self.copy_invite, "COPY LINK")
         self.pass_btn = self.button(row, "coop_password", self.set_password, "PASSWORD")
         self.places_btn = self.button(row, "coop_places", self.kept_places, "PLACES")
@@ -815,6 +817,7 @@ class CoopTab(tk.Frame):
         self.host.closing = True
         self.closing_since = time.time()
         self.settings["hosting"] = False
+        self.drop_short_code()
         co.save_settings(self.kit, self.settings)
         if waiting:
             co.announce(self.cfg.get("server_dir"), "This world closes to visitors in one minute. Visitors: log out now, then press COME HOME in your launcher.")
@@ -883,7 +886,9 @@ class CoopTab(tk.Frame):
                 else:
                     text, code = "Press PLAY once: your game server makes its key the first time it starts, and the world link needs it.", ""
             else:
-                code = co.make_invite(self.settings["address"], self.settings["port"], self.settings["secret"], self.world_name.get() or "A world")
+                self.long_code = co.make_invite(self.settings["address"], self.settings["port"], self.settings["secret"],
+                                                self.world_name.get() or "A world")
+                code = self.short_for(self.long_code) or self.long_code
         elif self.closing_since:
             text, code = "Closing: waiting for your visitors to pick up their characters. Keep the launcher open.", ""
         elif is_open:
@@ -894,7 +899,7 @@ class CoopTab(tk.Frame):
         self.invite_code.set(code)
         self.code_label.configure(text="World link" if is_open else "Invite code")
         self.reach_label.configure(text="Visitors reach me" if is_open else "Friends reach me")
-        for widget in (self.copy_btn, self.code_btn, self.link_btn, self.pass_btn, self.places_btn):
+        for widget in (self.copy_btn, self.code_btn, self.long_btn, self.link_btn, self.pass_btn, self.places_btn):
             widget.pack_forget()
         if is_open:
             self.link_btn.pack(side="left")
@@ -906,6 +911,70 @@ class CoopTab(tk.Frame):
             self.code_btn.pack(side="left", padx=8)
             for widget in (self.copy_btn, self.code_btn):
                 widget.configure(state="normal" if hosting else "disabled")
+            if hosting and code and not code.startswith(co.PREFIX):
+                self.long_btn.pack(side="left")
+
+    # ----- short invite codes (2026-11-23): shown while The Hub keeps one; the long code otherwise -----
+    def short_for(self, long_code):
+        """The short code to show for this long code, or None (then the long code is shown). Starts registering one."""
+        st = self.settings
+        if st.get("short") and st.get("short_for") == long_code and time.time() - float(st.get("short_at") or 0) < 7 * 86400:
+            if time.time() - float(st.get("short_at") or 0) >= co.SHORT_REFRESH:
+                self.register_short(long_code)            # renew it now and then; the code stays the same
+            return co.show_short(st["short"])
+        self.register_short(long_code)
+        return None
+
+    def register_short(self, long_code):
+        if getattr(self, "shorting", False) or time.time() - getattr(self, "short_tried", 0) < co.SHORT_RETRY:
+            return
+        st = self.settings
+        old = (st.get("short"), st.get("short_drop")) if st.get("short") and st.get("short_for") != long_code else None
+        same = st.get("short") and st.get("short_for") == long_code
+        code = st["short"] if same else co.make_short()
+        token = st["short_drop"] if same and st.get("short_drop") else secrets.token_hex(16)
+        self.shorting, self.short_tried = True, time.time()
+
+        def work():
+            try:
+                if old:
+                    co.drop_short(*old)
+                return co.register_short(code, long_code, token)
+            except Exception:
+                return False           # (no Hub: the long code stays on show)
+
+        def done(ok):
+            self.shorting = False
+            if ok:
+                self.settings.update({"short": code, "short_for": long_code, "short_drop": token, "short_at": int(time.time())})
+            elif old or not same:
+                self.settings.update({"short": "", "short_for": "", "short_drop": "", "short_at": 0})
+            try:
+                co.save_settings(self.kit, self.settings)
+            except OSError:
+                pass
+            if ok and not same:
+                self.show_host()
+                self.note("Short invite code ready: " + co.show_short(code) + ". COPY INVITE copies it; COPY LONG CODE is for "
+                          "friends with no internet (same home network).")
+
+        self.job(work, done)
+
+    def drop_short_code(self):
+        st = self.settings
+        if st.get("short"):
+            code, token = st["short"], st.get("short_drop") or ""
+            self.settings.update({"short": "", "short_for": "", "short_drop": "", "short_at": 0})
+            self.short_tried = 0
+            if token:
+                threading.Thread(target=lambda: co.drop_short(code, token), daemon=True).start()
+
+    def copy_long(self):
+        code = getattr(self, "long_code", "")
+        if code:
+            self.clipboard_clear()
+            self.clipboard_append(code)
+            self.note("Long invite code copied. It works without The Hub, for example for a friend on your home network.")
 
     def copy_invite(self):
         if self.invite_code.get():
@@ -913,7 +982,9 @@ class CoopTab(tk.Frame):
             self.clipboard_append(self.invite_code.get())
             self.note("World link copied. Anyone who has it can visit: post it where your players are."
                       if self.invite_code.get().startswith(co.LINK_PREFIX) else
-                      "Invite code copied. Paste it to your friend (a Discord message is fine).")
+                      "Invite code copied. Paste it to your friend (a Discord message is fine)."
+                      + (" If they can't use it (no internet, or The Hub is down), COPY LONG CODE." if not
+                         self.invite_code.get().startswith(co.PREFIX) else ""))
 
     def about_changed(self):
         self.settings["about"] = co.clean_about(self.about.get())
@@ -976,6 +1047,7 @@ class CoopTab(tk.Frame):
                                    "are not affected).\n\nMake a new code?", parent=self):
             return
         self.settings["secret"] = os.urandom(16).hex()
+        self.drop_short_code()
         co.save_settings(self.kit, self.settings)
         self.show_host()
 
@@ -1453,7 +1525,11 @@ class CoopTab(tk.Frame):
         return next((charid for charid, name in self.characters if name == self.character.get()), None)
 
     def read_code(self):
-        return co.read_code(self.their_code.get())       # a friend's invite code, or the link of an open world
+        text = self.their_code.get()
+        if co.short_code(text):                          # (2026-11-23) a short code: The Hub knows the long one
+            text = co.resolve_short(text)
+            self.their_code.set(text)                    # (so a friend's card keeps the long code, which needs no Hub)
+        return co.read_code(text)                        # a friend's invite code, or the link of an open world
 
     def test_connection(self):
         try:
@@ -1904,6 +1980,10 @@ class CoopTab(tk.Frame):
             if not self.listing and now - self.last_guests >= GUESTS_SECONDS and self.host is not None and (self.host.running() or self.guest_rows):
                 self.listing, self.last_guests = True, now
                 self.job(self.host.guests, self.listed)
+            if (self.settings.get("hosting") and not self.settings.get("open") and getattr(self, "long_code", "")
+                    and not self.settings.get("short") and not getattr(self, "shorting", False)
+                    and now - getattr(self, "short_tried", 0) >= co.SHORT_RETRY):
+                self.show_host()                          # (tries The Hub again; shows the short code once it answers)
         self.after(2000, self.tick)
 
     def keep_all(self, rows):

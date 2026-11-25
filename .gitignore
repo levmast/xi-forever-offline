@@ -14,6 +14,7 @@
 !/launcher_core.py
 !/launcher_gui.pyw
 !/launcher_squad.py
+!/launcher_squad_backup.py
 !/launcher_rules.py
 !/launcher_icons.py
 !/launcher_personality.py

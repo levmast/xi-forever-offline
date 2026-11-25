@@ -73,8 +73,57 @@ def check(kit, server, test_builds, fetch):
         # run from the source (a developer's) still never updates itself.
         lost = key == "kit" and have is None and getattr(sys, "frozen", False) and bool(folder)
         out[key] = {"installed": have, "newest": tag, "notes": (release or {}).get("body", ""), "release": release,
-                    "newer": bool(tag and ((have and version_key(tag) > version_key(have)) or lost))}
+                    "newer": bool(tag and ((have and version_key(tag) > version_key(have)) or lost)),
+                    "size": asset_size(release, KIT_ASSET if key == "kit" else SERVER_ASSET)}
     return out
+
+
+def asset_size(release, pattern):
+    """(2026-11-24, Jaymz: "show the total download size, I have slow internet") the size in bytes of the file an
+    update would download, or 0 when the release doesn't say."""
+    for asset in (release or {}).get("assets", []) or []:
+        if re.search(pattern, asset.get("name", "")):
+            try:
+                return int(asset.get("size") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+def download_size(info):
+    """The total download of the parts that are newer, in bytes."""
+    return sum(int(info[k].get("size") or 0) for k in ("kit", "server") if info.get(k, {}).get("newer"))
+
+
+def size_text(size):
+    """'about 410 MB' / 'about 1.2 GB' / '' when unknown."""
+    if not size:
+        return ""
+    mb = size / (1024 * 1024)
+    return f"about {mb / 1024:.1f} GB" if mb >= 1024 else f"about {max(1, round(mb))} MB"
+
+
+def prune_db_backups(kit, keep=3, log=print):
+    """(2026-11-24, the user: "are the players' old data being deleted, I don't want them clogged up") every server update
+    saves the whole database first (backups/db-before-<version>-<time>.sql, tens of MB each), and they only ever piled
+    up. The newest `keep` are kept (enough to go back an update or two); older ones go. Returns the bytes freed."""
+    folder = os.path.join(kit, "backups")
+    try:
+        names = [n for n in os.listdir(folder) if n.startswith("db-before-v") and n.endswith(".sql")]
+    except OSError:
+        return 0
+    paths = sorted((os.path.join(folder, n) for n in names), key=os.path.getmtime, reverse=True)
+    freed = 0
+    for path in paths[keep:]:
+        try:
+            size = os.path.getsize(path)
+            os.remove(path)
+            freed += size
+        except OSError:
+            pass
+    if freed:
+        log(f"Removed older database copies from earlier updates ({freed // (1024 * 1024)} MB); the newest {keep} are kept.")
+    return freed
 
 
 def _download(release, pattern, kit, fetch, log, what):
@@ -352,6 +401,10 @@ def update_server(kit, cfg, release, fetch, log=print, run=None, connect=None):
     _unpack(path, server, keep=("settings/network.lua",), log=log)
     update_database(cfg, server, log=log, run=run, connect=connect)
     log(f"Server updated to {release.get('tag_name')}. Your database from before is in {dump}.")
+    try:
+        prune_db_backups(kit, keep=3, log=log)
+    except Exception:
+        pass
 
 # Tools a server release depends on: when the kit pins another version (thirdparty.json "tag"), the installed copy is
 # replaced. xiloader has to match the server (Phoenix's server from 2026-11 refuses any xiloader older than 3.0).

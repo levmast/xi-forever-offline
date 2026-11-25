@@ -44,7 +44,7 @@ EMOTES = {"wave", "nod", "stretch", "sit", "salute"}
 SQUAD_TAGS = {"s.recruit", "s.ack_pull", "s.ack_follow", "s.ack_hold", "s.battle", "s.lowhp", "s.lowmp", "s.after", "s.reply",
               "s.down", "s.wipe", "s.idle_town", "s.idle_field", "s.banter", "s.bond", "s.jobchange", "s.jobchange_whm",
               "s.bench", "s.reunion", "s.race", "s.gender", "s.scene_first", "s.scene_lowhp", "s.scene_wipe", "s.scene_rest",
-              "s.scene_return"}
+              "s.scene_return", "s.scene_after"}
 SQUAD_SLOTS = {"name"}
 SQUAD_SCENE_TAGS = {t for t in SQUAD_TAGS if t.startswith("s.scene_")}
 # who may say one of our squad lines (squad_more.txt): role from the mate's job, voice as in squad_dialogue.lua
@@ -412,6 +412,27 @@ def build_crowd(b, name, pack, vdir):
         out["pairs"].append({"id": p["id"], "place": o.get("place") or p.get("place", "any"),
                              "lo": p.get("min_level", 1), "hi": p.get("max_level", 75), "a": a, "b": bb,
                              "ap": p["a"].get("polite", ""), "bp": p["b"].get("polite", "")})
+    # our own crowd lines (writers' contributions):  +id|category|opts|casual|polite (optional)
+    for key in [k for k in recs if k.startswith("+")]:
+        f, where = recs.pop(key)
+        if len(f) < 3 or not key[1:]:
+            b.err(f"{where}: expected +id|category|opts|casual|polite")
+            continue
+        cat = f[0]
+        if cat not in CROWD_CATS:
+            b.err(f"{where}: unknown crowd category {cat}")
+            continue
+        o = opts_of(f[1], where)
+        casual, polite = f[2], (f[3] if len(f) > 3 else "")
+        check(casual, where, cat)
+        if polite:
+            check(polite, where, cat)
+            if set(re.findall(r"{(\w+)}", polite)) != set(re.findall(r"{(\w+)}", casual)):
+                b.err(f"{where}: polite and casual lines need the same fields")
+        lo, hi = (int(x) for x in o["lvl"].split("-")) if "lvl" in o else (1, 75)
+        out["lines"].append({"id": "fo_" + key[1:], "cat": cat, "place": o.get("place", "any"), "lo": lo, "hi": hi,
+                             "jobs": o["jobs"].split("/") if "jobs" in o else [], "when": o.get("when", ""),
+                             "casual": casual, "polite": polite})
     for key, (_, where) in recs.items():
         b.err(f"{where}: {key} is not in the pack's crowd section")
     return out

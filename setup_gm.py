@@ -82,10 +82,14 @@ def has_gmlevel_column(conn):
 
 
 def set_level(conn, name, level):
+    """How many characters have that name (0 = none). (2026-11-24, Keithvalentine) The database counts the rows it
+    CHANGED, so a character already at that level came back as "not found": count the matching rows instead."""
     cur = conn.cursor()
-    cur.execute("UPDATE chars SET gmlevel = ? WHERE LOWER(charname) = LOWER(?)", (int(level), name))
-    count = cur.rowcount
-    conn.commit()
+    cur.execute("SELECT COUNT(*) FROM chars WHERE LOWER(TRIM(charname)) = LOWER(TRIM(?))", (name,))
+    count = int(cur.fetchone()[0] or 0)
+    if count:
+        cur.execute("UPDATE chars SET gmlevel = ? WHERE LOWER(TRIM(charname)) = LOWER(TRIM(?))", (int(level), name))
+        conn.commit()
     cur.close()
     return count
 

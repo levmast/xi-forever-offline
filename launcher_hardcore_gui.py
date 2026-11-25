@@ -106,6 +106,9 @@ def attach(app, page=None):
             conn = _connect(app)
             try:
                 gone = hc.expire_fallen(conn, _bot_base())
+                if hc.prune_pending(HERE, conn, _bot_base()):          # (2026-11-24) deleted characters leave the list
+                    is_open, name = _world(app)
+                    hc.write_server_files(HERE, app.cfg.get("server_dir"), is_open, name)
             finally:
                 conn.close()
             for name in gone:
@@ -207,6 +210,11 @@ class HardcoreMenu(tk.Toplevel):
         try:
             conn = _connect(self.app)
             try:
+                if hc.prune_pending(HERE, conn, _bot_base()):          # (2026-11-24) deleted characters leave the list
+                    try:
+                        hc.write_server_files(HERE, self.app.cfg.get("server_dir"), *_world(self.app))
+                    except Exception:
+                        pass
                 found = hc.characters(conn, _bot_base())
             finally:
                 conn.close()
@@ -449,10 +457,10 @@ class HardcoreMenu(tk.Toplevel):
             try:
                 conn = _connect(self.app)
                 try:
-                    hc.create_randomized(conn, cfg.get("game_user", ""), name, cfg.get("server_dir"))
+                    charid, _roll = hc.create_randomized(conn, cfg.get("game_user", ""), name, cfg.get("server_dir"))
                 finally:
                     conn.close()
-                hc.add_pending(HERE, cfg.get("server_dir"), name, 4)
+                hc.add_pending(HERE, cfg.get("server_dir"), name, 4, charid)
                 text, ok = (f"Fate has made {name}.\n\nPress PLAY RANDOMIZED and choose {name} on the character list. "
                             f"Who you are, where you were born and what job you start with: you'll find out when you arrive."), True
             except hc.CreateError as e:

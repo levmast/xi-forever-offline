@@ -1,5 +1,9 @@
 --[[
-hcicons 1.4  (XI: Forever Offline, 2026-11-23)
+hcicons 1.6  (XI: Forever Offline, 2026-11-23; 1.6 2026-11-24: the game's own copy of "!hcicons" is hidden too)
+Since 1.5 the game itself draws the mode's shield beside the name (the launcher puts the shields in the game's own
+icon sheet, and the server shows them like the bazaar mark), so this add-on no longer draws over names by default.
+It keeps the party-list column below, and "/hcicons names plate" or "/hcicons names float" brings back its own
+drawing (beside the name or floating over the head). The old text:
 Shows the mode's icon beside the name of every Iron, Steel, Silver and Randomized character near you, where the
 game's own bazaar and seeking-party icons sit, always on (the shields in this add-on's icons folder: iron.png,
 steel.png, silver.png, random.png). The one you target gets a frame in its mode's colour; Random's shield slowly
@@ -13,7 +17,7 @@ character arrives later, the server sends another. Those lines are never shown i
 
   /hcicons            on / off (for this session)
   /hcicons list       the hardcore characters this add-on knows about here
-  /hcicons style plate | float    beside the name (default) or floating over the head
+  /hcicons names off | plate | float    the add-on's own marks over names: none (default since 1.5), beside the name, or over the head
   /hcicons size N     the name-plate icon's size in px (default 18)
   /hcicons nudge N    move the name-plate icon up (negative) or down in px, to line it up with the name
   /hcicons height N   how far above the feet the name sits, in yalms (default 2.4; negative if it shows at the feet)
@@ -31,7 +35,7 @@ Nothing is sent anywhere but your own world's server.
 
 addon.name    = 'hcicons';
 addon.author  = 'XI: Forever Offline';
-addon.version = '1.4';
+addon.version = '1.6';
 addon.desc    = 'Icons over the heads of Iron, Steel, Silver and Randomized characters.';
 addon.link    = 'https://xiforever.com';
 
@@ -57,8 +61,8 @@ local FILES = { [1] = 'iron', [2] = 'steel', [3] = 'silver', [4] = 'random' };
 local ICON_SIZE = 34;
 
 local S = { on = true, known = {}, ask_at = 0, height = 2.4, warned = false, range = 45,
-            style = 'plate',      -- 'plate': a small icon right beside the name, where the bazaar / seek-party icons sit
-                                  -- 'float': a bigger glowing icon over the head
+            names = 'off',        -- the add-on's own marks over names (1.5: the game draws the mode's mark itself)
+                                  -- 'plate': a small icon beside the name; 'float': a bigger glowing icon over the head
             plate = 18,           -- the icon's size in plate style (px)
             charw = 7.0,          -- about how wide one letter of the name plate is (px), to find the name's left edge
             plate_dy = 0,         -- move the plate icon up (-) or down (+) in px
@@ -68,7 +72,7 @@ local S = { on = true, known = {}, ask_at = 0, height = 2.4, warned = false, ran
 local function mem() return AshitaCore:GetMemoryManager(); end
 
 -- your placement (style, size, nudge, height) is kept in config/addons/hcicons/settings.txt
-local KEEP = { 'style', 'plate', 'plate_dy', 'height', 'charw', 'party', 'party_x', 'party_y', 'party_row', 'party_size', 'party_up' };
+local KEEP = { 'names', 'plate', 'plate_dy', 'height', 'charw', 'party', 'party_x', 'party_y', 'party_row', 'party_size', 'party_up' };
 local function settings_path()
     return AshitaCore:GetInstallPath() .. '\\config\\addons\\hcicons\\settings.txt';
 end
@@ -126,6 +130,10 @@ ashita.events.register('text_in', 'hcicons_text_in', function(e)
     local text = e.message_modified or e.message or '';
     if text:find(MARK, 1, true) then
         pcall(read_line, text);
+        e.blocked = true;
+    elseif text:find('!hcicons', 1, true) then
+        -- (1.6, Rysan and others 2026-11-24) the game prints its own copy of what this add-on says ("Name : !hcicons");
+        -- the server answers it fine, so that copy is only noise
         e.blocked = true;
     end
 end);
@@ -368,6 +376,7 @@ ashita.events.register('d3d_present', 'hcicons_present', function()
         AshitaCore:GetChatManager():QueueCommand(1, '!hcicons');
     end
     if not S.on or imgui == nil or (next(S.known) == nil and not S.party_moving) then return; end
+    local drawNames = S.names == 'plate' or S.names == 'float';
     local ok, problem = pcall(function()
         local ent = mem():GetEntity();
         local list = imgui.GetForegroundDrawList and imgui.GetForegroundDrawList() or imgui.GetBackgroundDrawList();
@@ -380,7 +389,7 @@ ashita.events.register('d3d_present', 'hcicons_present', function()
         local mx, my = 0, 0;
         if me then mx, my = ent:GetLocalPositionX(me), ent:GetLocalPositionY(me); end
         local target = target_index();
-        for index = 0x400, 0x6FF do
+        for index = 0x400, drawNames and 0x6FF or 0x3FF do
             local name = ent:GetName(index);
             if name ~= nil and name ~= '' then
                 local mode = S.known[name:lower()];
@@ -397,7 +406,7 @@ ashita.events.register('d3d_present', 'hcicons_present', function()
                         if sx ~= nil then
                             local drawn = false;
                             local done, result;
-                            if S.style == 'plate' then
+                            if S.names == 'plate' then
                                 done, result = pcall(plate_icon, list, sx, sy, mode, alpha, name, index == target);
                             else
                                 done, result = pcall(icon, list, sx, sy, mode, size, alpha, index == target);
@@ -425,9 +434,10 @@ ashita.events.register('command', 'hcicons_command', function(e)
         local names = {};
         for name, mode in pairs(S.known) do names[#names + 1] = name .. ' (' .. MODES[mode].text .. ')'; end
         say(#names > 0 and table.concat(names, ', ') or 'No hardcore characters here.');
-    elseif what == 'style' and (args[3] == 'plate' or args[3] == 'float') then
-        S.style = args[3];
-        say(S.style == 'plate' and 'Icons sit beside the name, like the bazaar icon.' or 'Icons float over the head.');
+    elseif (what == 'names' or what == 'style') and (args[3] == 'plate' or args[3] == 'float' or args[3] == 'off') then
+        S.names = args[3];
+        say(S.names == 'off' and 'The game shows the marks beside names; the add-on draws none.' or
+            (S.names == 'plate' and 'The add-on also draws icons beside the name.' or 'The add-on also draws icons over the head.'));
         save_settings();
     elseif what == 'size' and tonumber(args[3]) then
         S.plate = math.max(10, math.min(40, tonumber(args[3])));

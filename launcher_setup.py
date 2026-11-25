@@ -930,15 +930,30 @@ def run_setup(kit, choices, tp, log=print, fetch=None, run=subprocess.run, popen
     if game == "official" and not valid_ffxi(choices.get("ffxi_dir")):
         import launcher_game as lg
         found = find_ffxi()
+        own = None
         if not valid_ffxi(found):
-            files = lg.download_official(kit, log=log, context=tp.ssl_context())
-            lg.run_official_installer(kit, files, log=log, popen=popen)
-            found = find_ffxi()
+            # (2026-11-24) the whole game from XI: Forever Offline's own download, no Square Enix installer; the
+            # launcher registers it with Windows at the first PLAY (launcher_game.install_from_release). Square Enix's
+            # installer stays the way in only when the download can't be had.
+            try:
+                own = lg.install_from_release(kit, log=log, context=tp.ssl_context())
+            except Exception as problem:
+                log(f"   The game couldn't be downloaded from XI: Forever Offline ({problem}). Using Square Enix's "
+                    "installer instead.")
+        if own:
+            choices["ffxi_dir"] = own["ffxi"]
+            extra_cfg.update({"game_copy": False, "pol_dir": own["viewer"], "pol_lang": "US", "game_own_install": True,
+                              "game_registry_needed": True})
+        else:
             if not valid_ffxi(found):
-                raise RuntimeError("FINAL FANTASY XI isn't installed yet. Finish Square Enix's installer (it may still be "
-                                   "open), then press Install again; the download is kept.")
-        choices["ffxi_dir"] = found
-        extra_cfg["game_update_needed"] = not update_game_files(kit, found, log=log, context=tp.ssl_context())
+                files = lg.download_official(kit, log=log, context=tp.ssl_context())
+                lg.run_official_installer(kit, files, log=log, popen=popen)
+                found = find_ffxi()
+                if not valid_ffxi(found):
+                    raise RuntimeError("FINAL FANTASY XI isn't installed yet. Finish Square Enix's installer (it may still "
+                                       "be open), then press Install again; the download is kept.")
+            choices["ffxi_dir"] = found
+            extra_cfg["game_update_needed"] = not update_game_files(kit, found, log=log, context=tp.ssl_context())
     if not valid_ffxi(choices.get("ffxi_dir")):
         raise RuntimeError("That folder is not FINAL FANTASY XI (FFXiMain.dll is missing). Install the game first.")
     if game == "copy":
@@ -1197,6 +1212,38 @@ def reapply_era_dats(ffxi_dir, era_dir, backup, files, log=print):
     return [f"Era-DATs put back: {changed} file(s) a game update had replaced (the update's files are saved in dat-backup)."]
 
 
+def undo_retail_names(kit, ffxi_dir, log=print):
+    """(2026-11-24) Undoes a mistake of the same day's build: it put 48 zones' retail monster-name files back over the
+    era ones, from a check against this server's base monster lists only. With the Phoenix module's era monster layout
+    (which this server loads) the era names are the right ones (Zeruhn Mines 62 of 66 against 35, Dynamis ~450 against
+    ~15). The originals it moved to backups/era-name-files go back into dat-backup and the era files into the game.
+    Returns how many were put back."""
+    import filecmp
+    moved_dir = os.path.join(kit, "backups", "era-name-files")
+    era_dir, backup = os.path.join(kit, "Era-DATs"), os.path.join(kit, "dat-backup")
+    if not ffxi_dir or not os.path.isdir(moved_dir) or not os.path.isdir(backup):
+        return 0
+    done = 0
+    for root, _dirs, names in os.walk(moved_dir):
+        for name in names:
+            moved = os.path.join(root, name)
+            rel = os.path.relpath(moved, moved_dir)
+            era = os.path.join(era_dir, rel)
+            if not os.path.isfile(era):
+                continue
+            dest = existing_case(ffxi_dir, rel)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            if not (os.path.exists(dest) and filecmp.cmp(era, dest, shallow=False)):
+                shutil.copy2(era, dest)
+            saved = os.path.join(backup, rel)
+            os.makedirs(os.path.dirname(saved), exist_ok=True)
+            os.replace(moved, saved)
+            done += 1
+    if done:
+        log(f"Era-DATs: {done} zone(s) got their era monster names back.")
+    return done
+
+
 def _era_files(era_dir):
     files = []
     for rom in ("ROM", "ROM2", "ROM3", "ROM4"):
@@ -1218,9 +1265,12 @@ def check_era_dats(kit, ffxi_dir, log=print):
     era_dir, backup = os.path.join(kit, "Era-DATs"), os.path.join(kit, "dat-backup")
     if not ffxi_dir or not os.path.isdir(backup) or not os.path.isdir(os.path.join(ffxi_dir, "ROM")):
         return []
+    messages = []
+    if undo_retail_names(kit, ffxi_dir, log=messages.append):
+        record_era_state(kit, ffxi_dir)
     files = _era_files(era_dir)
     if not files:
-        return []
+        return messages
     try:
         with open(_era_state_path(kit), "r", encoding="utf-8") as handle:
             state = json.load(handle)
@@ -1240,9 +1290,9 @@ def check_era_dats(kit, ffxi_dir, log=print):
         if st.st_size != os.path.getsize(src) or not filecmp.cmp(src, dest, shallow=False):
             drifted.append(rel)
     if not drifted:
-        return []
+        return messages
     log(f"Era-DATs: {len(drifted)} game file(s) changed since the last PLAY (a game update?) - checking them.")
-    return reapply_era_dats(ffxi_dir, era_dir, backup, drifted, log)
+    return messages + reapply_era_dats(ffxi_dir, era_dir, backup, drifted, log)
 
 
 def record_era_state(kit, ffxi_dir):

@@ -8358,6 +8358,189 @@
    "conds": [],
    "casual": "well done {member}",
    "polite": "Well done, {member}."
+  },
+  {
+   "id": "fo_jo1_ls_choco",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "ls"
+   ],
+   "conds": [],
+   "casual": "anyone remember where I parked my chocobo?",
+   "polite": "Does anyone remember where I parked my chocobo?"
+  },
+  {
+   "id": "fo_jo1_ls_oneitem",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "ls"
+   ],
+   "conds": [
+    "hunt"
+   ],
+   "casual": "came out here for one item. three hours ago.",
+   "polite": "I came out here for one item. That was three hours ago."
+  },
+  {
+   "id": "fo_jo1_ls_inv",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "ls"
+   ],
+   "conds": [],
+   "casual": "my inventory is basically a collection of bad decisions",
+   "polite": "My inventory is basically a collection of bad decisions."
+  },
+  {
+   "id": "fo_jo1_ls_lb",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "ls"
+   ],
+   "conds": [
+    "endgame"
+   ],
+   "casual": "anyone need help with their limit break?",
+   "polite": "Does anyone need help with their limit break?"
+  },
+  {
+   "id": "fo_jo1_ls_onemore",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "ls"
+   ],
+   "conds": [
+    "hunt",
+    "night"
+   ],
+   "casual": "one more level, then I'm calling it a night. probably.",
+   "polite": "One more level, then I am calling it a night. Probably."
+  },
+  {
+   "id": "fo_jo1_gear",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.gear"
+   ],
+   "conds": [],
+   "casual": "finally got my new gear. now I'm broke.",
+   "polite": "I finally got my new gear. Now I am broke."
+  },
+  {
+   "id": "fo_jo1_ding",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.levelup"
+   ],
+   "conds": [],
+   "casual": "ding!",
+   "polite": "Ding!"
+  },
+  {
+   "id": "fo_jo1_ding2",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.levelup"
+   ],
+   "conds": [],
+   "casual": "finally! thought that level would never end",
+   "polite": "Finally! I thought that level would never end."
+  },
+  {
+   "id": "fo_jo1_gz1",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.congrats"
+   ],
+   "conds": [],
+   "casual": "tyty!",
+   "polite": "Thank you!"
+  },
+  {
+   "id": "fo_jo1_gz2",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.congrats"
+   ],
+   "conds": [],
+   "casual": "thanks! only about a thousand crabs to go",
+   "polite": "Thank you! Only about a thousand crabs to go."
+  },
+  {
+   "id": "fo_jo1_lol",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "r.laugh"
+   ],
+   "conds": [],
+   "casual": "you laugh, but that actually happened",
+   "polite": "You laugh, but that really happened."
+  },
+  {
+   "id": "fo_jo1_wipe1",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.wipe"
+   ],
+   "conds": [],
+   "casual": "well, that was educational",
+   "polite": "Well, that was educational."
+  },
+  {
+   "id": "fo_jo1_wipe2",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.wipe"
+   ],
+   "conds": [],
+   "casual": "so... anyone have a Raise?",
+   "polite": "So... does anyone have a Raise?"
+  },
+  {
+   "id": "fo_jo1_wipe3",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.wipe"
+   ],
+   "conds": [],
+   "casual": "let's agree never to speak of this again",
+   "polite": "Let us agree never to speak of this again."
+  },
+  {
+   "id": "fo_jo1_loot",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.loot_react"
+   ],
+   "conds": [],
+   "casual": "wait, it actually dropped?!",
+   "polite": "Wait, it actually dropped?"
+  },
+  {
+   "id": "fo_jo1_ptend",
+   "src": [],
+   "cat": "forever_offline",
+   "tags": [
+    "e.party_end"
+   ],
+   "conds": [],
+   "casual": "thanks for the party everyone. safe travels!",
+   "polite": "Thank you for the party, everyone. Safe travels!"
   }
  ],
  "scenes": [
@@ -16716,6 +16899,306 @@
     "voices": [],
     "text": "People think Galka are slow. We are just careful.",
     "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_b_pull",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Hope everyone is awake. I am bringing company.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_b_lowhp",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "I have walked away from worse.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_b_after",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Now that is how you earn your gil.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_b_town",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "Enough sightseeing. Let us find some trouble.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_b_field",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "bold"
+    ],
+    "text": "I wonder what is waiting beyond that hill.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_c_pull",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "Ready yourselves. One at a time.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_c_lowhp",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "A little healing would be appreciated.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_c_after",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "Well done. Let us recover before moving on.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_c_town",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "It is nice to hear something other than battle for a while.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_c_field",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "calm"
+    ],
+    "text": "The world feels peaceful when we stop running through it.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_h_pull",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Here comes our next bit of experience!",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_h_lowhp",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "I would really prefer not to become a ghost today.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_h_after",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Same time, same monster?",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_h_town",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Anyone hungry? I am always hungry.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_h_field",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "cheerful"
+    ],
+    "text": "Think we will find something rare today?",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_g_pull",
+    "tags": [
+     "s.battle"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Weapons out. Less talking.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_g_lowhp",
+    "tags": [
+     "s.lowhp"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Healer. Whenever you are ready.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_g_after",
+    "tags": [
+     "s.after"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Ugly thing. Good riddance.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_g_town",
+    "tags": [
+     "s.idle_town"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Too many people. Not enough places to sit.",
+    "pack_text": ""
+   },
+   {
+    "id": "fo_sq_jo1_g_field",
+    "tags": [
+     "s.idle_field"
+    ],
+    "roles": [],
+    "races": [],
+    "genders": [],
+    "fam": [],
+    "voices": [
+     "gruff"
+    ],
+    "text": "Keep your eyes open. Quiet does not mean safe.",
+    "pack_text": ""
    }
   ],
   "scenes": [
@@ -17012,6 +17495,99 @@
      {
       "role": "tank",
       "text": "Wondering, not worrying. Mostly."
+     }
+    ]
+   },
+   {
+    "id": "fo_sqs_jo1_close_call",
+    "tags": [
+     "s.scene_after"
+    ],
+    "cooldown": 60,
+    "roles": [
+     "healer",
+     "tank"
+    ],
+    "lines": [
+     {
+      "role": "tank",
+      "text": "Thought you were going to let me die back there."
+     },
+     {
+      "role": "healer",
+      "text": "I considered it."
+     },
+     {
+      "role": "tank",
+      "text": "Very funny."
+     },
+     {
+      "role": "healer",
+      "text": "Next time, wait until I have MP."
+     },
+     {
+      "role": "tank",
+      "text": "Fair enough."
+     }
+    ]
+   },
+   {
+    "id": "fo_sqs_jo1_one_more_level",
+    "tags": [
+     "s.scene_rest"
+    ],
+    "cooldown": 90,
+    "roles": [
+     "damage",
+     "healer",
+     "support"
+    ],
+    "lines": [
+     {
+      "role": "support",
+      "text": "Just one more level!"
+     },
+     {
+      "role": "damage",
+      "text": "You said that two levels ago."
+     },
+     {
+      "role": "support",
+      "text": "This time I mean it."
+     },
+     {
+      "role": "healer",
+      "text": "I will believe you when we are back in town."
+     }
+    ]
+   },
+   {
+    "id": "fo_sqs_jo1_place_to_return",
+    "tags": [
+     "s.scene_rest"
+    ],
+    "cooldown": 90,
+    "roles": [
+     "damage",
+     "healer",
+     "support"
+    ],
+    "lines": [
+     {
+      "role": "healer",
+      "text": "Do you ever miss home?"
+     },
+     {
+      "role": "damage",
+      "text": "Sometimes."
+     },
+     {
+      "role": "support",
+      "text": "Then why do we keep traveling?"
+     },
+     {
+      "role": "damage",
+      "text": "So we will have stories when we return."
      }
     ]
    }
@@ -22160,6 +22736,116 @@
     "jobs": [],
     "when": "",
     "casual": "anyone up for some exp in {camp}",
+    "polite": ""
+   },
+   {
+    "id": "fo_jo1_sandy_knight",
+    "cat": "say_town",
+    "place": "sandoria",
+    "lo": 1,
+    "hi": 75,
+    "jobs": [],
+    "when": "",
+    "casual": "A polished sword means little if the hand holding it trembles.",
+    "polite": ""
+   },
+   {
+    "id": "fo_jo1_sandy_merchant",
+    "cat": "say_town",
+    "place": "sandoria",
+    "lo": 1,
+    "hi": 75,
+    "jobs": [],
+    "when": "",
+    "casual": "Adventurers always have stories. Rarely enough gil.",
+    "polite": ""
+   },
+   {
+    "id": "fo_jo1_bastok_miner",
+    "cat": "say_town",
+    "place": "bastok",
+    "lo": 1,
+    "hi": 75,
+    "jobs": [],
+    "when": "",
+    "casual": "The mountain gives nothing away for free.",
+    "polite": ""
+   },
+   {
+    "id": "fo_jo1_bastok_smith",
+    "cat": "say_town",
+    "place": "bastok",
+    "lo": 1,
+    "hi": 75,
+    "jobs": [],
+    "when": "",
+    "casual": "Another broken sword? What are you people fighting out there?",
+    "polite": ""
+   },
+   {
+    "id": "fo_jo1_windy_student",
+    "cat": "say_town",
+    "place": "windurst",
+    "lo": 1,
+    "hi": 75,
+    "jobs": [],
+    "when": "",
+    "casual": "I tried a new spell yesterday. The ceiling is still missing.",
+    "polite": ""
+   },
+   {
+    "id": "fo_jo1_windy_traveler",
+    "cat": "say_town",
+    "place": "windurst",
+    "lo": 1,
+    "hi": 75,
+    "jobs": [],
+    "when": "",
+    "casual": "Funny how the smallest people have the biggest ambitions.",
+    "polite": ""
+   },
+   {
+    "id": "fo_jo1_jeuno_adv",
+    "cat": "say_town",
+    "place": "jeuno",
+    "lo": 1,
+    "hi": 75,
+    "jobs": [],
+    "when": "",
+    "casual": "Everyone comes here chasing something.",
+    "polite": ""
+   },
+   {
+    "id": "fo_jo1_jeuno_merchant",
+    "cat": "say_town",
+    "place": "jeuno",
+    "lo": 1,
+    "hi": 75,
+    "jobs": [],
+    "when": "",
+    "casual": "You can tell how far someone's traveled by the state of their boots.",
+    "polite": ""
+   },
+   {
+    "id": "fo_jo1_selbina_fisher",
+    "cat": "say_town",
+    "place": "ferry",
+    "lo": 1,
+    "hi": 75,
+    "jobs": [],
+    "when": "",
+    "casual": "Some days the sea gives you dinner. Other days it gives you patience.",
+    "polite": ""
+   },
+   {
+    "id": "fo_jo1_mhaura_sailor",
+    "cat": "say_town",
+    "place": "ferry",
+    "lo": 1,
+    "hi": 75,
+    "jobs": [],
+    "when": "",
+    "casual": "Every departure is somebody else's homecoming.",
     "polite": ""
    }
   ],

@@ -61,6 +61,7 @@ Gambits began as the TitanGambits engine and was brought here by its author.
 All of the launcher's music was made for XI: Forever Offline by **JØ (jnull)**, our Head of Music.
 - "A Place to Return": the launcher's opening theme (`assets/press/default.mp3`).
 - "Beyond the Veil": the 8-Bit theme's song (`assets/press/beyond_the_veil.mp3`).
+- "TOMORROW.EXE": the Aero theme's song (`assets/press/tomorrow_exe.mp3`), by JØ with **Nox** (her voice, with JØ's).
 - "No Signal, All Vibes": the Vaporwave theme's song.
 - The Vaporwave theme's opener: a short piece that plays the first time the launcher opens, before "No Signal, All Vibes"
   takes over.
@@ -73,7 +74,9 @@ song that plays and who made it.
   official installer (Windows Installer descriptors lifted while the game runs, so the copy's DLLs load).
 - **[wildcabbagepatch](https://github.com/wildcabbagepatch)**: GambitsV2, the in-game Squad Rule Set editor, and its
   server side (squad Rule Sets, job ability rules for squad mates, the `!gsq` command).
-- **JØ (jnull)**, Head of Music: all of the launcher's music (see Music, above).
+- **JØ (jnull)**, Head of Music: all of the launcher's music (see Music, above), and *Living Vana'diel, Writing
+  Contribution #001* (with Nox): squad mate lines for the four voices, three squad scenes, bot player and linkshell lines
+  and town lines for San d'Oria, Bastok, Windurst, Jeuno, Selbina and Mhaura.
 - **Records of Vana'diel** (a pack of FINAL FANTASY XI characters drawn as 8 / 16-bit sprites): the characters on the
   buttons and the title banner of the launcher's 8-Bit theme (`assets/press/8bit-ui`; the sprites used are in
   `art-src/8bit-sprites`).

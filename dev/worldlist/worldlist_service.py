@@ -10,6 +10,13 @@ card for someone else's world.
                                   answers at the address in its link with the key in its link (TLS), from a public address.
   GET  /worlds                    {"worlds": [{"link", "seen"}]}: the worlds heard from in the last 15 minutes
   GET  /worlds/health
+Short invite codes (2026-11-23, the user: "6 letters 3 numbers 3 letters"): a host's launcher seals its long invite code
+with a key worked out from the short code, so this service keeps only a sealed box it cannot open, filed under an id that
+is also worked out from the short code (and slow to work out, so guessing codes is slow):
+  POST /worlds/code/put  {"id", "box", "drop"}  keep it (7 days; the host refreshes it while it hosts). drop = a hash of the
+                                                host's own drop token, so only the host can take it away.
+  POST /worlds/code/get  {"id"}                 {"box"} or not found
+  POST /worlds/code/drop {"id", "token"}        take it away (NEW CODE, STOP HOSTING)
 Moderation (the owner only, with the code in owner.txt): POST /worlds/hide {"code", "pin"} hides a world for good,
 POST /worlds/unhide {"code", "pin"}.
 Run: python3 worldlist_service.py [--port 54301] [--data /var/lib/xifo-worldlist]
@@ -33,6 +40,12 @@ MOST = 200               # the most worlds on the list
 PER_ADDRESS = 5          # the most listed worlds behind one public address
 RATE = 30                # one announce per world per this many seconds
 LINK_RE = re.compile(r"^XIFO2-[A-Za-z0-9_\-]{20,600}$")
+CODE_DAYS = 7            # a short code the host stops refreshing is forgotten after this many days
+CODE_MOST = 20000        # the most short codes kept
+CODE_PUTS = 20           # puts per address per hour
+CODE_GETS = 30           # lookups per address per minute (a code is 12 characters; this keeps guessing hopeless)
+ID_RE = re.compile(r"^[0-9a-f]{32}$")
+BOX_RE = re.compile(r"^[A-Za-z0-9_\-]{40,1600}$")
 
 
 def read_link(link):
@@ -173,7 +186,82 @@ class WorldList:
         return {"ok": True}
 
 
-def make_handler(worlds):
+class CodeBook:
+    """Short invite codes: sealed boxes by id (see the top of this file). Kept in codes.json in the data folder."""
+
+    def __init__(self, data):
+        self.path = os.path.join(data, "codes.json")
+        self.lock = threading.Lock()
+        self.codes = {}          # id -> {"box", "drop", "until"}
+        self.hits = {}           # (kind, address) -> [times]
+        try:
+            with open(self.path, encoding="utf-8") as handle:
+                self.codes = {k: v for k, v in json.load(handle).items() if isinstance(v, dict)}
+        except (OSError, ValueError, AttributeError):
+            pass
+
+    def save(self):
+        with open(self.path + ".part", "w", encoding="utf-8") as handle:
+            json.dump(self.codes, handle)
+        os.replace(self.path + ".part", self.path)
+
+    def allowed(self, kind, address, most, window, now):
+        key = (kind, address)
+        times = [t for t in self.hits.get(key, []) if now - t < window]
+        if len(times) >= most:
+            self.hits[key] = times
+            return False
+        times.append(now)
+        self.hits[key] = times
+        if len(self.hits) > 50000:
+            self.hits = {k: v for k, v in self.hits.items() if v and now - v[-1] < 3600}
+        return True
+
+    def put(self, body, address, now=None):
+        now = now or time.time()
+        cid, box, drop = str(body.get("id") or ""), str(body.get("box") or ""), str(body.get("drop") or "")
+        if not ID_RE.match(cid) or not BOX_RE.match(box) or not ID_RE.match(drop):
+            return {"ok": False, "error": "That is not a short code."}
+        with self.lock:
+            if not self.allowed("put", address, CODE_PUTS, 3600, now):
+                return {"ok": False, "error": "Too many codes from this address; try again later."}
+            for k in [k for k, v in self.codes.items() if v.get("until", 0) < now]:
+                del self.codes[k]
+            known = self.codes.get(cid)
+            if known and known.get("drop") != drop:
+                return {"ok": False, "error": "taken"}
+            if not known and len(self.codes) >= CODE_MOST:
+                return {"ok": False, "error": "The code book is full right now."}
+            self.codes[cid] = {"box": box, "drop": drop, "until": int(now + CODE_DAYS * 86400)}
+            self.save()
+        return {"ok": True, "days": CODE_DAYS}
+
+    def get(self, body, address, now=None):
+        now = now or time.time()
+        cid = str(body.get("id") or "")
+        with self.lock:
+            if not self.allowed("get", address, CODE_GETS, 60, now):
+                return {"ok": False, "error": "Too many lookups; wait a minute."}
+            row = self.codes.get(cid) if ID_RE.match(cid) else None
+            if not row or row.get("until", 0) < now:
+                return {"ok": False, "error": "unknown"}
+            return {"ok": True, "box": row["box"]}
+
+    def drop(self, body, address, now=None):
+        now = now or time.time()
+        cid, token = str(body.get("id") or ""), str(body.get("token") or "")
+        with self.lock:
+            if not self.allowed("put", address, CODE_PUTS, 3600, now):
+                return {"ok": False, "error": "Too many requests; try again later."}
+            row = self.codes.get(cid)
+            if row and secrets.compare_digest(row.get("drop", ""), hashlib.sha256(token.encode()).hexdigest()[:32]):
+                del self.codes[cid]
+                self.save()
+                return {"ok": True}
+        return {"ok": False, "error": "unknown"}
+
+
+def make_handler(worlds, codes=None):
     class Handler(BaseHTTPRequestHandler):
         server_version = "XIFO-Worlds/1"
 
@@ -185,7 +273,7 @@ def make_handler(worlds):
             self.send_response(code)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "max-age=60")
+            self.send_header("Cache-Control", "no-store" if self.command == "POST" else "max-age=60")
             self.end_headers()
             self.wfile.write(data)
 
@@ -207,9 +295,15 @@ def make_handler(worlds):
                 return self.reply(200, {"ok": True, "worlds": len(worlds.listing()["worlds"])})
             return self.reply(404, {"error": "unknown"})
 
+        def address(self):
+            forwarded = (self.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+            return forwarded or self.client_address[0]
+
         def do_POST(self):
             path = self.path.split("?")[0].rstrip("/")
             body = self.body()
+            if codes is not None and path in ("/worlds/code/put", "/worlds/code/get", "/worlds/code/drop"):
+                return self.reply(200, getattr(codes, path.rsplit("/", 1)[1])(body, self.address()))
             if path == "/worlds/announce":
                 return self.reply(200, worlds.announce(body.get("link")))
             if path in ("/worlds/hide", "/worlds/unhide"):
@@ -225,7 +319,7 @@ def main():
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--data", default="/var/lib/xifo-worldlist")
     args = ap.parse_args()
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(WorldList(args.data)))
+    server = ThreadingHTTPServer((args.host, args.port), make_handler(WorldList(args.data), CodeBook(args.data)))
     server.daemon_threads = True
     print(f"Worlds list on {args.host}:{args.port}, data in {args.data}", flush=True)
     server.serve_forever()

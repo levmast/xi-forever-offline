@@ -164,3 +164,22 @@
 +win_r_03|e.win_react|nice job!|Nicely done!
 +win_r_04|e.win_react|gg!|Well fought!
 +win_r_05|e.win_react|well done {member}|Well done, {member}.
+
+# ---- Living Vana'diel, Writing Contribution #001, by J-NULL (JO), 2026-11-23 ----
++jo1_ls_choco|ls|anyone remember where I parked my chocobo?|Does anyone remember where I parked my chocobo?
++jo1_ls_oneitem|ls,@hunt|came out here for one item. three hours ago.|I came out here for one item. That was three hours ago.
++jo1_ls_inv|ls|my inventory is basically a collection of bad decisions|My inventory is basically a collection of bad decisions.
++jo1_ls_lb|ls,@endgame|anyone need help with their limit break?|Does anyone need help with their limit break?
++jo1_ls_onemore|ls,@hunt,@night|one more level, then I'm calling it a night. probably.|One more level, then I am calling it a night. Probably.
++jo1_gear|e.gear|finally got my new gear. now I'm broke.|I finally got my new gear. Now I am broke.
++jo1_ding|e.levelup|ding!|Ding!
++jo1_ding2|e.levelup|finally! thought that level would never end|Finally! I thought that level would never end.
++jo1_gz1|r.congrats|tyty!|Thank you!
++jo1_gz2|r.congrats|thanks! only about a thousand crabs to go|Thank you! Only about a thousand crabs to go.
++jo1_lol|r.laugh|you laugh, but that actually happened|You laugh, but that really happened.
++jo1_wipe1|e.wipe|well, that was educational|Well, that was educational.
++jo1_wipe2|e.wipe|so... anyone have a Raise?|So... does anyone have a Raise?
++jo1_wipe3|e.wipe|let's agree never to speak of this again|Let us agree never to speak of this again.
+# (kept for when the server has these events; nothing sends e.loot_react or e.party_end yet)
++jo1_loot|e.loot_react|wait, it actually dropped?!|Wait, it actually dropped?
++jo1_ptend|e.party_end|thanks for the party everyone. safe travels!|Thank you for the party, everyone. Safe travels!

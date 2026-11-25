@@ -977,6 +977,11 @@ class SquadTab(tk.Frame):
         bar.pack(pady=6)
         tk.Button(bar, text="New", command=self.new_mate, bg=ACCENT, fg="white", relief="flat", padx=12).pack(side="left", padx=3)
         tk.Button(bar, text="Delete", command=self.delete_mate, bg=PANEL, fg=FG, relief="flat", padx=12).pack(side="left", padx=3)
+        # (2026-11-24) the whole squad to one file and back (launcher_squad_backup.py)
+        bar2 = tk.Frame(left, bg=BG)
+        bar2.pack()
+        tk.Button(bar2, text="Back up squad", command=self.backup_squad, bg=PANEL, fg=FG, relief="flat", padx=8).pack(side="left", padx=3)
+        tk.Button(bar2, text="Restore...", command=self.restore_squad, bg=PANEL, fg=FG, relief="flat", padx=8).pack(side="left", padx=3)
 
         pages = ttk.Notebook(body)
         pages.pack(side="left", fill="both", expand=True, padx=(10, 0))
@@ -1535,6 +1540,59 @@ class SquadTab(tk.Frame):
         if not messagebox.askyesno("Delete", f"Delete {self.mate['name']} and all of their levels and gear?"):
             return
         self.guard(lambda: (sq.delete_mate(self.conn, self.mate["id"]), self.load_squad()))
+
+    # ----- squad backup and restore (2026-11-24) -----
+    def backup_squad(self):
+        charid = self.charid()
+        if charid is None or self.conn is None:
+            return
+        import launcher_squad_backup as sb
+        folder = os.path.join(HERE, "backups", "squads")
+        os.makedirs(folder, exist_ok=True)
+
+        def go():
+            data = sb.backup(self.conn, HERE, charid, self.greeting_user)
+            if not data["summary"]:
+                raise ValueError("This character has no squad mates to back up.")
+            path = filedialog.asksaveasfilename(title="Save the squad backup", initialdir=folder,
+                                                initialfile=sb.default_name(data["character"]), defaultextension=sb.SUFFIX,
+                                                filetypes=[("Squad backup", "*" + sb.SUFFIX)], parent=self)
+            if not path:
+                return
+            path = sb.save(path, data)
+            self.say(f"Squad backed up: {sb.describe(data)} -> {path}")
+        self.guard(go)
+
+    def restore_squad(self):
+        charid = self.charid()
+        if charid is None or self.conn is None:
+            return
+        import launcher_squad_backup as sb
+        folder = os.path.join(HERE, "backups", "squads")
+        os.makedirs(folder, exist_ok=True)
+
+        def go():
+            path = filedialog.askopenfilename(title="Pick a squad backup", initialdir=folder,
+                                              filetypes=[("Squad backup", "*" + sb.SUFFIX)], parent=self)
+            if not path:
+                return
+            data = sb.load(path)
+            who = self.char_var.get() or "this character"
+            if not messagebox.askyesno("Restore squad", f"Put this squad on {who}?\n\n{sb.describe(data)}\n(from {data.get('character', '?')})\n\n"
+                                       f"{who}'s squad as it is now is REPLACED. A backup of it is saved first, in "
+                                       "backups\\squads. Log the character out before you restore.", parent=self):
+                return
+            current = sb.backup(self.conn, HERE, charid, self.greeting_user)
+            if current["summary"]:
+                sb.save(os.path.join(folder, "before-restore-" + sb.default_name(current["character"])), current)
+            names = sb.restore(self.conn, HERE, charid, data, self.greeting_user)
+            try:
+                sq.write_greetings_lua(self.greeting_lua, sq.greeting_data(self.greeting_defaults, self.greeting_user))
+            except Exception:
+                pass
+            self.load_squad()
+            self.say(f"Squad restored: {', '.join(names) or 'no mates'}. They come out like this the next time you call them.")
+        self.guard(go)
 
     def apply_name(self):
         def go():
@@ -2861,7 +2919,9 @@ class UpdatesTab(tk.Frame):
         self.player = bool(app.cfg.get("mariadb_dir"))      # a player install (first-run setup); else this is the dev PC
         if self.player:
             self.build_setup_again()
-        if app.ashita and os.path.isdir(app.ashita):
+        # (2026-11-23, the user: "remove this") the Revamped switch shows only once a Revamped package is installed;
+        # without one it only said there was nothing to switch
+        if app.ashita and os.path.isdir(app.ashita) and rv.detected(app.ashita):
             self.build_revamped()
         self.build_clear_ah()
         try:                                                # (2026-11-22, Sunie) the AI hood: only where its switch file is
@@ -3233,8 +3293,9 @@ class UpdatesTab(tk.Frame):
             if not silent or newer:
                 for key, label in (("kit", "Launcher"), ("server", "Server")):
                     i = info[key]
+                    size = lu.size_text(i.get("size")) if i["newer"] else ""
                     self.lines.put(("line", f"{label}: you have {i['installed'] or '?'}, newest {i['newest'] or 'none published'}"
-                                            + (" - update available" if i["newer"] else "")))
+                                            + (" - update available" if i["newer"] else "") + (f" (download {size})" if size else "")))
             if newer and silent:
                 self.after(0, self.offer_update)
         threading.Thread(target=work, daemon=True).start()
@@ -3243,7 +3304,13 @@ class UpdatesTab(tk.Frame):
         info = self.update_info
         newest = max((info[k]["newest"] for k in ("kit", "server") if info[k]["newer"]), key=lambda t: t or "")
         notes = next((info[k]["notes"] for k in ("kit", "server") if info[k]["newer"] and info[k]["notes"]), "")
-        if messagebox.askyesno("Update available", f"XI: Forever Offline {newest} is out.\n\n{notes[:900]}\n\nUpdate now? "
+        try:                     # (2026-11-24, Jaymz) the download size, for slow connections
+            import launcher_update as lu
+            size = lu.size_text(lu.download_size(info))
+        except Exception:
+            size = ""
+        if messagebox.askyesno("Update available", f"XI: Forever Offline {newest} is out." + (f" Download: {size}." if size else "")
+                               + f"\n\n{notes[:900]}\n\nUpdate now? "
                                "Your settings, characters and squad mates are kept, and your database is saved first."):
             self.player_update()
 
@@ -3705,7 +3772,14 @@ class App(tk.Tk):
         self.after(PICTURE_SECONDS * 1000, self.next_picture)
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         if self.cfg.get("game_update_needed"):     # installed with Square Enix's installer: its first update comes first
-            self.after(700, lambda: PolUpdateGuide(self))
+            self.after(700, self.first_game_update)
+
+    def first_game_update(self):
+        """(2026-11-24, the user: "we uploaded all the files to github but the launcher still directs to SE") the game's
+        first update comes from XI: Forever Offline's own download; the PlayOnline login guide only if that can't be had."""
+        if not self.offer_game_files("Your game hasn't had its first update yet (Square Enix's installer puts in an "
+                                     "older version)."):
+            PolUpdateGuide(self)
 
     # ----- UI -----
     def build_ui(self):
@@ -4617,6 +4691,8 @@ class App(tk.Tk):
                                    "installer puts in an older version). Show the steps?\n\nNo = play anyway.", parent=self):
                 PolUpdateGuide(self)
                 return
+        if IS_WINDOWS and self.cfg.get("game_registry_needed") and not self.register_game():
+            return
         if not getattr(self, "age_checked", False) and self.game_too_old():
             return
         self.rates = self.rates_tab.collect()
@@ -4734,6 +4810,45 @@ class App(tk.Tk):
             self.age_checked = False                                    # ask again after the update
             return True
         return False
+
+    def register_game(self):
+        """(2026-11-24) A game that came from XI: Forever Offline's own download (no Square Enix installer) is registered
+        with Windows once, here, before its first start: PlayOnline's folders and COM classes (launcher_game.registry_text).
+        Windows asks for permission once. True when it is registered."""
+        import launcher_game as lg
+        try:
+            if lg.registered(self.cfg):
+                done = True
+            else:
+                reg_file = lg.write_registry_file(HERE, self.cfg.get("ashita_dir", ""), self.cfg["ffxi_client_dir"],
+                                                  self.cfg["pol_dir"])
+                marker = reg_file + ".done"
+                if os.path.exists(marker):
+                    os.remove(marker)
+                messagebox.showinfo("One more step", "FINAL FANTASY XI is downloaded. Windows needs to know where it is, "
+                                    "once: Windows will ask for permission next. Choose Yes.", parent=self)
+                run_elevated(["register", reg_file])
+                for _ in range(120):
+                    if os.path.exists(marker):
+                        break
+                    self.update()
+                    time.sleep(0.5)
+                done = lg.registered(self.cfg)
+        except Exception as e:
+            messagebox.showerror("Register the game", f"The game couldn't be registered with Windows: {e}\n\nPress PLAY "
+                                 "to try again.", parent=self)
+            return False
+        if not done:
+            messagebox.showerror("Register the game", "Windows didn't register the game (the permission prompt was "
+                                 "refused or something went wrong). Press PLAY to try again.", parent=self)
+            return False
+        self.cfg.pop("game_registry_needed", None)
+        try:
+            save_config_value("game_registry_needed", None)
+        except (OSError, ValueError):
+            pass
+        self.say("The game is registered with Windows.")
+        return True
 
     def offer_game_files(self, why):
         """(2026-11-23) Offers to bring the game up to date from XI: Forever Offline's own release of the game files
@@ -5289,6 +5404,17 @@ class App(tk.Tk):
             messagebox.showinfo("Second character", "Press PLAY first. The second character joins the servers that are already running.")
             return
         boot2 = self.cfg.get("ashita_boot2")
+        if not boot2:
+            # (2026-11-24, Miniberg) setup_dualbox.py run while the launcher was open: its settings are in config.json
+            # but not in the copy the launcher read at start
+            try:
+                fresh = core.load_config(os.path.join(HERE, "config.json"))
+                for key in ("ashita_boot2", "game_user2", "game_pass2"):
+                    if fresh.get(key) and not self.cfg.get(key):
+                        self.cfg[key] = fresh[key]
+                boot2 = self.cfg.get("ashita_boot2")
+            except Exception:
+                pass
         path = os.path.join(self.ashita, "config", "boot", boot2) if (self.ashita and boot2) else ""
         if not path or not os.path.exists(path):
             messagebox.showinfo("Second character", "The second character is not set up yet.\n\nOpen PowerShell, go to " + HERE + " and run:\n\n    python setup_dualbox.py setup\n\nThen try again.")
@@ -5898,7 +6024,7 @@ class SetupWizard(tk.Tk):
         self.text("FINAL FANTASY XI: choose its SquareEnix folder (the one with PlayOnlineViewer and FINAL FANTASY XI in it). "
                   "It can come from a Windows PC (inside PlayOnline in Program Files, copied to a USB stick or this machine), "
                   "or from the game installed on this machine: the Steam version, or the official installer from "
-                  "playonline.com run through Proton or Wine. Update the game first (PlayOnline, once).", fg=FG)
+                  "playonline.com run through Proton or Wine. An older game is brought up to date by the launcher at PLAY.", fg=FG)
         for key, label, about in (
                 ("copy", "Copy the game into XI: Forever Offline's folder (recommended)",
                  "The folder you choose stays as it is (a USB stick can be unplugged afterwards). Needs about 16 GB free."),
@@ -5927,10 +6053,10 @@ class SetupWizard(tk.Tk):
                     "it is put back when the game closes."),
                    ("existing", "Use my installed FINAL FANTASY XI",
                     "No copy. The era game files (Phoenix Era-DATs) then go into that install; its original files are backed up."),
-                   ("official", "Download FINAL FANTASY XI from Square Enix (I don't have it)",
-                    "Square Enix's official installer, about 7 GB. Its setup window opens: install with the default "
-                    "choices. You need a Square Enix account with FINAL FANTASY XI (a free trial works): you log in once so PlayOnline "
-                    "can update the game, then you play offline.")]
+                   ("official", "Download FINAL FANTASY XI (I don't have it)",
+                    "The whole game, up to date (about 7.5 GB), from XI: Forever Offline's own download into the "
+                    "launcher's folder. At the first PLAY, Windows asks once for permission to register it. No Square "
+                    "Enix account, login or installer needed.")]
         for key, label, about in options:
             if key == "official" and found:
                 continue
@@ -5938,7 +6064,7 @@ class SetupWizard(tk.Tk):
                            activebackground=BG, activeforeground=FG, font=(UI_FONT, 10, "bold")).pack(anchor="w")
             tk.Label(self.body, text=about, bg=BG, fg=DIM, font=(UI_FONT, 9), wraplength=700, justify="left").pack(anchor="w", padx=(26, 0))
         self.folder_row("Final Fantasy XI", self.ffxi, "Found from PlayOnline's settings when it can be. The folder with FFXiMain.dll "
-                        "in it (not needed for the Square Enix download).")
+                        "in it (not needed for the download).")
         self.folder_row("Ashita", self.ashita, "A new folder is fine: Ashita is downloaded from its official release.")
         self.folder_row("Server", self.server, "A new folder is fine: the ready-made server is downloaded (a few hundred MB). "
                         "If you built the server yourself, choose its folder.")

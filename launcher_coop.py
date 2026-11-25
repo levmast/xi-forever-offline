@@ -94,7 +94,7 @@ def load_settings(kit):
         pass
     out = {"enabled": False, "hosting": False, "mode": "lan", "address": "", "port": PORT, "secret": "",
            "max_guests": 3, "zoneip_set": "", "backup_done": False, "open": False, "password": "",
-           "about": "", "listed": True}
+           "about": "", "listed": True, "short": "", "short_for": "", "short_drop": "", "short_at": 0}
     if isinstance(data, dict):
         out.update({k: v for k, v in data.items() if k in out})
     if out["mode"] not in MODES:
@@ -281,6 +281,99 @@ def read_link(text):
 def read_code(text):
     """An invite code from a friend (XIFO1-) or the link of an open world (XIFO2-)."""
     return read_link(text) if re.sub(r"\s+", "", str(text or "")).startswith(LINK_PREFIX) else read_invite(text)
+
+
+# ----- short invite codes (2026-11-23, the user: "6 letters 3 numbers 3 letters ... if the hub server is down or
+# unreachable (or they're doing local, no internet) it defaults to the long code") -----
+# A short code such as KUPOMG-482-TRX stands for the long invite code. The host's launcher seals the long code with a key
+# worked out from the short one and leaves the sealed box on the hub (CODES_URL); the hub cannot open it and never sees the
+# secret or the address. A friend's launcher works out the same key from the short code, fetches the box and opens it.
+# Working the key out is deliberately slow (PBKDF2), so trying codes one after another gets nowhere.
+SHORT_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ"      # no I or O (they look like 1 and 0)
+SHORT_DIGITS = "23456789"                       # no 0 or 1
+SHORT_ROUNDS = 200000
+CODES_URL = "https://hub.xiforever.com/worlds/code"
+SHORT_REFRESH = 12 * 3600                       # the host renews its code on the hub this often (the hub keeps it 7 days)
+SHORT_RETRY = 120                               # how soon to try again when the hub could not be reached
+
+
+def make_short():
+    pick = lambda chars, n: "".join(secrets.choice(chars) for _ in range(n))
+    return pick(SHORT_LETTERS, 6) + pick(SHORT_DIGITS, 3) + pick(SHORT_LETTERS, 3)
+
+
+def short_code(text):
+    """The 12 characters of a short code as typed ("kupomg 482-trx" and the like), or None if it is not one."""
+    raw = re.sub(r"[\s\-_.]+", "", str(text or "")).upper()
+    pattern = "[%s]{6}[%s]{3}[%s]{3}" % (SHORT_LETTERS, SHORT_DIGITS, SHORT_LETTERS)
+    return raw if re.fullmatch(pattern, raw) else None
+
+
+def show_short(code):
+    return f"{code[:6]}-{code[6:9]}-{code[9:]}"
+
+
+def _short_keys(code):
+    key = hashlib.pbkdf2_hmac("sha256", code.encode("ascii"), b"xifo-short-code-1", SHORT_ROUNDS, 64)
+    return hashlib.sha256(b"id|" + key).hexdigest()[:32], key[32:]
+
+
+def seal_short(code, long_code):
+    """(id, box) for the hub: the long code sealed with the short code's key."""
+    cid, key = _short_keys(code)
+    nonce = os.urandom(12)
+    plain = long_code.encode("utf-8")
+    body = nonce + _xor(plain, hashlib.shake_256(key + nonce).digest(len(plain)))
+    mac = hmac.new(key, body, hashlib.sha256).digest()[:16]
+    return cid, base64.urlsafe_b64encode(body + mac).decode("ascii").rstrip("=")
+
+
+def open_short(code, box):
+    _cid, key = _short_keys(code)
+    raw = base64.urlsafe_b64decode(box + "=" * (-len(box) % 4))
+    body, mac = raw[:-16], raw[-16:]
+    if len(body) < 13 or not hmac.compare_digest(hmac.new(key, body, hashlib.sha256).digest()[:16], mac):
+        raise CoopError("That short code did not open. Check it, or ask your friend for the long code.")
+    nonce, sealed = body[:12], body[12:]
+    return _xor(sealed, hashlib.shake_256(key + nonce).digest(len(sealed))).decode("utf-8")
+
+
+def register_short(code, long_code, drop_token, fetch=None):
+    """Leaves the sealed long code on the hub. True when the hub kept it; False when it could not be reached or refused."""
+    cid, box = seal_short(code, long_code)
+    try:
+        answer = _http_json(CODES_URL + "/put", {"id": cid, "box": box, "drop": hashlib.sha256(drop_token.encode()).hexdigest()[:32]},
+                            timeout=8, fetch=fetch)
+    except Exception:
+        return False
+    return bool(answer.get("ok"))
+
+
+def drop_short(code, drop_token, fetch=None):
+    try:
+        _http_json(CODES_URL + "/drop", {"id": _short_keys(code)[0], "token": drop_token}, timeout=8, fetch=fetch)
+    except Exception:
+        pass
+
+
+def resolve_short(text, fetch=None):
+    """The long invite code a short code stands for (asks the hub)."""
+    code = short_code(text)
+    if code is None:
+        raise CoopError("That is not a short code.")
+    try:
+        answer = _http_json(CODES_URL + "/get", {"id": _short_keys(code)[0]}, timeout=8, fetch=fetch)
+    except Exception:
+        raise CoopError("Couldn't look up that short code: The Hub's server can't be reached right now. "
+                        "Ask your friend for the long code (it starts with XIFO1-).")
+    if not answer.get("ok"):
+        if answer.get("error") == "unknown":
+            raise CoopError("That short code isn't known (mistyped, or your friend made a new code or stopped hosting). "
+                            "Check it, or ask your friend for the long code.")
+        raise CoopError("The Hub didn't look up that code: " + str(answer.get("error") or "no reason given")[:200])
+    long_code = open_short(code, str(answer.get("box") or ""))
+    read_invite(long_code)       # (raises if what came back is not a good invite)
+    return long_code
 
 
 def guest_key(secret, guest_id):
