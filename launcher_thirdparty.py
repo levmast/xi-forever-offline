@@ -601,7 +601,7 @@ def plan(item, names):
                 if rest.startswith(pattern):
                     out.append((name, dest + rest[len(pattern):]))
                     break
-            elif source.endswith("/"):
+            elif source == "" or source.endswith("/"):   # "" = every file, from the download's root (2026-11-25, Journal 0.4.6)
                 if name.startswith(source):
                     out.append((name, dest + name[len(source):]))
                     break
@@ -1148,6 +1148,12 @@ def _install(item, kit, ashita, fetch, log, server, run, started, remove_old=Tru
         record["files"] = sorted(set(placed) | (before - gone))
     state[item["id"]] = record
     _save_state(kit, state)
+    if item.get("patch"):                     # (2026-11-25) our era edits go on by themselves after an install or update
+        try:
+            for line in apply_patch(kit, ashita, item["patch"]):
+                log(f"{item['name']}: {line}")
+        except Exception as e:
+            log(f"{item['name']}: the era edits were not applied ({e}).")
     return found["version"]
 
 
@@ -1350,8 +1356,7 @@ def apply_patch(kit, ashita, folder, dry_run=False):
         texts[rel] = texts[rel].replace(f, r, 1)
     for rel in sorted({t[0] for t in todo}):
         path = os.path.join(ashita, *rel.split("/"))
-        if not os.path.exists(path + ".before-era"):
-            shutil.copy2(path, path + ".before-era")
+        shutil.copy2(path, path + ".before-era")      # (the file as it came, before our edits: refreshed on every update)
         with open(path, "w", encoding="utf-8", newline="") as handle:
             handle.write(texts[rel])
         messages.append(f"Edited {rel}.")

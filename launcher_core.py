@@ -1,5 +1,10 @@
 """Logic for the XI: Forever Offline launcher (no GUI code here, so it can be tested on its own)."""
 import json, os, re, shutil, subprocess, sys
+try:                                   # (2026-11-25) certificate checks that skip Windows' stale intermediates
+    import launcher_tls
+    launcher_tls.install()
+except Exception:
+    pass
 
 # XIFO_TEST_PLATFORM=windows: the stand-in tests check the Windows paths on a Linux machine
 IS_WINDOWS = os.name == "nt" or os.environ.get("XIFO_TEST_PLATFORM") == "windows"
@@ -377,7 +382,7 @@ def list_plugins(ashita_dir):
 
 
 # ---------- what an addon or plugin is (for the Addons page) ----------
-OWN_ADDONS = {"gambits", "autobox", "followme", "servermenu", "squadpanel", "crystalboy", "tetramaster", "stinkshell", "autora",
+OWN_ADDONS = {"gambits", "autobox", "followme", "servermenu", "squadpanel", "crystalboy", "tetramaster", "stinkshell", "autora", "vanasync",
               "gambitsrevamped", "squadsrevamped", "hcicons"}
 PLUGIN_NOTES = {"addons": "Runs Lua addons (keep this on).", "thirdparty": "Lets third-party plugins load.",
                 "screenshot": "Screenshots without the interface.", "minimap": "A minimap on screen.",
@@ -713,6 +718,11 @@ class ScriptManager:
             kept.append(line)
         if on:
             kept.append(f"/addon load {name}" if kind == "addon" else f"/load {name}")
+            # (2026-11-25, Ricc) an add-on needs Ashita's addons plugin loaded before it, or the line does nothing
+            # (a second window's script could be missing it)
+            if kind == "addon" and not any(re.match(r"^\s*/load\s+addons\s*$", x, re.I) for x in kept):
+                first = next((i for i, x in enumerate(kept) if re.match(r"^\s*/addon\s+load\s", x, re.I)), len(kept))
+                kept.insert(first, "/load addons")
         self._write(kept)
 
 
@@ -853,6 +863,8 @@ RATE_FIELDS = [
     ("map.AH_ANYWHERE",                 "map.lua",  "AH_ANYWHERE",                 "Auction house from anywhere (1 = on)", 1,  0,   1,     "int"),
     # (2026-11-22, sparkiie; the user: a comfort switch, off = as it is today) Fafnir, Adamantoise and Behemoth by timer
     ("main.LAND_KINGS_TIMED",           "main.lua", "LAND_KINGS_TIMED",            "Land kings on a timer (1 = on, 0 = called at the ???)", 0, 0, 1, "int"),
+    # (2026-11-25, the user: a launcher switch) custom/late/nm_timers.lua: timed NMs keep their timers between sessions
+    ("main.NM_TIMER_MODE",              "main.lua", "NM_TIMER_MODE",               "Timed NMs between sessions (0 = fresh at every start, 1 = paused while off, 2 = real time)", 1, 0, 2, "int"),
     # (2026-11-22, suggestions: Dugahst; the user: on by default) server: custom/late/comforts.lua
     ("main.GUILD_SHOPS_ALWAYS_OPEN",    "main.lua", "GUILD_SHOPS_ALWAYS_OPEN",     "Guild shops always open (1 = on, 0 = era hours)", 1, 0, 1, "int"),
     # (2026-11-23, Gilder, stanky kong; the user: on by default) Seekers of Adoulin's crystal storage at the crafting guilds

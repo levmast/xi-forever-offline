@@ -99,6 +99,9 @@ def ensure_script(path, addons=(), plugins=()):
     have_addons = {m.group(1).lower() for m in (ADDON_LINE.match(x) for x in live) if m}
     have_plugins = {m.group(1).lower() for m in (PLUGIN_LINE.match(x) for x in live) if m}
     added = []
+    # (2026-11-25, Ricc) "/addon load" lines do nothing unless Ashita's own addons plugin is loaded first; a new script
+    # never had it, so ticked add-ons stayed off on the second window while plugins worked
+    plugins = ["addons"] + [p for p in plugins if p.lower() != "addons"]
     for name in plugins:
         if name.lower() not in have_plugins:
             first_addon = next((i for i, x in enumerate(lines) if ADDON_LINE.match(x) and not x.lstrip().startswith("#")), len(lines))

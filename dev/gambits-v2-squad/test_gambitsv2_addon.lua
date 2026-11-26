@@ -387,7 +387,10 @@ local newGlobals = {}
 for k in pairs(_G) do if not globalsBefore[k] then newGlobals[#newGlobals + 1] = tostring(k) end end
 check(#newGlobals == 1 and newGlobals[1] == 'GambitsV2', 'defines one global, GambitsV2: ' .. table.concat(newGlobals, ', '))
 events.load.gv2_load()
-check(GV.settings.theme == 'classic' and Ed.themeName == 'classic' and Tr.get_interval() == 1.0, 'starts with Classic and a 1.0 s interval')
+-- (0.3.4) no settings exist here: a NEW installation, which starts with Crimson (an existing one keeps its saved theme:
+-- dev/squad-tests/test_theme_default.lua)
+check(GV.settings.theme == 'crimson' and Ed.themeName == 'crimson' and Tr.get_interval() == 1.0, 'a new installation starts with Crimson and a 1.0 s interval')
+Ed._S.showOptions = true -- (0.3.4: Ping, Theme and Size are behind the Options button; the checks below use them)
 step(); step()
 check(#game.sends == 0 and gui.windows == 0, 'nothing is sent and no window is drawn while it is closed')
 check(cmd('/gv2') == true and GV.open[1] == true, '/gv2 is handled (blocked) and opens the window')
@@ -395,7 +398,7 @@ check(cmd('/gv2') == true and GV.open[1] == true, '/gv2 is handled (blocked) and
 check(cmd('/gambits help') == true and cmd('/autobox') == false, '/gambits is this addon\'s command; /autobox (the old engine) is not touched')
 check(cmd('/GV2 help') == true, 'the command is not case sensitive')
 local ok1, t1 = run_until(function() return Ed._S.server and Ed._S.cat ~= nil and #Ed._S.sets > 0 end, 30)
-check(ok1 and Ed._S.server.version == 9 and Ed._S.mates[1].name == 'Mira', string.format('opening asks the server: hello (version %s), Mira, sets, choices (%.1f s)',
+check(ok1 and Ed._S.server.version == 11 and Ed._S.mates[1].name == 'Mira', string.format('opening asks the server: hello (version %s), Mira, sets, choices (%.1f s)',
       tostring(Ed._S.server and Ed._S.server.version), t1))
 check(balanced(gui) and gui.title:find('Gambits v2', 1, true), 'the window draws balanced (colours, style, IDs, children, window)')
 check(not visible_has('GSQ|') and not visible_has('command error') and not visible_has('^>>'), 'no GSQ answer, refusal or error line is visible')

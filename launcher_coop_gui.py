@@ -162,6 +162,19 @@ class CoopTab(tk.Frame):
                     self.note(result)
                 elif error is not None:
                     self.fail(error)
+                elif done is not None and not callable(done):
+                    # (2026-11-24, Jker_s81: "'BooleanVar' object is not callable" every few seconds) a finished job
+                    # whose callback is not a function: noted for the log once, never shown as an error box
+                    if not getattr(self, "_odd_done_noted", False):
+                        self._odd_done_noted = True
+                        try:
+                            import traceback
+                            with open(os.path.join(self.kit, "logs", "coop-error.log"), "a", encoding="utf-8") as handle:
+                                handle.write(time.strftime("%Y-%m-%d %H:%M:%S") + f"\nskipped a job callback that is not a function: "
+                                             f"{type(done).__name__} {done!r} (result {type(result).__name__})\n"
+                                             + "".join(traceback.format_stack(limit=6)) + "\n")
+                        except Exception:
+                            pass
                 elif done is not None:
                     done(result)
         except queue.Empty:

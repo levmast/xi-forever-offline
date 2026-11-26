@@ -263,7 +263,7 @@ end
 local o = run('ping 5 77')
 check(#o == 1 and o[1]:match('^GSQ|5|pong|77|%d+$'), 'ping answers with its id and the client value: ' .. tostring(o[1]))
 o = run('hello 6')
-check(o[1] == 'GSQ|6|hello|9|32|120|64', 'hello: version 9 (Bard role targeting), 32 rules, 120 bytes, 64 chunks: ' .. tostring(o[1]))
+check(o[1] == 'GSQ|6|hello|11|32|120|64|live', 'hello: version 11 (capability words: live, since 10), 32 rules, 120 bytes, 64 chunks: ' .. tostring(o[1]))
 o = run('nonsense 7')
 check(o[1]:match('^GSQ|7|err|badreq'), 'an unknown request is answered with an error')
 o = run(string.rep('x', 200))
@@ -617,7 +617,7 @@ local function count(t) local n = 0 for _ in pairs(t) do n = n + 1 end return n 
 -- Mira WHM25 / WAR (her own WAR level 30): sub level min(30, floor(25/2)) = 12
 squad = { mateOf(1, 3, 25, 1, { [1] = 30 }) }
 o = run('mates 71')
-check(o[1] == 'GSQ|71|mate|1|101|Mate1|WHM|25|WAR|0|0|12', 'mates: WHM 25 / WAR 12 (field 12 = the sub job level): ' .. tostring(o[1]))
+check(o[1] == 'GSQ|71|mate|1|101|Mate1|WHM|25|WAR|0|0|12|off|-|0|0|0', 'mates: WHM 25 / WAR 12 (field 12 = the sub job level; 13-17 = the live state, version 10): ' .. tostring(o[1]))
 local mira = catm(1)
 check(mira.cat and mira.cat.perMate, 'catm is a complete, verified one-mate catalog (6 kinds): ' .. tostring(mira.why))
 check(mira.ja.PROVOKE and mira.ja.PROVOKE.sub and mira.ja.PROVOKE.level == 5, 'WHM25/WAR12: Provoke from the sub job (level 5)')
@@ -645,23 +645,23 @@ check(scr.sp.SILENA and not scr.un.SILENA and scr.un.CURE_III, 'after the squad 
 SQUAD_TEST_SCROLLS, SQUAD_TEST_UNLOCKS = false, {}
 -- sub level from the mate's own (lower) WAR level
 squad = { mateOf(1, 3, 25, 1, { [1] = 8 }) }
-check(run('mates 72')[1]:match('|WAR|0|0|8$'), 'WHM25 with its own WAR at 8: sub level 8')
+check(run('mates 72')[1]:match('|WAR|0|0|8|off|%-|0|0|0$'), 'WHM25 with its own WAR at 8: sub level 8')
 check(catm(1).ja.PROVOKE, 'Provoke (5) still from WAR 8')
 squad = { mateOf(1, 3, 25, 1, { [1] = 4 }) }
 check(catm(1).ja.PROVOKE == nil, 'WAR at 4: no Provoke (level 5)')
 -- the sub job unlock (squad.lua SUB_UNLOCK_LEVEL 18)
 squad = { mateOf(1, 3, 17, 1, { [1] = 10 }) }
 playerLevel, playerSupport = 10, false
-check(run('mates 73')[1]:match('|WHM|17|%-|0|0|%-$'), 'WHM17, no unlock: no sub job (-) and no sub level')
+check(run('mates 73')[1]:match('|WHM|17|%-|0|0|%-|off|%-|0|0|0$'), 'WHM17, no unlock: no sub job (-) and no sub level')
 check(catm(1).ja.PROVOKE == nil, 'and no WAR abilities')
 playerLevel = 30
-check(run('mates 74')[1]:match('|WHM|17|WAR|0|0|8$'), 'WHM17 with a player of level 30 (support jobs): WAR 8 (min(10, 17/2))')
+check(run('mates 74')[1]:match('|WHM|17|WAR|0|0|8|off|%-|0|0|0$'), 'WHM17 with a player of level 30 (support jobs): WAR 8 (min(10, 17/2))')
 squad = { mateOf(1, 3, 17, 1, { [1] = 30 }) }
 playerLevel = 10
-check(run('mates 74')[1]:match('|WHM|17|WAR|0|0|8$'), 'WHM17 whose own WAR is 30 (one of its jobs at 18+ unlocks it): WAR 8')
+check(run('mates 74')[1]:match('|WHM|17|WAR|0|0|8|off|%-|0|0|0$'), 'WHM17 whose own WAR is 30 (one of its jobs at 18+ unlocks it): WAR 8')
 playerLevel = 10
 squad = { mateOf(1, 3, 17, 4, { [4] = 20 }) }
-check(run('mates 75')[1]:match('|WHM|17|BLM|0|0|8$'), 'WHM17 whose own BLM is 20 (a job of 18+ unlocks it): BLM 8')
+check(run('mates 75')[1]:match('|WHM|17|BLM|0|0|8|off|%-|0|0|0$'), 'WHM17 whose own BLM is 20 (a job of 18+ unlocks it): BLM 8')
 -- main-only and sub job abilities: RDM50 / WHM (own 40 -> sub 25)
 squad = { mateOf(1, 5, 50, 3, { [3] = 40 }) }
 local rdm = catm(1)
@@ -718,7 +718,7 @@ check(run('catm 79 9')[1]:match('^GSQ|79|err|missing'), 'catm for an empty slot:
 local realLF = xi.squad.levelsFor
 xi.squad.levelsFor = nil
 check(run('catm 80 1')[1]:match('^GSQ|80|err|server|.*levelsFor'), 'catm on a server whose squad.lua lacks xi.squad.levelsFor: refused, not guessed')
-check(run('mates 81')[1]:match('|WAR|0|0|%-$'), 'and mates then says the sub level is not known (-)')
+check(run('mates 81')[1]:match('|WAR|0|0|%-|off|%-|0|0|0$'), 'and mates then says the sub level is not known (-)')
 xi.squad.levelsFor = realLF
 -- every catm line of every job x sub job fits
 local worst = 0
@@ -827,7 +827,7 @@ do
     for _, l in ipairs(run('prl 319')) do check(#l <= 140, 'prl with a 15-character name fits 140 bytes (' .. #l .. ')') end
     squad[1].name = 'Aldric'
     -- the other requests do not know party roles: mates is unchanged
-    check(run('mates 320')[1] == 'GSQ|320|mate|1|101|Aldric|WAR|20|-|0|1|-', 'mates is unchanged by v7: ' .. tostring(run('mates 320')[1]))
+    check(run('mates 320')[1] == 'GSQ|320|mate|1|101|Aldric|WAR|20|-|0|1|-|unknown|-|0|0|0', 'mates fields 1-12 are unchanged by v7 (13-17: the live state, version 10): ' .. tostring(run('mates 320')[1]))
     player.getCharVar, player.setCharVar, player.getLocalVar, player.setLocalVar, player.getMainJob, player.getName, player.getObjType,
         player.getPartyWithTrusts = (table.unpack or unpack)(saved, 1, 8)
     squad = {}
@@ -977,7 +977,13 @@ local function fakeImgui(opts)
     g.GetContentRegionAvail = function() return { 1000, 500 } end
     g.Button = function(label) if g.clicks[label] then g.clicks[label] = nil; return true end return false end
     g.Selectable = function(label) if g.clicks[label] then g.clicks[label] = nil; return true end return false end
-    g.Checkbox = function(label, t) if g.clicks[label] then g.clicks[label] = nil; t[1] = not t[1]; return true end return false end
+    -- (a number n: the n-th tick box with that label in the frame, e.g. the one of rule n's row)
+    g.Checkbox = function(label, t)
+        local c = g.clicks[label]
+        if type(c) == 'number' and c > 1 then g.clicks[label] = c - 1; return false end
+        if c then g.clicks[label] = nil; t[1] = not t[1]; return true end
+        return false
+    end
     g.InputText = function() return false end
     g.InputInt = function() return false end
     if not opts.noCombo then
@@ -1048,9 +1054,14 @@ sentLines = {}
 g.clicks['Down##gsq-down'] = true
 M.draw(); M.tick()
 check(S2.sel == 3 and S2.draft.rules[3].name == 'CURAGA' and #sentLines == 0, 'Down moves the selected rule; nothing is sent')
-g.clicks['On / off##gsq-toggle'] = true
+-- (0.3.5) a rule is switched on and off with the tick box of its row; the On / off button, which did the same, is gone
+g.clicks['##on'] = 3
 M.draw()
-check(S2.draft.rules[3].on == false and S2.draft.dirty, 'On / off on the selected rule')
+check(S2.draft.rules[3].on == false and S2.draft.rules[1].on ~= false and S2.draft.rules[2].on == false and S2.draft.rules[2].name == 'DIVINE_SEAL' and S2.draft.dirty,
+      'the tick box of rule 3\'s row switches rule 3 off, and only that one (rule 1 stays on, rule 2 stays as it was)')
+local toggleDrawn = false
+for _, b in ipairs(g.buttons or {}) do if tostring(b):find('gsq-toggle', 1, true) then toggleDrawn = true end end
+check(not toggleDrawn, 'there is no separate On / off button any more')
 g.clicks['1. Party: HP < 50% -> Best of Cure##sel'] = true -- (beta polish: the compact rule line)
 M.draw()
 check(S2.sel == 1, 'clicking a rule in the list selects it')
@@ -1091,7 +1102,7 @@ check(deq(M.THEMES.classic.window, { 0.105, 0.095, 0.082, 1 }) and deq(M.THEMES.
       and deq(M.THEMES.classic.text, { 0.91, 0.89, 0.80, 1 }) and deq(M.THEMES.classic.tabSel, { 0.53, 0.42, 0.09, 1 }), 'Classic = FFXIPort 1.2.0 Classic = the Gambits window colours')
 check(deq(M.THEMES.squad.window, { 0.067, 0.075, 0.106, 1 }) and deq(M.THEMES.crimson.button, { 0.285, 0.130, 0.155, 1 }),
       'Squad and Crimson keep their exact FFXIPort values')
-check(M.theme == M.THEMES.classic, 'Classic is the theme in use')
+check(M.theme == M.THEMES[M.DEFAULT_THEME] and M.DEFAULT_THEME == 'crimson', 'the default theme is in use (0.3.4: Crimson for a new installation)')
 
 
 io.write(string.format('\npassed %d, failed %d\n', passed, failed))

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VanaSync · Battle Resonance</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <main id="player" aria-label="VanaSync player">
+    <header id="drag">
+      <span class="emblem" aria-hidden="true">V</span>
+      <div class="brand"><h1>VanaSync</h1><p>Attune yourself to the world.</p></div>
+      <button id="collapse" type="button" aria-controls="deck" aria-expanded="true" aria-label="Collapse player">−</button>
+    </header>
+    <section class="display" aria-label="Now playing">
+      <div class="signal"><span id="indicator"></span><strong id="phase">Exploration</strong><span id="arrangement"></span></div>
+      <div id="track" role="status" aria-live="polite">Audio disabled</div>
+      <p id="transport-status"></p>
+    </section>
+    <div id="deck">
+      <div class="row main-controls">
+        <label>Soundtrack <select id="mode"><option>Vanilla</option><option>Resonance</option><option>Off</option></select></label>
+        <label>Battle arrangement <select id="override"><option value="auto">Automatic</option><option value="solo">Solo</option><option value="party">Party</option><option value="alliance">Alliance</option></select></label>
+      </div>
+      <div class="row actions">
+        <button type="button" id="enable">Enable audio</button>
+        <button type="button" id="restore">Restore native</button>
+      </div>
+      <p class="notice" id="notice" role="status"></p>
+
+      <details id="album-section">
+        <summary>RESONANCE OF VANA’DIEL <span>Album Mode</span></summary>
+        <div class="panel">
+          <div class="row">
+            <button type="button" id="albumOn" aria-pressed="false">Enter Album Mode</button>
+            <label class="check"><input type="checkbox" id="interrupt"> Battle interruptions</label>
+            <label class="check"><input type="checkbox" id="repeat"> Repeat album</label>
+          </div>
+          <div class="row actions">
+            <button type="button" id="previous">Previous</button>
+            <button type="button" id="pause">Pause</button>
+            <button type="button" id="next">Next</button>
+            <output id="position" aria-label="Album playback position">0:00</output>
+          </div>
+          <label for="album-import">Add audio in selection order</label>
+          <input id="album-import" type="file" accept=".wav,.mp3,.ogg,.flac,.m4a,.opus,.aac,.webm" multiple>
+          <ol id="playlist" aria-label="Album track order"></ol>
+        </div>
+      </details>
+
+      <details id="library-section">
+        <summary>Track assignments</summary>
+        <div class="panel">
+          <label for="import">Import audio into local catalog</label>
+          <input id="import" type="file" accept=".wav,.mp3,.ogg,.flac,.m4a,.opus,.aac,.webm" multiple>
+          <div id="slots"></div>
+        </div>
+      </details>
+
+      <details id="settings-section">
+        <summary>Player settings</summary>
+        <div class="panel grid">
+          <label>Post-combat delay (seconds)<input type="number" id="grace" min="0" max="30" step="0.1"></label>
+          <label>Crossfade (seconds)<input type="number" id="fade" min="0" max="4" step="0.1"></label>
+          <label class="check wide"><input type="checkbox" id="sync"> Share battle position for matched arrangements</label>
+          <label class="check wide"><input type="checkbox" id="locked"> Lock player position</label>
+          <label>Player scale<input type="range" id="scale" min="0.75" max="1.4" step="0.05"></label>
+          <label>Opacity<input type="range" id="transparency" min="0.45" max="1" step="0.05"></label>
+          <label>Battle volume<input type="range" id="battle" min="0" max="1" step="0.01"></label>
+          <label>Exploration volume<input type="range" id="exploration-volume" min="0" max="1" step="0.01"></label>
+          <label>Album volume<input type="range" id="album" min="0" max="1" step="0.01"></label>
+          <label>Ambience volume<input type="range" id="ambience" min="0" max="1" step="0.01"></label>
+          <label>Collapse shortcut<select id="key-collapse"></select></label>
+          <label>Album shortcut<select id="key-album"></select></label>
+          <label>Restore shortcut<select id="key-emergency"></select></label>
+          <button id="reset-position" type="button">Reset position</button>
+        </div>
+      </details>
+
+      <details open id="simulator">
+        <summary>Game simulator <span>Local test inputs</span></summary>
+        <div class="panel grid">
+          <label class="check"><input id="engaged" type="checkbox"> In combat</label>
+          <label class="check"><input id="alliance" type="checkbox"> Alliance flag</label>
+          <label>Group members<input id="members" type="number" min="1" max="18" value="1"></label>
+          <label>Zone ID<input id="zone" type="number" min="1" max="9999" value="1"></label>
+          <label class="check"><input id="cutscene" type="checkbox"> Cutscene</label>
+          <button id="report" type="button">Export diagnostics</button>
+        </div>
+      </details>
+      <footer>Battle Resonance · 0.1.0 <span>JØ × NOX</span></footer>
+    </div>
+  </main>
+  <div id="quick" hidden aria-label="Quick settings">
+    <button type="button" id="quick-lock">Lock position</button>
+    <button type="button" id="quick-settings">Player settings</button>
+    <button type="button" id="quick-restore">Restore native</button>
+  </div>
+</body>
+</html>

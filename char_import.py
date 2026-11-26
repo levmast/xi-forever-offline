@@ -340,7 +340,7 @@ def plan(conn, snap, charid, max_level=75):
             "limit_points": limit_points,
             "charid": charid, "levels": levels, "main": main, "sub": sub, "genkai": genkai, "unlocked": unlocked,
             "skills": skills, "spells": spells, "keys": keys, "items": placed, "gil": gil, "equip": equip,
-            "race": int(char.get("race") or 0), "face": int(char.get("face") or 0), "size": int(char.get("size") or 0),
+            "race": int(char.get("race") or 0), "face": int(char.get("face") or 0), "size": _size(char.get("size")),
             "look": look, "title": title, "nation": nation, "rank": rank, "rank_points": int(char.get("rank_points") or 0),
             "report": report, "name": char.get("name") or "?"}
 
@@ -430,6 +430,16 @@ def apply(conn, p):
     except Exception:
         conn.rollback()
         raise
+
+
+def _size(value):
+    """(2026-11-24, Jker_s81) The game's sizes are 0-2; another server's capture with anything else stopped the import
+    ("Out of range value for column 'size'"): then the middle size."""
+    try:
+        size = int(value or 0)
+    except (TypeError, ValueError):
+        return 1
+    return size if 0 <= size <= 2 else 1
 
 
 def find_character(conn, name):

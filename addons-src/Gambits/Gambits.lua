@@ -5,6 +5,7 @@ Commands: /gambits (and /gv2, as before). Settings stay in config/addons/Gambits
 Milestone 2: the Squad Rule Set editor (Target -> Conditions -> Action) for your squad mates.
 
   /gv2                      show or hide the window
+  /gv2 show [slot]          show the window, on that squad mate (the Squads menu's Gambits button)
   /gv2 ping [n] [gap]       measure n round trips (default 10), optionally with another interval between lines
   /gv2 theme <classic|squad|crimson>
   /gv2 interval <seconds>   time between two chat lines (default 1.0; 0.6 - 5.0)
@@ -20,7 +21,7 @@ share codes).
 
 addon.name    = 'Gambits'
 addon.author  = 'XI: Forever Offline'
-addon.version = '0.3.3'
+addon.version = '0.3.9'
 addon.desc    = 'Gambits: Rule Sets for your squad mates (Target -> Conditions -> Action).'
 addon.link    = ''
 
@@ -55,7 +56,8 @@ end
 
 local T  = load_local('transport')
 local Ed = load_local('squad_editor')
-G.T, G.Ed = T, Ed
+local U  = Ed.UI   -- (0.3.4) xifo_ui.lua: the palettes, the window's colours and metrics, the character's shared theme
+G.T, G.Ed, G.U = T, Ed, U
 do
     -- the Trust-summoning spells (generated list): left out of the editor's Specific Spell choices
     local okTr, trusts = pcall(load_local, 'trust_spells')
@@ -110,8 +112,63 @@ do
     end
 end
 
+local function install_path()
+    local ok, base = pcall(function() return AshitaCore:GetInstallPath() end)
+    if not ok or type(base) ~= 'string' or base == '' then
+        return nil
+    end
+
+    if not base:match('[/\\]$') then
+        base = base .. '/'
+    end
+
+    return base
+end
+
+-- (0.3.4) The theme a NEW settings file starts with. Crimson for a new installation. An installation that already
+-- has Gambits settings keeps its own look: the settings library wrote the theme into every settings file it made
+-- (Classic unless the player chose another), it never replaces a value that is in a file, and a file it makes later
+-- (a character new to this installation) is made from the default given here. So that default is the theme found in
+-- the installation's own defaults file. The file is only read, as text; nothing is written and nothing is changed.
+local function saved_theme(path)
+    local f = io.open(path, 'r')
+    if not f then
+        return nil, false
+    end
+
+    local text = f:read('*a') or ''
+    f:close()
+    local name = text:match('settings%["theme"%]%s*=%s*"(%w+)"')
+    return (name ~= nil and Ed.THEMES[name] ~= nil) and name or nil, true
+end
+
+function G.seed_theme()
+    local base = install_path()
+    if base == nil then
+        return U.DEFAULT
+    end
+
+    local dir = base .. 'config/addons/' .. tostring(addon.name) .. '/'
+    local theme, existed = saved_theme(dir .. 'defaults/settings.lua')
+    if existed then
+        return theme or 'classic' -- (an existing installation; a file without a readable theme was written under Classic)
+    end
+
+    -- no defaults file: the add-on was only ever loaded while logged in. This character's file tells whether the
+    -- installation is an existing one (its files were all made under Classic).
+    local id = U.current_identity()
+    if id ~= nil then
+        local _, existedHere = saved_theme(dir .. id .. '/settings.lua')
+        if existedHere then
+            return 'classic'
+        end
+    end
+
+    return U.DEFAULT
+end
+
 local function clean_settings(s)
-    s.theme = Ed.THEMES[s.theme or ''] and s.theme or 'classic'
+    s.theme = Ed.THEMES[s.theme or ''] and s.theme or (Ed.THEMES[G.seedTheme or ''] and G.seedTheme or U.DEFAULT)
     s.scale = math.max(70, math.min(200, math.floor(((tonumber(s.scale) or 100) + 5) / 10) * 10))
     s.interval = math.max(0.6, math.min(5.0, tonumber(s.interval) or 1.0))
     s.hide_echo = s.hide_echo ~= false
@@ -125,6 +182,9 @@ end
 
 local function load_settings()
     local s
+    G.seedTheme = G.seed_theme()
+    DEFAULTS.theme = G.seedTheme
+    Ed.DEFAULT_THEME = G.seedTheme
     if settingsLib then
         local d = {}
         for k, v in pairs(DEFAULTS) do
@@ -148,6 +208,21 @@ local function load_settings()
     end
 
     G.settings = clean_settings(s)
+
+    -- (0.3.4) The settings library reads another file when a character logs in or out and then holds a NEW table: the
+    -- one it saves. Until 0.3.3 this add-on went on using the table from before the login (the "defaults" file when it
+    -- was loaded at the title screen, as the launcher's start script does), so a character's own theme, size and
+    -- window size were never used, and what the player changed was never written. Now the table the library holds is
+    -- the one in use. A character whose own saved theme differs from the installation's default therefore shows its
+    -- own theme from this version on.
+    if settingsLib and type(settingsLib.register) == 'function' and not G.registered then
+        G.registered = true
+        pcall(settingsLib.register, 'settings', 'gv2_settings', function(new)
+            if type(new) == 'table' then
+                G.adopt_settings(new)
+            end
+        end)
+    end
 end
 
 local function save_settings()
@@ -268,39 +343,151 @@ end
 G.guarded = guarded
 
 -- ---------------------------------------------------------------- the window (whole-window theme, FFXIPort 1.2.0 pattern)
+-- (0.3.4) the lists themselves are in xifo_ui.lua now (the same values), shared with the Squads menu
 local function color_list(c)
-    local times = Ed.times
-    return {
-        { 'ImGuiCol_WindowBg', c.window }, { 'ImGuiCol_ChildBg', c.panel }, { 'ImGuiCol_PopupBg', c.window },
-        { 'ImGuiCol_Text', c.text }, { 'ImGuiCol_TextDisabled', c.muted }, { 'ImGuiCol_Border', c.border },
-        { 'ImGuiCol_Separator', c.border }, { 'ImGuiCol_FrameBg', c.header },
-        { 'ImGuiCol_FrameBgHovered', times(c.header, 1.25) }, { 'ImGuiCol_FrameBgActive', times(c.header, 1.40) },
-        { 'ImGuiCol_Button', c.button }, { 'ImGuiCol_ButtonHovered', times(c.button, 1.25) },
-        { 'ImGuiCol_ButtonActive', times(c.button, 1.40) }, { 'ImGuiCol_Header', c.header },
-        { 'ImGuiCol_HeaderHovered', times(c.header, 1.25) }, { 'ImGuiCol_HeaderActive', times(c.header, 1.40) },
-        { 'ImGuiCol_CheckMark', c.gold }, { 'ImGuiCol_SliderGrab', c.gold }, { 'ImGuiCol_ScrollbarGrab', c.button },
-        { 'ImGuiCol_TitleBg', c.title or c.header }, { 'ImGuiCol_TitleBgActive', c.titleActive or c.header },
-        { 'ImGuiCol_TitleBgCollapsed', c.title or c.header },
-    }
+    return U.window_colors(c)
 end
 
 local function style_list(c)
-    local list = {
-        { 'ImGuiStyleVar_WindowPadding', { s(8), s(8) } }, { 'ImGuiStyleVar_FramePadding', { s(4), s(3) } },
-        { 'ImGuiStyleVar_ItemSpacing', { s(6), s(4) } }, { 'ImGuiStyleVar_ItemInnerSpacing', { s(4), s(4) } },
-    }
-    if c.rounding then
-        list[#list + 1] = { 'ImGuiStyleVar_WindowRounding', s(c.rounding.window) }
-        list[#list + 1] = { 'ImGuiStyleVar_ChildRounding', s(c.rounding.child) }
-        list[#list + 1] = { 'ImGuiStyleVar_FrameRounding', s(c.rounding.frame) }
-        list[#list + 1] = { 'ImGuiStyleVar_PopupRounding', s(c.rounding.frame) }
+    return U.window_vars(c, s)
+end
+
+-- ---------------------------------------------------------------- (0.3.4) the settings in use, the shared theme
+-- the settings table the library holds now (after a login or logout): this character's theme, size and window size
+function G.adopt_settings(new)
+    G.settings = clean_settings(new)
+    G.sizeApplied, G.pendingSize = false, nil
+    if T and type(T.set_interval) == 'function' then
+        pcall(T.set_interval, G.settings.interval)
     end
 
-    if c.frameBorder then
-        list[#list + 1] = { 'ImGuiStyleVar_FrameBorderSize', c.frameBorder }
+    -- the settings library swapped its table: a login or a logout. With no character now it is a logout for sure
+    -- (the follower would otherwise keep the character for a while, as it does through a zone change)
+    if G.follow and U.current_identity() == nil then
+        G.follow:reset()
     end
 
-    return list
+    G.sync_theme(now(), true)
+end
+
+local function make_dir(dir)
+    if ashita and ashita.fs and type(ashita.fs.create_directory) == 'function' then
+        pcall(ashita.fs.create_directory, dir)
+    end
+end
+
+-- A small file while Gambits is loaded for this character (config/addons/xiforever/<Name>_<ServerId>/gambits.loaded):
+-- the Squads menu shows its Gambits button only then, so it never sends a command nobody answers. It is not a
+-- setting and holds nothing; it is removed when the add-on is unloaded or another character logs in.
+function G.presence(id)
+    if id == G.presenceId then
+        return
+    end
+
+    local base = install_path()
+    if G.presenceId and base then
+        local old = U.pref_dir(base, G.presenceId)
+        if old then
+            os.remove(old .. 'gambits.loaded')
+            os.remove(old .. 'gambits.open') -- (0.3.9)
+        end
+    end
+    G.openSaid = nil -- (0.3.9) the new character's folder is told the window's state at the next frame
+
+    G.presenceId = id
+    local dir = base and U.pref_dir(base, id) or nil
+    if dir then
+        make_dir((dir:gsub('[^/\\]+[/\\]$', '')))
+        make_dir(dir)
+        local f = io.open(dir .. 'gambits.loaded', 'w')
+        if f then
+            f:write(U.presence_text(addon.version)) -- (with the game process's id: a mark left by a crash is not this one)
+            f:close()
+        end
+    end
+end
+
+-- (0.3.9) The window's real state for the Squads menu's launcher: a small file gambits.open beside gambits.loaded while
+-- the window is shown (made the same way: with the game process's id), and the line "/xifogambits" whenever it changes,
+-- however it changed (the window's X, /gambits, a mate's Gambits button, the launcher). Looked at once a frame, after
+-- the window was drawn; it only writes when the state changed. The line carries nothing: the file stays the one source.
+G.OPEN_SIGNAL = '/xifogambits'
+function G.announce_open()
+    local shown = G.open[1] == true
+    if shown == G.openSaid or G.presenceId == nil then
+        return
+    end
+
+    G.openSaid = shown
+    local base = install_path()
+    local dir = base and U.pref_dir(base, G.presenceId) or nil
+    if dir then
+        if shown then
+            local f = io.open(dir .. 'gambits.open', 'w')
+            if f then
+                f:write(U.presence_text(addon.version))
+                f:close()
+            end
+        else
+            os.remove(dir .. 'gambits.open')
+        end
+    end
+
+    pcall(function()
+        AshitaCore:GetChatManager():QueueCommand(1, G.OPEN_SIGNAL)
+    end)
+end
+
+-- The theme in use: the character's shared choice when one was made (here or in the Squads menu), else this add-on's
+-- own saved theme. Looked at once a second while the window is shown, every five seconds otherwise, and at once when
+-- the settings change. It only reads: the shared choice is written only by G.pick_theme.
+function G.sync_theme(t, force)
+    if G.follow == nil or G.settings == nil then
+        return
+    end
+
+    if not force and t - (G.themeAt or -1000) < (G.open[1] and 1 or 5) then
+        return
+    end
+
+    G.themeAt = t
+    local shared, id = G.follow:poll(t, true)
+    local want = shared or G.settings.theme
+    if want ~= Ed.themeName then
+        Ed.set_theme(want)
+    end
+
+    G.presence(id)
+end
+
+-- the player picked a theme (the list in the window, /gv2 theme): saved as this add-on's own setting and as the
+-- character's shared choice, which the Squads menu follows
+function G.pick_theme(name)
+    if not U.valid(name) then
+        return nil
+    end
+
+    name = Ed.set_theme(name)
+    G.settings.theme = name
+    if settingsLib and type(settingsLib.save) == 'function' then
+        pcall(settingsLib.save)
+    end
+
+    if G.follow and G.follow:pick(name, make_dir) then
+        G.theme_signal() -- (0.3.7) the Squads menu reads the choice at its next frame, not at its next look
+    end
+
+    return name
+end
+
+-- (0.3.7) "/xifotheme": the character's theme was just chosen, look at it now. A line between the two add-ons, never
+-- typed and never sent to the game: each of them answers it and stops it, so it is harmless when the other is not
+-- loaded. It carries no theme: the saved choice stays the one source.
+G.THEME_SIGNAL = '/xifotheme'
+function G.theme_signal()
+    pcall(function()
+        AshitaCore:GetChatManager():QueueCommand(1, G.THEME_SIGNAL)
+    end)
 end
 
 -- pushes the theme; returns a token that pop() closes exactly (also after a failed push)
@@ -351,6 +538,23 @@ end
 
 G.MIN_W, G.MIN_H = 720, 420  -- unscaled minimum window size
 
+-- (0.3.6) the size of the game's screen in pixels (ImGui's display size), or nil when this binding does not say
+function G.display()
+    if not imgui.GetIO then
+        return nil, nil
+    end
+
+    local ok, w, h = pcall(function()
+        local size = imgui.GetIO().DisplaySize
+        return tonumber(size.x or size[1]), tonumber(size.y or size[2])
+    end)
+    if ok and w and h and w > 0 and h > 0 then
+        return w, h
+    end
+
+    return nil, nil
+end
+
 -- Saves the window size once it has stopped changing for a second (not every frame while the player drags it)
 function G.remember_size()
     if not imgui.GetWindowSize then
@@ -389,9 +593,13 @@ local function render()
     local began, shown = false, false
     local ok, err = pcall(function()
         -- resizable (FFXIPort 1.2.0's pattern): the minimum grows with the scale; the size the player left is used again
+        -- (0.3.6) never taller or wider than the game's screen (a window taller than the screen has its Save buttons
+        -- below the edge); at a large Size on a small screen the smallest size gives way to the screen's size
         if imgui.SetNextWindowSizeConstraints then
             local big = rawget(_G, 'FLT_MAX') or 3.0e38
-            imgui.SetNextWindowSizeConstraints({ s(G.MIN_W), s(G.MIN_H) }, { big, big })
+            local sw, sh = G.display()
+            local maxW, maxH = sw or big, sh or big
+            imgui.SetNextWindowSizeConstraints({ math.min(s(G.MIN_W), maxW), math.min(s(G.MIN_H), maxH) }, { maxW, maxH })
         end
 
         if not G.sizeApplied and imgui.SetNextWindowSize then
@@ -441,15 +649,27 @@ function G.command(words)
     local sub = string.lower(words[1] or '')
     if sub == '' or sub == 'show' or sub == 'toggle' then
         G.open[1] = (sub == 'show') or not G.open[1]
+        if G.open[1] then
+            G.sync_theme(now(), true) -- (0.3.7) a window that opens has the character's theme in its first frame
+        end
+        -- (0.3.4) /gambits show <slot>: on that squad mate (the Squads menu's Gambits button sends this)
+        if sub == 'show' and tonumber(words[2]) then
+            Ed.want_mate(tonumber(words[2]))
+        end
     elseif sub == 'hide' then
         G.open[1] = false
     elseif sub == 'ping' then
         G.open[1] = true
         Ed.ping(tonumber(words[2]) or 10, tonumber(words[3]))
     elseif sub == 'theme' then
-        G.settings.theme = Ed.set_theme(string.lower(words[2] or ''))
-        save_settings()
-        print('[GambitsV2] Theme: ' .. Ed.THEME_NAMES[G.settings.theme])
+        -- (0.3.4) an unknown name changes nothing (it used to set Classic); a known one is this character's choice,
+        -- here and in the Squads menu
+        local picked = G.pick_theme(string.lower(words[2] or ''))
+        if picked then
+            print('[GambitsV2] Theme: ' .. Ed.THEME_NAMES[picked])
+        else
+            print('[GambitsV2] /gv2 theme classic|squad|crimson   Now: ' .. tostring(Ed.THEME_NAMES[Ed.themeName]))
+        end
     elseif sub == 'interval' then
         local v = tonumber(words[2])
         if v then
@@ -477,6 +697,8 @@ end
 function G.start()
     load_settings()
     Ed.set_theme(G.settings.theme)
+    G.follow = U.follow.new(install_path())
+    G.sync_theme(now(), true)
     Ed.init({
         transport = T,
         transport_config = { interval = G.settings.interval, hideEcho = G.settings.hide_echo },
@@ -506,9 +728,12 @@ function G.start()
                 pcall(function() c:QueueCommand(1, line) end)
             end
         end,
+        display_h = function()
+            local _, h = G.display()
+            return h
+        end,
         on_theme = function(name)
-            G.settings.theme = name
-            save_settings()
+            G.pick_theme(name)
         end,
         trust_spells = G.trusts,
         addon_data = G.data,
@@ -537,10 +762,29 @@ ashita.events.register('load', 'gv2_load', guarded('load', G.start))
 ashita.events.register('unload', 'gv2_unload', guarded('unload', function()
     Ed.on_unload()
     save_settings()
+    G.presence(nil) -- (removes gambits.loaded and, 0.3.9, gambits.open)
 end))
 
 ashita.events.register('command', 'gv2_command', guarded('command', function(e)
-    if e.blocked or type(e.command) ~= 'string' then
+    if type(e.command) ~= 'string' then
+        return
+    end
+
+    -- (0.3.7) the theme was chosen a moment ago, here or in the Squads menu: read it once, now (also when the menu
+    -- stopped the line first)
+    if string.lower(e.command:match('^%s*(%S+)') or '') == G.THEME_SIGNAL then
+        e.blocked = true
+        G.sync_theme(now(), true)
+        return
+    end
+
+    -- (0.3.9) this add-on's own line to the Squads menu: never sent to the game
+    if string.lower(e.command:match('^%s*(%S+)') or '') == G.OPEN_SIGNAL then
+        e.blocked = true
+        return
+    end
+
+    if e.blocked then
         return
     end
 
@@ -577,7 +821,9 @@ end))
 
 ashita.events.register('d3d_present', 'gv2_present', guarded('present', function()
     Ed.tick()
+    G.sync_theme(now())
     render()
+    G.announce_open() -- (0.3.9) after the window was drawn: its X may have closed it in this frame
 end))
 
 return G

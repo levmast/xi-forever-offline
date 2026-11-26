@@ -25,7 +25,7 @@ hidden=("${std[@]}" bcrypt certifi mariadb PIL.Image PIL.ImageTk PIL._tkinter_fi
         launcher_core launcher_squad launcher_rules launcher_icons launcher_personality
         launcher_thirdparty launcher_revamped launcher_setup launcher_game launcher_gamefiles launcher_client launcher_update launcher_linux
         launcher_passport launcher_coop launcher_coop_gui launcher_contrib
-        launcher_pages launcher_widgets launcher_settings launcher_gamepad launcher_theme launcher_hood launcher_hd launcher_hd_gui launcher_stinkshell launcher_hardcore launcher_hardcore_gui)
+        launcher_pages launcher_widgets launcher_settings launcher_gamepad launcher_theme launcher_hood launcher_hd launcher_hd_gui launcher_stinkshell launcher_hardcore launcher_hardcore_gui launcher_armory launcher_armory_gui launcher_ventures launcher_vanasync launcher_charcards launcher_charcards_gui)
 opts=(--noconfirm --onefile --name XI-Forever-Offline
       --distpath "$PWD" --workpath "$PWD/build/pyinstaller" --specpath "$PWD/build/pyinstaller"
       --collect-all mariadb --collect-data certifi)
@@ -38,3 +38,4 @@ echo "Built: $PWD/XI-Forever-Offline"
 echo "Quick check (runs the personality tests through it):"
 chmod +x XI-Forever-Offline
 ./XI-Forever-Offline --run "$PWD/dev/personality-tests/test_personality.py"
+# (2026-11-25) Ventures: launcher_ventures added to the module list above

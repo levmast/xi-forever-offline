@@ -31,7 +31,7 @@ $hidden = @($std -split "`r?`n" | Where-Object { $_ }) + @("bcrypt", "certifi", 
             "launcher_thirdparty", "launcher_revamped", "launcher_setup", "launcher_game", "launcher_gamefiles", "launcher_client",
             "launcher_passport", "launcher_coop", "launcher_coop_gui", "launcher_contrib",
             "launcher_pages", "launcher_widgets", "launcher_settings", "launcher_gamepad", "launcher_theme", "launcher_hood",
-            "launcher_hd", "launcher_hd_gui", "launcher_stinkshell", "launcher_hardcore", "launcher_hardcore_gui", "launcher_linux", "launcher_squad_backup")
+            "launcher_hd", "launcher_hd_gui", "launcher_stinkshell", "launcher_hardcore", "launcher_hardcore_gui", "launcher_linux", "launcher_armory", "launcher_armory_gui", "launcher_ventures" <# (2026-11-25) Ventures #>, "launcher_vanasync" <# (2026-11-25) VanaSync #>, "launcher_charcards", "launcher_charcards_gui" <# (2026-11-25) character cards #>, "launcher_squad_backup")
 $opts = @("--noconfirm", "--onefile", "--windowed", "--name", "XI Forever Offline",
           "--icon", (Join-Path $PSScriptRoot "assets\ui\icon.ico"),
           "--distpath", $PSScriptRoot, "--workpath", (Join-Path $PSScriptRoot "build\pyinstaller"),

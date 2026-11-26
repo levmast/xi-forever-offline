@@ -45,6 +45,7 @@ import ctypes
 import datetime
 import json
 import os
+import tempfile
 import shutil
 import subprocess
 import sys
@@ -556,12 +557,18 @@ class Player:
         "if(-not $p.NaturalDuration.HasTimeSpan){exit 3};"
         "$p.Play();"
         "$end=(Get-Date).AddSeconds($p.NaturalDuration.TimeSpan.TotalSeconds+1);"
-        "while((Get-Date) -lt $end){[System.Windows.Forms.Application]::DoEvents();Start-Sleep -Milliseconds 250}")
+        "$vf=$env:XIFO_SONG_VOLFILE;"
+        # (2026-11-25, Hexblood) the slider moves this player too: the launcher writes the level to a small file
+        "while((Get-Date) -lt $end){[System.Windows.Forms.Application]::DoEvents();"
+        "if($vf -and (Test-Path $vf)){try{$c=(Get-Content $vf -Raw);if($c -and $c.Trim()){$v=[double]$c.Trim();if($v -ge 0 -and $v -le 1){$p.Volume=$v}}}catch{}};"
+        "Start-Sleep -Milliseconds 250}")
 
     def _play_mf(self, path, volume):
         """The fallback player: True when the song started (the process still runs after a short wait)."""
         try:
-            env = dict(os.environ, XIFO_SONG=os.path.abspath(path),
+            self._volfile = os.path.join(tempfile.gettempdir(), "xifo-song-volume-%d.txt" % os.getpid())
+            self._write_volume(volume)
+            env = dict(os.environ, XIFO_SONG=os.path.abspath(path), XIFO_SONG_VOLFILE=self._volfile,
                        XIFO_SONG_VOLUME=str(max(0.0, min(1.0, volume))))
             proc = subprocess.Popen(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
                                      "-WindowStyle", "Hidden", "-Command", self.MF_SCRIPT],
@@ -578,11 +585,22 @@ class Player:
             self.why = f"Windows Media Foundation: {type(e).__name__}: {e}"
         return False
 
+    def _write_volume(self, level):
+        """The level for the Media Foundation player, which reads this file while it plays."""
+        try:
+            if getattr(self, "_volfile", None):
+                with open(self._volfile, "w", encoding="ascii") as handle:
+                    handle.write("%.3f" % max(0.0, min(1.0, level)))
+        except OSError:
+            pass
+
     def volume(self, level):
-        """Louder or quieter while it plays (Windows; elsewhere the new level counts from the next time)."""
+        """Louder or quieter while it plays (Windows: either player; elsewhere the new level counts from the next time)."""
         try:
             if os.name == "nt" and self.open:
                 self._mci(f"setaudio {self.ALIAS} volume to {int(max(0.0, min(1.0, level)) * 1000)}")
+            elif os.name == "nt" and self.proc is not None:
+                self._write_volume(level)          # (2026-11-25, Hexblood) the Media Foundation player follows the slider too
         except Exception:
             pass
 

@@ -546,6 +546,13 @@ def launch(work, step, out):
     sys.exit(1 if fails else 0)
 
 
+if __name__ == "__main__" and "--launch" not in sys.argv and not os.environ.get("DISPLAY", "").startswith(":"):
+    # These tests start the real launcher a dozen times and take screenshots of an X screen: they are meant for Linux under
+    # xvfb-run (see the top of this file). On Windows they would open real launcher windows on your desktop, one after another.
+    print("This test runs only on Linux under xvfb-run (see the top of this file); nothing was started.")
+    sys.exit(0)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--launch":
         launch(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else "")

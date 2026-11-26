@@ -229,10 +229,23 @@ class HdPacks(unittest.TestCase):
             return code, said
         return run, calls
 
+    def test_the_hardcore_marks_files_are_left_out(self):
+        # (2026-11-25, the user) a pack such as MoonIcon-Tactics must not hide the Hardcore / Randomized marks
+        import zipfile
+        z = os.path.join(self.tmp, "MoonIcon-Tactics 1.2-46-1-2-1763000000.zip")
+        with zipfile.ZipFile(z, "w") as archive:
+            for rel in ("MoonIcon-Tactics-1.0/ROM/119/51.DAT", "MoonIcon-Tactics-1.0/ROM/0/13.DAT", "MoonIcon-Tactics-1.0/ROM/119/52.DAT"):
+                archive.writestr(rel, b"icons")
+        done = hd.install(z, self.ashita, self.kit, log=self.said.append, free=100 << 30)
+        self.assertEqual((done[0]["files"], done[0]["left_out"]), (1, 2))
+        self.assertTrue(os.path.exists(self.dats(done[0]["name"], "ROM", "119", "52.DAT")))
+        self.assertFalse(os.path.exists(self.dats(done[0]["name"], "ROM", "119", "51.DAT")))
+        self.assertEqual(hd.known_pack(os.path.basename(z))["id"], "moonicon")
+
     def test_rar_is_unpacked_beside_its_place_and_moved_in(self):
         rar = os.path.join(self.tmp, "AshenbubsHD Prime - November 2021-1-1-2111-1636901722.rar")
         open(rar, "wb").write(b"Rar!")
-        run, calls = self.unpacker({"AshenbubsHD-Prime/ROM/0/0.DAT": b"retail", "AshenbubsHD-Prime/ROM/0/1.DAT": b"hd", "AshenbubsHD-Prime/ROM9/1/1.DAT": b"hd9"})
+        run, calls = self.unpacker({"AshenbubsHD-Prime/ROM/0/0.DAT": b"retail", "AshenbubsHD-Prime/ROM/0/2.DAT": b"hd", "AshenbubsHD-Prime/ROM9/1/1.DAT": b"hd9"})
         done = hd.install(rar, self.ashita, self.kit, log=self.said.append, run=run, tools=[("tar", "C:/Windows/System32/tar.exe")], free=100 << 30)
         self.assertEqual(calls[0][:2], ["C:/Windows/System32/tar.exe", "-xf"])
         self.assertEqual(done[0]["name"], "AshenbubsHD-Prime")

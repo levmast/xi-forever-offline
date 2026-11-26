@@ -687,7 +687,8 @@ def update_config(kit, values, drop=()):
 # ----- the kit's own addons -----
 # (2026-11-19) "Gambits" is now the squad Rule Set editor (wildcabbagepatch's Gambits v2, first shipped as GambitsV2);
 # the addon that had the name before (your own character's rules, Parser, EXP Watch, Enemy Info) is "autobox".
-OWN_ADDONS = ("Gambits", "autobox", "followme", "servermenu", "squadpanel", "stinkshell", "autora", "hcicons")
+OWN_ADDONS = ("Gambits", "autobox", "followme", "servermenu", "squadpanel", "stinkshell", "autora", "hcicons",
+              "vanasync")   # (2026-11-25) VanaSync: copied, not started (off by default)
 STOCK_ADDONS = ("distance", "fps", "move", "timestamp", "tparty", "checker", "drawdistance", "allmaps")
 STOCK_PLUGINS = ("minimap",)
 START_ADDONS = ("Gambits", "servermenu", "crystalboy")          # loaded at startup on a new install

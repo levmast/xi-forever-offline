@@ -37,7 +37,7 @@ Settings (button place, last tab): config/addons/servermenu/settings.cfg
 
 addon.name    = 'servermenu';
 addon.author  = 'XI: Forever Offline';
-addon.version = '1.26m';   -- (1.26m) each job's level in the Job and Sub lists (Dugahst); (1.26l) Spells and abilities window on the profile (Frost); (1.26k) the Auto-equip tip names "Squad gets all gear"; (1.26j) Attack my target / Stop; (1.26i) the menu opens again (opacity helper stood below the menu); (1.26h) a click right after a refresh is no longer dropped by the game; (1.26g) opacity, one gear button
+addon.version = '1.35';   -- (1.35) a card's Settings has Position (Normal, Behind enemy, TA partner: where the mate stands in a fight, !squad position), when the server offers it (cap matepos); it takes effect at once; (1.34) every window's text drawn at its Size (the font pushed at the scaled size, as the Gambits window does: sharper at 120 %), themed scrollbars, the launcher's Gambits half opens AND closes the editor and is lit while it is shown, Options > Show Gambits shortcut, the Camp row's groups wrap whole and the monster kinds wrap under Anything; (1.33) the Camp row shows what the camp is doing (Ready, Pulling, Fighting, Paused), "Next pull at" an enemy HP % and "Healer MP" (squad.lua campst), Move camp here keeps the puller and Start / Pause (cap campmove), and an optional compact Camp bar (state, Start / Pause, Move here, Camp off) that follows the server's changes; (1.32) the menu's opacity reaches the cards and panels too, and no layer is laid over another; a theme picked here or in Gambits is in both windows at their next frame; (1.31) the launcher is as high as the menu's buttons, with one outline around both halves, and has the character's theme from its first frame; Sub stands in the second column, where Mode and WS at stand; (1.30) a card's Settings in two columns under a thin line, "Save size"; the Profile's Stats in groups (Role / Mode / Race, Actions, Attributes, Combat; numbers end in line; "Live stats" only when they are read from the mate that is out); the launcher is one control with a Squads half and a Gambits half, and is there only while the character is in the world; (1.29) Jobs is a button of its own on the card again (Job and Sub; the unlocked-job help is their tooltip), Settings keeps its name with a mark for open / closed, one call status at a time (Away, Calling..., Out) with Call and Dismiss in one place, the Rules line says what is expected while a mate is called, Engage is a plain button, the Gear rows are really drawn as one strip in the game (Ashita's cursor position is two numbers); (1.28) one look with the Gambits window: ImGui's own title bar and close button, the same tabs (a smaller kind for choices inside a view), row states and spacing; the commands in groups (Squad, Fight, Camp, Setup) and a clearer Engage button; compact mate cards with the same first row on every card and the rarely changed settings behind Settings; "rules skipped"; the Profile begins with the mate row, its Gear view has clickable slot rows in three groups; (1.27) themes (Classic, Squad, Crimson; Crimson for a new installation, an existing one keeps its look) shared with Gambits per character, Options row (Theme, Size, Opacity), a top row and cards that fit their content, Apply for one mate, the Profile's Stats and Gear views, tooltips that never read a % as a format; (1.26n) the Rules line: the rules a called mate really runs (Gambits Rule Set or default job rules), the selected set and Apply needed; (1.26m) each job's level in the Job and Sub lists (Dugahst); (1.26l) Spells and abilities window on the profile (Frost); (1.26k) the Auto-equip tip names "Squad gets all gear"; (1.26j) Attack my target / Stop; (1.26i) the menu opens again (opacity helper stood below the menu); (1.26h) a click right after a refresh is no longer dropped by the game; (1.26g) opacity, one gear button
 addon.desc    = 'The XI: Forever Offline menu: squad mates, and the dualbox character with his gambits.';
 addon.link    = '';
 
@@ -47,6 +47,28 @@ local imgui;
 do
     local ok, mod = pcall(require, 'imgui');
     if ok then imgui = mod; end
+end
+
+-- (1.27) xifo_ui.lua, next to this file: the palettes, the text helpers that never format, and the character's shared
+-- theme choice (the same file is in the Gambits folder). Tried as a module first, then by this add-on's own folder,
+-- then by the folder this file was loaded from.
+local U;
+do
+    local ok, mod = pcall(require, 'xifo_ui');
+    local tried = {};
+    if not (ok and type(mod) == 'table') then
+        local base = (type(addon) == 'table' and type(addon.path) == 'string') and addon.path or '';
+        if base ~= '' and not base:match('[/\\]$') then base = base .. '/'; end
+        local here = (debug and debug.getinfo and (debug.getinfo(1, 'S').source or '') or ''):match('^@(.*[/\\])') or '';
+        for _, dir in ipairs({ base, here }) do
+            if not (ok and type(mod) == 'table') and not tried[dir] then
+                tried[dir] = true;
+                ok, mod = pcall(dofile, dir .. 'xifo_ui.lua');
+            end
+        end
+    end
+    if not (ok and type(mod) == 'table') then error('servermenu: xifo_ui.lua could not be loaded: ' .. tostring(mod)); end
+    U = mod;
 end
 
 -- The item icons come from the game's own item bitmaps, the same source the equipment monitor uses.
@@ -141,7 +163,7 @@ for role, text in pairs(ROLE_HELP) do ROLE_INFO.TIPS[role] = text .. '\n\n' .. R
 
 -- (role clarity) the small gold note on a mate's row: only when a Tank or Damage Role takes healing or support away
 -- from a job (main or sub) whose default rules have it. A PLD tank without a WHM/RDM sub job is the usual set-up: no
--- note. The menu does not know whether a Gambits Rule Set is assigned, so it speaks only of the default job rules.
+-- note. It speaks only of the default job rules; (1.26n) it is left out while the Rules line shows a Rule Set running.
 -- Returns the tooltip, the Role's name and the job it is about, or nil.
 function ROLE_INFO.note(mate)
     local role = mate and mate.role;
@@ -162,6 +184,83 @@ function ROLE_INFO.note(mate)
         roleName, table.concat(parts, ', '), job), roleName, job;
 end
 
+-- (1.26n) the Rules line of a mate card: what the called mate really runs (the server's rs| line), what is chosen for
+-- its next call, and whether Apply now is needed. Returns parts { { colour name, text }, ... } and the tooltip.
+-- The server decides every state; nothing here guesses that a set runs.
+ROLE_INFO.RS_STATES = { off = true, unknown = true, addon = true, set = true, job = true, fallback = true, pending = true };
+ROLE_INFO.RS_WHY = {
+    job    = 'The main job was changed since the call.',
+    choice = 'Another Rule Set (or none) was chosen since the call.',
+    edited = 'The running Rule Set was saved with changes since the call.',
+    gone   = 'The running Rule Set is no longer saved: the next call uses the default job rules.',
+    role   = 'The Role or Mode was changed since the call.',
+};
+ROLE_INFO.RS_FB = {
+    [1] = 'the chosen Rule Set no longer exists or is not valid',
+    [2] = 'the chosen Rule Set number now belongs to a different set',
+    [3] = 'none of its rules can be used at this level and job',
+    [4] = 'Squads has no job rules for this job: the trust\'s own rules run, and Rule Sets do not apply',
+};
+function ROLE_INFO.rules(mate, rs, stale, calling)
+    local roleName = mate.role and (mate.role:sub(1, 1):upper() .. mate.role:sub(2)) or 'Auto';
+    local function default(job) return 'Default ' .. job .. ' job rules' .. ((mate.role and mate.role ~= 'auto') and (' (' .. roleName .. ')') or ''); end
+    local liveJob = (rs.job ~= nil and rs.job ~= '-' and rs.job ~= '') and rs.job or mate.main;
+    local using;
+    if rs.live > 0 then
+        using = 'Gambits: ' .. ((rs.liveName ~= '?' and rs.liveName ~= '-') and rs.liveName or ('Rule Set ' .. rs.live .. ' (no longer saved)'));
+    elseif rs.fb == 4 then
+        using = liveJob .. ' trust\'s own rules';
+    else
+        using = default(liveJob);
+    end
+    local chosen, nextCall;
+    if rs.sel > 0 and rs.selName ~= '?' and rs.selName ~= '-' then
+        chosen = rs.selName; nextCall = 'Gambits: ' .. rs.selName;
+    elseif rs.sel > 0 then
+        chosen = 'Rule Set ' .. rs.sel .. ' (cannot be used)'; nextCall = default(mate.main);
+    else
+        chosen = 'None'; nextCall = default(mate.main);
+    end
+    local roleLine = 'Squad Role: ' .. roleName .. ((rs.state == 'set') and ' (not used while a Rule Set runs)'
+        or ' (filters only the default job rules)');
+    local function tip(status)
+        return table.concat({ 'Currently using: ' .. using, 'Selected Rule Set: ' .. chosen, roleLine, status }, '\n');
+    end
+    if stale then
+        return { { 'dim', 'Checking...' } }, 'A change was sent. Waiting for the server\'s answer before showing what this mate runs.';
+    elseif rs.state == 'off' and calling then
+        -- (1.29) being called: what it is expected to run, said as that. What it runs is shown once the server reports it.
+        return { { 'dim', 'Next call: ' .. nextCall } },
+            'Being called. Expected at this call: ' .. nextCall .. '\nSelected Rule Set: ' .. chosen .. '\n' .. roleLine
+            .. '\nWhat it really runs is shown here once the server reports it.';
+    elseif rs.state == 'off' then
+        return { { 'dim', 'Not called.  Next call: ' .. nextCall } },
+            'Selected Rule Set: ' .. chosen .. '\n' .. roleLine .. '\nNothing runs until the mate is called.';
+    elseif rs.state == 'unknown' then
+        return { { 'dim', 'Not reported' } }, 'This mate was called before the server could report its rules (or by an older call path). Apply now to see them.';
+    elseif rs.state == 'addon' then
+        return { { 'dim', 'Run by an add-on' } }, 'An installed add-on builds this mate\'s rules; Squads and Rule Sets do not.';
+    elseif rs.state == 'set' then
+        local parts = { { 'good', using } };
+        if rs.dropped > 0 then
+            -- (1.28) "skipped": the server's count of the set's rules that this mate cannot use at its level and job;
+            -- they are not part of what runs (squad_rulesets.lua: dropped). Which ones: Check, in the Gambits editor.
+            parts[#parts + 1] = { 'warn', string.format('  (%d rule%s skipped)', rs.dropped, rs.dropped == 1 and '' or 's') };
+        end
+        return parts, tip(rs.dropped > 0 and string.format('Active. %d rule%s of the set cannot be used at this level or job and %s skipped. Check, in the Gambits editor, shows which.',
+            rs.dropped, rs.dropped == 1 and '' or 's', rs.dropped == 1 and 'is' or 'are') or 'Active: the selected Rule Set is running.');
+    elseif rs.state == 'fallback' and rs.fb == 4 and rs.sel == 0 then
+        return { { 'text', using } }, tip(ROLE_INFO.RS_FB[4] .. '.');
+    elseif rs.state == 'fallback' then
+        return { { 'warn', using }, { 'warn', '  Rule Set not used' } },
+            tip('Fallback: ' .. (ROLE_INFO.RS_FB[rs.fb] or 'the chosen Rule Set could not be used') .. '.');
+    elseif rs.state == 'pending' then
+        return { { 'text', using }, { 'warn', '  Apply needed' } },
+            tip((ROLE_INFO.RS_WHY[rs.why] or 'The settings changed since the call.') .. '\nNext call: ' .. nextCall .. '. Press Apply now.');
+    end
+    return { { 'text', using } }, tip('Default job rules: no Rule Set is selected for this job.');
+end
+
 local LAYERS = {
     emergency_survival     = { 'Survival',    { 0.90, 0.45, 0.40, 1 } },
     raise                  = { 'Raise',       { 0.95, 0.85, 0.55, 1 } },
@@ -176,24 +275,19 @@ local LAYERS = {
 };
 local TARGETS = { self = 'self', enemy = 'enemy', lowest = 'lowest HP ally', ally = 'party', dead = 'KO\'d ally', status = 'afflicted ally', mp = 'low-MP ally' };
 
--- the look
-local C = {
-    gold   = { 0.89, 0.74, 0.40, 1 },
-    text   = { 0.88, 0.89, 0.92, 1 },
-    dim    = { 0.56, 0.59, 0.66, 1 },
-    good   = { 0.42, 0.85, 0.52, 1 },
-    bad    = { 0.95, 0.42, 0.40, 1 },
-    warn   = { 0.96, 0.76, 0.36, 1 },
-    hp     = { 0.30, 0.70, 0.38, 1 },
-    mp     = { 0.30, 0.50, 0.90, 1 },
-    on     = { 0.16, 0.48, 0.28, 1 },
-    onHi   = { 0.22, 0.60, 0.36, 1 },
-    sel    = { 0.55, 0.43, 0.18, 1 },
-    selHi  = { 0.68, 0.54, 0.24, 1 },
-    panel  = { 0.065, 0.075, 0.105, 0.97 },
-    line   = { 0.30, 0.32, 0.40, 0.55 },
-    faint  = { 0.46, 0.49, 0.55, 1 },
-};
+-- the look (1.27): the colours of the theme in use, filled by X.applyTheme from xifo_ui (U.menu). The Squad theme is
+-- this menu's look as it always was, value for value; Classic and Crimson fill the same roles from their palettes.
+-- Names: gold text dim good bad warn hp mp on onHi sel selHi panel line faint busy go goHi goText.
+local C = {};
+-- (1.27) one table for what 1.27 adds, to keep this file's count of locals down
+local X = { names = {}, gearCache = {} };
+function X.applyTheme(name)
+    local m = U.menu(name);
+    for k, v in pairs(m.c) do C[k] = v; end
+    X.menu, X.themeName = m, m.name;
+    return m.name;
+end
+X.applyTheme('squad');   -- (until the settings are read at load)
 
 -- ---------------------------------------------------------------- state
 local S = {
@@ -210,7 +304,11 @@ local S = {
     spell = { 'Dia' },
     -- the button
     cfg = { button_x = '18', button_y = '240', button_locked = 'false', button_hidden = 'false', button_wide = 'false', tab = 'Squad', spell = 'Dia', scale = '1',
-            button_opacity = '100', menu_opacity = '100' },   -- (1.26g, K-Andy) percent; /menu opacity
+            button_opacity = '100', menu_opacity = '100',     -- (1.26g, K-Andy) percent; /menu opacity
+            -- (1.34) the launcher's Gambits half (Options > Show Gambits shortcut), and the compact Camp bar of 1.33 (which
+            -- had no default here, so it was saved but not read back after a reload: only keys listed here are read)
+            launcher_gambits = 'true', camp_compact = 'false',
+            theme = '' },   -- (1.27) classic | squad | crimson; '' = not decided yet (see the load event)
     cfgDirty = false, cfgSavedAt = -1000, buttonPos = nil, dragging = false, dragFrom = nil, dragMoved = false,
 };
 
@@ -307,6 +405,7 @@ end
 local function enqueue(command, delay, who)
     if not isRefresh(command) then S.lastClick = now(); end
     S.queue[#S.queue + 1] = { at = now() + (delay or 0), command = command, who = who };
+    ROLE_INFO.rsCommand(command, now() + (delay or 0));
 end
 
 -- (1.26d) one refresh is enough: a new ask replaces one still waiting in the queue, so five quick clicks
@@ -323,6 +422,172 @@ local function ask(delay)
     S.waitUntil = now() + (delay or 0) + 5;
     S.lastAsk = now();
     S.incoming = nil;
+    S.incomingRs = nil;
+end
+
+-- (1.26n) the Rules line: what a called mate really runs, from the server's rs| line (squad_rulesets.lua R.panelLine).
+-- A change this menu (or Gambits, through chat) sends makes that mate's line "Checking..." until an answer to a
+-- !squad panel sent AFTER the change has come in, so an old answer never shows a set as running. slot nil = all mates.
+-- (1.26n, responsiveness) After a change the menu asks again at +2, +7 and +11 s (RS_BURST: the server calls a mate
+-- back 4 s after Apply, 1.5 s more per further mate), at most those three, and stops early once the answer shows the
+-- change settled. A newer change replaces the plan. The normal 15 s refresh is unchanged.
+ROLE_INFO.RS_BURST = { 2, 7, 11 };
+ROLE_INFO.RS_TIMEOUT = 3;    -- s: an ask without an answer by then no longer holds back the next one (M2)
+ROLE_INFO.RS_LOST = 10;      -- s: an ask without an answer by then is lost for good (the server answers in well under 1 s)
+ROLE_INFO.RS_CHAT = { ['/say'] = true, ['/s'] = true, ['/party'] = true, ['/p'] = true, ['/linkshell'] = true, ['/l'] = true,
+    ['/linkshell2'] = true, ['/l2'] = true, ['/tell'] = true, ['/t'] = true, ['/shout'] = true, ['/sh'] = true, ['/yell'] = true };
+function ROLE_INFO.rsTouch(slot, at, verb)
+    at = at or now();
+    S.rsChangedAt = S.rsChangedAt or {};
+    local key = slot or 'all';
+    S.rsChangedAt[key] = math.max(S.rsChangedAt[key] or -1, at);
+    -- the refresh plan for this change (an older plan is dropped), and which mates were out when it was made
+    local out = {};
+    for _, m in ipairs(S.mates or {}) do if m.out then out[m.slot] = true; end end
+    local due = {};
+    for _, d in ipairs(ROLE_INFO.RS_BURST) do due[#due + 1] = at + d; end
+    S.rsBurst = { due = due, slot = slot, verb = verb, from = at, out = out };
+    -- (1.27) when a mate (or the squad: 'all') was last sent for: a mate that is away right after that is being called
+    -- again, not "not called", and what was waiting for its next call has been applied once it is back
+    if verb == 'call' or verb == 'reapply' then
+        X.recallAt = X.recallAt or {};
+        X.recallVerb = X.recallVerb or {};   -- (1.29) a call the server refuses leaves a call timer; an Apply does not
+        if slot then
+            X.recallAt[slot], X.recallVerb[slot] = at, verb;
+        else
+            -- "call all" sends for everyone; Apply now (reapply) only for the mates that are out
+            for _, m in ipairs(S.mates or {}) do
+                if verb == 'call' or m.out then X.recallAt[m.slot], X.recallVerb[m.slot] = at, verb; end
+            end
+        end
+    end
+end
+
+-- (1.27) the theme in use: the character's shared choice when one was made (in this menu or in Gambits), else this
+-- menu's own setting. Looked at once a second while one of the menu's windows is shown, every five seconds otherwise
+-- (the Squads button is always there), and at once when another character logs in. It only reads.
+function X.syncTheme(t, force)
+    if X.follow == nil then return; end
+    local visible = S.open[1] or S.sheetOpen[1] or S.actionsOpen[1];
+    if not force and t - (X.themeAt or -1000) < (visible and 1 or 5) then return; end
+    X.themeAt = t;
+    local shared = X.follow:poll(t, true);
+    local want = shared or (U.valid(S.cfg.theme) and S.cfg.theme or U.DEFAULT);
+    if want ~= X.themeName then X.applyTheme(want); end
+end
+
+-- (1.27) changes that wait for a mate's next call and that the server does not report itself (gear, sub job, range,
+-- weapon skill, wait, blue magic; with an older server also Role, Mode and main job): [slot] = { at, gear }
+function X.pendMate(slot, gear)
+    X.pend = X.pend or {};
+    local was = X.pend[slot];
+    X.pend[slot] = { at = now(), gear = gear == true or (was ~= nil and was.gear == true) };
+end
+function X.recalledAt(slot)
+    return (X.recallAt or {})[slot] or -1000;
+end
+-- a mate that is away within 12 s of being sent for (the server calls back 4 s after Apply, 1.5 s more per further mate)
+function X.recalling(mate)
+    return mate ~= nil and not mate.out and now() - X.recalledAt(mate.slot) < 12;
+end
+-- once per fresh mate list: a change waits only while its mate is out and has not been called again since
+function X.settlePending()
+    for slot, p in pairs(X.pend or {}) do
+        local mate = nil;
+        for _, m in ipairs(S.mates or {}) do if m.slot == slot then mate = m; end end
+        local recalled = X.recalledAt(slot);
+        if mate == nil or (not mate.out and not X.recalling(mate))
+            or (mate.out and recalled > p.at and (S.rsAnswerFor or -1) > recalled + 4) then
+            X.pend[slot] = nil;
+        end
+    end
+end
+-- does this mate have something that only its next call applies? (it must be out: an away mate gets it when called)
+function X.pending(mate)
+    if mate == nil or not mate.out then return false; end
+    if X.pend and X.pend[mate.slot] then return true; end
+    local rs = S.rs and S.rs[mate.slot];
+    return rs ~= nil and rs.state == 'pending' and not ROLE_INFO.rsStale(mate.slot);
+end
+-- the squad commands that change what a mate runs or will run: from this menu (enqueue) or typed / sent by Gambits
+ROLE_INFO.RS_VERBS = { call = true, dismiss = true, reapply = true, ruleset = true, job = true, sub = true, role = true, mode = true };
+function ROLE_INFO.rsCommand(command, at)
+    local verb, rest = tostring(command or ''):lower():match('^/say%s+!squad%s+(%a+)%s*(%S*)');
+    if verb and ROLE_INFO.RS_VERBS[verb] then
+        ROLE_INFO.rsTouch(tonumber(rest), at, verb);
+        return true;
+    end
+    return false;
+end
+function ROLE_INFO.rsStale(slot)
+    local at = S.rsChangedAt or {};
+    local changed = math.max(at.all or -1, (slot and at[slot]) or -1);
+    return changed >= 0 and changed >= (S.rsAnswerFor or -2);
+end
+-- every !squad panel sent (by this menu, or typed / sent by another add-on), oldest first (M2). An answer is credited
+-- to the OLDEST ask that could still be answered, lost ones included until RS_LOST: the server answers in order, so
+-- this never credits an answer to an ask newer than the one it answers. A lost ask can only make the Rules line wait
+-- one more answer, never show a change as confirmed too early.
+function ROLE_INFO.rsSent(t)
+    S.rsAsks = S.rsAsks or {};
+    while #S.rsAsks > 0 and t - S.rsAsks[1] > ROLE_INFO.RS_LOST do table.remove(S.rsAsks, 1); end
+    S.rsAsks[#S.rsAsks + 1] = t;
+end
+function ROLE_INFO.rsAnswered()
+    local asks, t = S.rsAsks or {}, now();
+    while #asks > 0 and t - asks[1] > ROLE_INFO.RS_LOST do table.remove(asks, 1); end
+    if #asks > 0 then S.rsAnswerFor = table.remove(asks, 1); end   -- (no ask on record: an answer nobody here asked for proves nothing new)
+end
+-- an ask still waiting for its answer (sent less than RS_TIMEOUT ago), or one in the queue
+function ROLE_INFO.rsAskWaiting(t)
+    for _, item in ipairs(S.queue) do if item.command:find('^/say !squad panel') then return true; end end
+    local asks = S.rsAsks or {};
+    return #asks > 0 and t - asks[#asks] < ROLE_INFO.RS_TIMEOUT;
+end
+-- the change the plan is for has settled in a fresh answer: a call or reapply once the mates are back, a dismiss once
+-- the mate is away, anything else at the first fresh answer
+function ROLE_INFO.rsSettled(b)
+    if S.rs == nil then return true; end   -- (an older server: nothing to wait for)
+    local function state(slot) return S.rs[slot] and S.rs[slot].state; end
+    if b.verb == 'call' or b.verb == 'reapply' then
+        local slots = b.slot and { [b.slot] = true } or b.out;
+        -- (nobody known to be out when it was sent, e.g. from an answer taken during an earlier re-call: all three asks)
+        if next(slots) == nil then return false; end
+        for slot in pairs(slots) do
+            local st = state(slot);
+            if st == nil or st == 'off' or st == 'unknown' then return false; end
+        end
+    elseif b.verb == 'dismiss' then
+        for _, m in ipairs(S.mates or {}) do if (b.slot == nil or m.slot == b.slot) and m.out then return false; end end
+    end
+    return true;
+end
+-- once per frame: the next planned ask when it is due, the Squad tab is shown, no ask is waiting and no answer is
+-- coming in (an ask resets the half-read answer)
+function ROLE_INFO.rsBurstTick(t)
+    local b = S.rsBurst;
+    if b == nil then return; end
+    if not (S.open[1] and S.tab == 'Squad') then S.rsBurst = nil; return; end
+    if S.rsAnswerFor and S.rsAnswerFor > b.from and ROLE_INFO.rsSettled(b) then S.rsBurst = nil; return; end
+    if b.due[1] == nil then S.rsBurst = nil; return; end
+    if t < b.due[1] or S.incoming ~= nil or S.incomingRs ~= nil then return; end
+    table.remove(b.due, 1);
+    if not ROLE_INFO.rsAskWaiting(t) then ask(); end
+end
+-- (M1) a chat line another add-on (or you) sent: the menu waits SAY_GAP after it before typing its own next line, or
+-- the game may drop one of the two. Lines this menu sent itself are recognised and not counted.
+function ROLE_INFO.rsOwnSay(command, t)
+    S.ownSays = S.ownSays or {};
+    S.ownSays[#S.ownSays + 1] = { text = command, at = t };
+end
+function ROLE_INFO.rsSeenSay(command, t)
+    local own = S.ownSays or {};
+    for i = #own, 1, -1 do
+        if t - own[i].at > 5 then table.remove(own, i);
+        elseif own[i].text == command then table.remove(own, i); return false; end
+    end
+    S.otherSayAt = t;
+    return true;
 end
 
 -- Actions buttons: what you asked for (S.want[slot] = 'on' or 'off') is checked against what the server reports in every new mate list.
@@ -408,9 +673,14 @@ local function pump(t)
     -- to wait only after another click, so one that came right after a refresh of the menu was lost. Now every line
     -- the menu says waits its turn after the last one it said, refreshes included.
     if S.queue[pick].command:find('^/say ') and t - (S.lastSay or -1000) < SAY_GAP then return; end
+    -- (1.26n, M1) the same wait after a chat line another add-on or you sent (Gambits' !gsq / !squad lines), but only for
+    -- a line this menu will TYPE: one that goes as the addon channel packet is not a chat line and need not wait
+    local typed = S.queue[pick].command:find('^/say ') and not (S.channel and S.queue[pick].command:find('^/say !'));
+    if typed and t - (S.otherSayAt or -1000) < SAY_GAP then return; end
     local chat = chatManager();
     if chat == nil or typing(chat) then return; end
     local first = table.remove(S.queue, pick);
+    if first.command:find('^/say !squad panel') then ROLE_INFO.rsSent(t); end
     if first.who then   -- (1.26c) meant for one character: not for whoever is logged in now, if that is someone else
         local ok, name = pcall(function() return AshitaCore:GetMemoryManager():GetParty():GetMemberName(0); end);
         name = (ok and tostring(name or '') or ''):match('^%s*(.-)%s*$') or '';
@@ -429,6 +699,7 @@ local function pump(t)
     end
     -- the server handles the addon channel packet: a "!" line goes out as that packet, so it is not typed, not echoed, not a chat line
     if S.channel and first.command:find('^/say !') and channelSend(first.command:sub(6)) then return; end
+    if first.command:find('^/say ') then ROLE_INFO.rsOwnSay(first.command, t); end   -- (M1: not counted as another add-on's line)
     pcall(function() chat:QueueCommand(1, first.command); end);
 end
 
@@ -492,14 +763,24 @@ local function onLine(payload)
     local es, ee, ecount = payload:match('^gle|(%d+)|(%-?%d+)|(%d+)$');
     if es then
         local g = S.gear;
-        if g and g.slot == tonumber(es) and g.eq == tonumber(ee) then g.done, g.total = true, tonumber(ecount); end
+        if g and g.slot == tonumber(es) and g.eq == tonumber(ee) then
+            g.done, g.total = true, tonumber(ecount);
+            X.gearCache[g.slot .. ':' .. g.eq] = { items = g.items, total = g.total, at = now() };   -- (1.27) kept two minutes
+        end
         S.waitUntil = 0;
         return;
     end
     if payload == 'end' then
         S.channel = S.incomingChannel == true;   -- (an older server never says chan|1, so the menu keeps typing)
         S.incomingChannel = nil;
+        -- (1.26n) the Rules lines of this answer (nil from an older server: no Rules line is drawn), and which ask it answers
+        S.rs = S.incomingRs;
+        S.incomingRs = nil;
+        ROLE_INFO.rsAnswered();
         S.mates = S.incoming or {};
+        X.caps = S.incomingCaps or {};          -- (1.27; nothing from an older server: one-mate Apply is not offered)
+        S.incomingCaps = nil;
+        X.settlePending();
         reconcileActions();
         S.incoming = nil;
         S.behs = S.incomingBeh;                 -- (nil from an older server: the Forward to Gambits button stays hidden)
@@ -525,8 +806,24 @@ local function onLine(payload)
         S.waitUntil = 0;
         return;
     end
+    -- (1.27) cap|<words>: what this server can do beyond the first menus (squad.lua says reapply1 when "!squad reapply
+    -- <slot>" re-calls one mate). The menu uses such a form only after it has read the word in the answer in use.
+    local caps = payload:match('^cap|([%w_,]+)$');
+    if caps then
+        S.incomingCaps = {};
+        for word in caps:gmatch('[%w_]+') do S.incomingCaps[word] = true; end
+        return;
+    end
     local camp = parseCamp(payload);
     if camp then S.incomingCamp = camp; return; end
+    -- (1.33, community feedback F5-F7) campst|<camp 1/0>|<paused 1/0>|<state>|<pulls>|<next pull at enemy HP %>|<healer MP %>:
+    -- in a panel answer, or by itself when the camp changed (squad.lua SQUAD_CAMPX.push); then it is applied at once
+    local stOn, stPaused, stState, stPulls, stAt, stMp = payload:match('^campst|([01])|([01])|(%a+)|(%d+)|(%d+)|(%d+)$');
+    if stOn then
+        X.campSt({ on = stOn == '1', paused = stPaused == '1', state = stState, pulls = tonumber(stPulls), pullAt = tonumber(stAt),
+                   healerMp = tonumber(stMp) });
+        return;
+    end
     -- (squad.lua for servermenu 1.17) campbots|<bot players in your party, comma list or ->|<the bot pulling or ->
     local cbNames, cbPuller = payload:match('^campbots|([^|]*)|([^|]*)$');
     if cbNames then
@@ -575,7 +872,17 @@ local function onLine(payload)
         end
         S.incomingOpts = S.incomingOpts or {};
         S.incomingOpts[tonumber(oslot)] = { size = tonumber(osize), tp = tonumber(otp), ws = ows ~= '-' and (ows:gsub('_', ' ')) or nil,
-                                            range = tonumber(orange), list = list };
+                                            range = tonumber(orange), list = list, pos = (S.incomingOpts[tonumber(oslot)] or {}).pos };
+        return;
+    end
+    -- (1.35) pos|<slot>|<0 normal, 1 behind, 2 ta>: where the mate stands in a fight (!squad position); the server says it
+    -- right after the mate's opt line, and offers the setting with cap|...,matepos
+    local pslot, pmode = payload:match('^pos|(%d+)|(%d+)$');
+    if pslot then
+        S.incomingOpts = S.incomingOpts or {};
+        local o = S.incomingOpts[tonumber(pslot)] or {};
+        o.pos = tonumber(pmode);
+        S.incomingOpts[tonumber(pslot)] = o;
         return;
     end
     -- (squad.lua with pull choices) campwant|<Monster_Name or -> and campmob|<Monster_Name>|<lowest lv>|<highest lv>|<how many>|<1 pullable>
@@ -601,6 +908,17 @@ local function onLine(payload)
     if bkey then
         S.incomingBeh = S.incomingBeh or {};
         table.insert(S.incomingBeh, { key = bkey, state = bstate, label = blabel });
+        return;
+    end
+    -- (1.26n) rs|<slot>|<state>|<why>|<live num>|<live name>|<chosen num>|<chosen name>|<fallback>|<left out>|<job at the call>
+    local rsSlot, rsState, rsWhy, rsLive, rsLiveName, rsSel, rsSelName, rsFb, rsDrop, rsJob =
+        payload:match('^rs|(%d+)|(%a+)|([%a-]+)|(%d+)|([^|]*)|(%d+)|([^|]*)|(%d+)|(%d+)|([^|]*)$');
+    if rsSlot then
+        if ROLE_INFO.RS_STATES[rsState] then
+            S.incomingRs = S.incomingRs or {};
+            S.incomingRs[tonumber(rsSlot)] = { state = rsState, why = rsWhy, live = tonumber(rsLive), liveName = rsLiveName,
+                sel = tonumber(rsSel), selName = rsSelName, fb = tonumber(rsFb), dropped = tonumber(rsDrop), job = rsJob };
+        end
         return;
     end
     -- (1.26m, Dugahst) jl|<slot>|<JOB>:<level>,...: each job's own level, shown in the Job and Sub lists
@@ -629,26 +947,76 @@ local function askSheet(delay)
     S.profileIncoming = {};
 end
 
-local function openSheet(slot)
+-- tab (1.27): 'stats' or 'gear'; nil keeps the view that was shown
+local function openSheet(slot, tab)
     slot = tonumber(slot);
     if slot == nil then return; end
+    if tab == 'stats' or tab == 'gear' then S.sheetTab = tab; end
     S.sheetSlot = slot;
     S.sheetOpen[1] = true;
     S.sheetFresh = true;        -- next frame: put the window in the middle of the screen, in front
     S.profile = nil;
+    S.profileHeld = nil;
     askSheet(0);
+end
+
+-- (1.27) whose sheet an answer is. The window can go to another mate while the answer for the one before is still on
+-- its way, and that answer must never be shown under the new mate (its gear cells would send commands for the new one).
+-- A server that says the slot (squadsheet:slot|<n>, before hdr) is taken at its word. An older one names only the
+-- mate, and a squad has no two mates of one name: the answer is this mate's when the name is the selected mate's.
+-- true / false, or nil while the squad list has not said that slot's name yet.
+function X.sheetIsFor(data, slot)
+    if data.slot ~= nil then return data.slot == slot; end
+    for _, m in ipairs(S.mates or {}) do
+        if m.slot == slot then return data.hdr ~= nil and m.name == data.hdr.name; end
+    end
+    return nil;
+end
+-- the sheet the window may show: only one that is known to be the selected mate's (S.profile.forSlot says whose)
+function X.sheetShown()
+    local held = S.profileHeld;
+    if held ~= nil then
+        local mine = X.sheetIsFor(held, S.sheetSlot);
+        if mine ~= nil then
+            S.profileHeld = nil;
+            if mine then held.forSlot = S.sheetSlot; S.profile = held; end
+        end
+    end
+    local d = S.profile;
+    if d ~= nil and d.forSlot ~= S.sheetSlot then return nil; end
+    return d;
 end
 
 local function onSheetLine(text)
     if text == 'end' then
-        if S.profileIncoming and S.profileIncoming.hdr then S.profile = S.profileIncoming; end
+        local data = S.profileIncoming;
         S.profileIncoming = nil;
+        if data and data.hdr then
+            local mine = X.sheetIsFor(data, S.sheetSlot);
+            if mine then
+                data.forSlot, data.at = S.sheetSlot, now();
+                S.profile, S.profileHeld = data, nil;
+            elseif mine == nil then
+                data.at = now();
+                S.profileHeld = data;       -- (shown once the squad list says who is in that slot)
+            end
+        end
+        return;
+    end
+    local key, rest = text:match('^(%a+)|(.*)$');
+    if not key then return; end
+    -- an answer starts at its slot line (or at hdr, from an older server): one that follows another without a
+    -- request in between (the late answer for the mate before, then this mate's) is read too
+    if key == 'slot' then
+        S.profileIncoming = { slot = tonumber(rest) };
         return;
     end
     local data = S.profileIncoming;
+    if key == 'hdr' and (data == nil or data.hdr ~= nil) then
+        data = {};
+        S.profileIncoming = data;
+    end
     if not data then return; end
-    local key, rest = text:match('^(%a+)|(.*)$');
-    if not key then return; end
     if key == 'hdr' then
         local name, job, main, sub, subLevel, role, mode, race, mask =
             rest:match('^(.-)|([^|]*)|(%d+)|([^|]*)|(%d+)|([^|]*)|([^|]*)|([^|]*)|(%d+)$');
@@ -731,7 +1099,10 @@ local function changeMate(mate, kind, value)
     if kind == 'role' or kind == 'mode' then mate[kind] = value; end
     if kind == 'job' then mate.main = value; end
     if kind == 'sub' then mate.sub = (value == 'none') and '-' or value; end
-    S.pendingApply = true;
+    -- (1.27) a server with the Rules line says itself what a Role, Mode or main job change leaves to apply (and that a
+    -- Role changes nothing while a Rule Set runs); every other change is remembered here until that mate is called again
+    if not (S.rs ~= nil and (kind == 'role' or kind == 'mode' or kind == 'job')) then X.pendMate(mate.slot); end
+    if kind == 'job' or kind == 'sub' then X.dropGear(mate.slot); end
     ask(1.5);
 end
 
@@ -744,7 +1115,35 @@ end
 local function applyNow()
     enqueue('/say !squad reapply');
     ask(5);
-    S.pendingApply = false;
+    X.pend = {};
+    X.gearCache = {};
+end
+
+-- (1.27) Apply for ONE mate: "!squad reapply <slot>" when the server said it can (cap|reapply1), so the others stay
+-- out and keep fighting. An older server would re-call everyone on that line, so there the squad-wide Apply is sent
+-- and the button says so. Returns true when only this mate is re-called.
+function X.applyMate(mate)
+    if X.caps and X.caps.reapply1 then
+        enqueue(string.format('/say !squad reapply %d', mate.slot));
+        ask(5);
+        if X.pend then X.pend[mate.slot] = nil; end
+        X.dropGear(mate.slot);
+        return true;
+    end
+    applyNow();
+    return false;
+end
+function X.applyTip(mate)
+    if X.caps and X.caps.reapply1 then
+        return 'Sends only ' .. mate.name .. ' off and calls them again with the new settings (about 4 seconds). The others stay out.';
+    end
+    return 'This server can only call the whole squad again: every mate that is out leaves and comes back.';
+end
+-- the gear lists kept for one mate (or all): asked again after a job change, an Apply, or two minutes
+function X.dropGear(slot)
+    for key in pairs(X.gearCache) do
+        if slot == nil or key:match('^(%d+):') == tostring(slot) then X.gearCache[key] = nil; end
+    end
 end
 
 -- ---------------------------------------------------------------- the second window, through two small files
@@ -930,12 +1329,30 @@ local function px(n)
     if type(n) ~= 'number' or n <= 0 then return n; end
     local us = userScale();
     local size = has('GetFontSize') and imgui.GetFontSize() or 13;
-    if S.scaledNow and type(size) == 'number' then size = size / us; end   -- (inside our window the font is scaled already)
+    -- (inside our window, or while our window's font is pushed, the font is scaled already)
+    if (S.scaledNow or S.fontPushed) and type(size) == 'number' then size = size / us; end
     local scale = (type(size) == 'number' and size > 0) and math.max(1, math.min(3, size / 13)) or 1;
     return math.floor(n * scale * us + 0.5);
 end
 
+-- (1.34) The text of every window of this menu at its Size, the way the Gambits window does it: the game's font pushed
+-- AT the scaled size (ImGui 1.92: PushFont(font, size) lays the letters out for that size), before the window begins and
+-- popped after it ends. Until 1.33 the font was drawn at its own size and stretched by SetWindowFontScale, so at 120 %
+-- the Squads menu's letters were softer than the Gambits window's at the same Size. SetWindowFontScale stays the fallback
+-- for a binding without PushFont. Returns whether a font was pushed; X.popFont(pushed) closes it exactly.
+function X.pushFont()
+    local us = userScale();
+    if us == 1 or S.fontPushed or not (has('PushFont') and has('GetFont') and has('GetFontSize')) then return false; end
+    local ok = pcall(function () imgui.PushFont(imgui.GetFont(), imgui.GetFontSize() * us); end);
+    S.fontPushed = ok;
+    return ok;
+end
+function X.popFont(pushed)
+    if pushed then pcall(imgui.PopFont); S.fontPushed = false; end
+end
+
 local function scaleWindow()
+    if S.fontPushed then S.scaledNow = true; return; end   -- (1.34: the font is the scaled one already)
     if has('SetWindowFontScale') then imgui.SetWindowFontScale(userScale()); S.scaledNow = true; end
 end
 local function G(name) return rawget(_G, name); end
@@ -946,41 +1363,16 @@ end
 
 local function dimText(text) colorText(C.dim, text); end
 
-local function wrapped(text, color)
-    if color and has('PushStyleColor') and G('ImGuiCol_Text') then
-        imgui.PushStyleColor(G('ImGuiCol_Text'), color);
-        imgui.TextWrapped(text);
-        imgui.PopStyleColor(1);
-    else
-        imgui.TextWrapped(text);
-    end
-end
+-- (1.27) every wrapped line and every tooltip goes through xifo_ui: drawn with TextUnformatted, wrapped at about 27
+-- characters' width of the current font. Ashita hands the text of SetTooltip and TextWrapped to ImGui as a printf
+-- FORMAT, and these texts can hold a '%' ("below 30% HP", an item's "Haste+4%"), which then prints garbage or ends the
+-- game. (1.26n drew only the Role and Mode tooltips this way; an item's description went to SetTooltip as it was.)
+local function wrapped(text, color) U.wrapped(imgui, color, text); end
 
-local function tooltip(text)
-    if has('IsItemHovered') and imgui.IsItemHovered() and has('SetTooltip') then imgui.SetTooltip(text); end
-end
+local function tooltip(text) if text ~= nil then U.tooltip(imgui, text, px(350)); end end
 
--- (role clarity) the Role / Mode / note tooltips: wrapped at about 27 characters' width of the current font (~350 px at
--- 13 px), as the Gambits editor's tooltips and Ashita's imgui.ShowHelp do, so they stay next to the mouse instead of
--- running across the screen. Drawn with TextUnformatted: Ashita hands SetTooltip's text to ImGui as a printf format,
--- and these texts contain '%' ("below 30% HP"). Without BeginTooltip / TextUnformatted: SetTooltip with '%' doubled.
-ROLE_INFO.WRAP_EM = 27;
-function ROLE_INFO.tip(text)
-    if not (has('IsItemHovered') and imgui.IsItemHovered()) or text == nil then return; end
-    if has('BeginTooltip') and has('EndTooltip') and has('TextUnformatted') then
-        if imgui.BeginTooltip() ~= false then
-            local size = has('GetFontSize') and imgui.GetFontSize() or nil;
-            local wrap = (type(size) == 'number' and size > 0) and size * ROLE_INFO.WRAP_EM or px(350);
-            local wrapOk = has('PushTextWrapPos') and has('PopTextWrapPos');
-            if wrapOk then imgui.PushTextWrapPos(wrap); end
-            imgui.TextUnformatted(tostring(text));
-            if wrapOk then imgui.PopTextWrapPos(); end
-            imgui.EndTooltip();
-        end
-    elseif has('SetTooltip') then
-        imgui.SetTooltip((tostring(text):gsub('%%', '%%%%')));
-    end
-end
+ROLE_INFO.WRAP_EM = U.TOOLTIP_WRAP_EM;
+function ROLE_INFO.tip(text) if text ~= nil then U.tooltip(imgui, text, px(350)); end end
 
 local function pushColors(list)
     local n = 0;
@@ -991,24 +1383,128 @@ local function pushColors(list)
     return n;
 end
 
-local function pushVars(list)
-    local n = 0;
-    if not has('PushStyleVar') then return 0; end
-    for _, pair in ipairs(list) do
-        local id = G(pair[1]);
-        if id ~= nil then imgui.PushStyleVar(id, pair[2]); n = n + 1; end
-    end
-    return n;
-end
-
--- a button that can look selected (gold) or switched on (green)
+-- a button that can look selected, switched on, be the main action of its view ('go') or wait for the server ('busy':
+-- drawn, never clicked). (1.27) the colours are the theme's; what was pushed is popped also when the button fails.
 local function button(label, id, w, h, look)
     local n = 0;
     if look == 'selected' then n = pushColors({ { 'ImGuiCol_Button', C.sel }, { 'ImGuiCol_ButtonHovered', C.selHi }, { 'ImGuiCol_ButtonActive', C.selHi } });
-    elseif look == 'on' then n = pushColors({ { 'ImGuiCol_Button', C.on }, { 'ImGuiCol_ButtonHovered', C.onHi }, { 'ImGuiCol_ButtonActive', C.onHi } }); end
-    local clicked = imgui.Button(label .. '##' .. id, { px(w or 0), px(h or 0) });
+    elseif look == 'on' then n = pushColors({ { 'ImGuiCol_Button', C.on }, { 'ImGuiCol_ButtonHovered', C.onHi }, { 'ImGuiCol_ButtonActive', C.onHi } });
+    elseif look == 'go' then n = pushColors({ { 'ImGuiCol_Button', C.go }, { 'ImGuiCol_ButtonHovered', C.goHi }, { 'ImGuiCol_ButtonActive', C.goHi }, { 'ImGuiCol_Text', C.goText } });
+    elseif look == 'busy' then n = pushColors({ { 'ImGuiCol_Button', C.busy }, { 'ImGuiCol_ButtonHovered', C.busy }, { 'ImGuiCol_ButtonActive', C.busy } }); end
+    local ok, clicked = pcall(imgui.Button, label .. '##' .. id, { px(w or 0), px(h or 0) });
     if n > 0 then imgui.PopStyleColor(n); end
-    return clicked;
+    if not ok then error(clicked, 0); end
+    return clicked == true and look ~= 'busy';
+end
+
+-- (1.27) the next control stays on this line when `w` pixels (as laid out for the usual font) still fit, else it
+-- starts a new line: nothing is cut off at the window's edge any more (the top row needed 850 px in a 592 px window)
+function X.fit(w, spacing)
+    return U.same_if_fits(imgui, px(w), spacing or 6);
+end
+-- (1.34) the cursor's x in the window (Ashita hands back a number), or nil
+function X.cursorX()
+    if not has('GetCursorPosX') then return nil; end
+    local ok, x = pcall(imgui.GetCursorPosX);
+    return (ok and type(x) == 'number') and x or nil;
+end
+-- (1.34) the next control on this line when `w` PIXELS (measured: text widths, px() sizes) still fit, else on a new line
+-- starting at `indentX` (the column the group belongs to), so a wrapped group lines up under its row, not at the edge
+function X.fitAt(w, indentX, spacing)
+    local stayed = U.same_if_fits(imgui, w, spacing or 6);
+    if not stayed and indentX and has('SetCursorPosX') then pcall(imgui.SetCursorPosX, indentX); end
+    return stayed;
+end
+-- (1.34) start a new line at `x` (after the previous line's last control)
+function X.lineAt(x)
+    if x and has('SetCursorPosX') then pcall(imgui.SetCursorPosX, x); end
+end
+-- (1.28) a tab: the same in every window of the menu. The main ones (Squad / Dualbox / Auto, Stats / Gear) are
+-- U.SIZE.tab high; `compact` is the smaller kind for a choice inside a view (Equipment / Look). The selected one has
+-- the theme's tab colour. As wide as its text plus the tab padding.
+function X.tab(label, id, selected, compact)
+    local h = px(compact and U.SIZE.tabCompact or U.SIZE.tab);
+    local colors = selected and { { 'ImGuiCol_Button', C.sel }, { 'ImGuiCol_ButtonHovered', C.selHi }, { 'ImGuiCol_ButtonActive', C.selHi } } or nil;
+    local token = U.push(imgui, colors, { { 'ImGuiStyleVar_FramePadding', { px(compact and U.SIZE.tabPadCompact or U.SIZE.tabPad), X.sv(3) } } });
+    local ok, clicked = pcall(imgui.Button, label .. '##' .. id, { 0, h });
+    U.pop(imgui, token);
+    if not ok then error(clicked, 0); end
+    return clicked == true;
+end
+-- (1.30) a second column in a card's Settings: the next group starts at X.COL.second when w pixels (at the usual size)
+-- fit there, else on a new line. Returns true when it stayed on the row.
+function X.column2(w)
+    imgui.SameLine(px(X.COL.second), 0);
+    local left = U.avail(imgui);
+    if has('NewLine') and left ~= nil and left < px(w) then imgui.NewLine(); return false; end
+    return true;
+end
+-- a gold caption in front of a row of controls, the controls starting at the same place in every row
+function X.rowLabel(text)
+    colorText(C.gold, text);
+    imgui.SameLine(px(U.SIZE.labelCol), 0);
+end
+-- a little more room than between two rows: the next group of rows starts
+function X.group()
+    if has('Dummy') then imgui.Dummy({ 0, X.sv(U.SIZE.group - 4) }); end
+end
+-- the next control at the right edge of the row when `w` pixels (at the usual size) fit there, else on a new line
+function X.right(w)
+    local stayed = U.same_if_fits(imgui, px(w), 6);
+    if stayed and has('GetCursorPosX') and has('SetCursorPosX') then
+        local left = U.avail(imgui);
+        local ok, x = pcall(imgui.GetCursorPosX);
+        if left ~= nil and ok and type(x) == 'number' and left > px(w) then pcall(imgui.SetCursorPosX, x + left - px(w)); end
+    end
+    return stayed;
+end
+function X.textW(text)
+    if has('CalcTextSize') then
+        local ok, a = pcall(imgui.CalcTextSize, tostring(text or ''));
+        if ok and type(a) == 'table' then return tonumber(a[1] or a.x) or 0; end
+        if ok and type(a) == 'number' then return a; end
+    end
+    return #tostring(text or '') * 7;
+end
+-- style values grow with the menu's Size, like the Gambits window's
+function X.sv(n)
+    return math.max(1, math.floor(n * userScale() + 0.5));
+end
+-- the shared metrics for the theme and Size in use: the list is made once, not in every frame for every window
+function X.vars()
+    local key = tostring(X.themeName) .. ':' .. tostring(userScale());
+    if X.varsKey ~= key then X.varsKey, X.varsList = key, U.window_vars(X.menu.palette, X.sv); end
+    return X.varsList;
+end
+-- a window's colours: the theme's, then the ones given (kept per theme and name; extra is used when it is first made)
+function X.windowColors(name, extra)
+    local key = tostring(X.themeName) .. ':' .. name;
+    X.colorLists = X.colorLists or {};
+    if X.colorLists[key] == nil then
+        local list = {};
+        for _, pair in ipairs(X.menu.window) do list[#list + 1] = pair; end
+        for _, pair in ipairs(extra()) do list[#list + 1] = pair; end
+        X.colorLists[key] = list;
+    end
+    return X.colorLists[key];
+end
+-- a card whose height is what its content needed in the last frame (`guess`, in pixels, for the first one): rows can
+-- wrap, a long Rule Set name fits, and nothing is clipped. No scroll bar of its own.
+function X.card(id, guess)
+    X.cardH = X.cardH or {};   -- (1.28: before the line below; an ImGui without BeginChild made X.cardEnd fail and the menu close)
+    if not has('BeginChild') then return true, false; end
+    local flags = G('ImGuiChildFlags_Borders') or G('ImGuiChildFlags_Border') or true;
+    local wflags = (G('ImGuiWindowFlags_NoScrollbar') or 0) + (G('ImGuiWindowFlags_NoScrollWithMouse') or 0);
+    return imgui.BeginChild(id, { 0, X.cardH[id] or guess }, flags, wflags), true;
+end
+-- `open` is what BeginChild said: false for a card that is scrolled out of view. Nothing was drawn in it then, so its
+-- height is not measured: it keeps the one it had (a card of 16 pixels would make the list jump).
+function X.cardEnd(id, began, open)
+    if open and has('GetCursorPosY') then
+        local ok, y = pcall(imgui.GetCursorPosY);
+        if ok and type(y) == 'number' and y > 0 then X.cardH[id] = math.floor(y + X.sv(8) + 0.5); end
+    end
+    if began and has('EndChild') then imgui.EndChild(); end
 end
 
 -- a drop-down list; falls back to a row of buttons when this ImGui has no combo boxes
@@ -1052,11 +1548,19 @@ end
 local function beginChild(id, w, h, border, noScroll)
     if not has('BeginChild') then return true, false; end
     local flags = border and (G('ImGuiChildFlags_Borders') or G('ImGuiChildFlags_Border') or true) or 0;
+    -- (1.32) A child without a border only holds things (the list the cards scroll in): it has no background of its
+    -- own. It had the panel colour like a card, so the cards stood on a second see-through layer: the list was darker
+    -- than the rows above it, most of all at a low menu opacity. ImGui paints a child's background when it begins.
+    local clear = (not border) and U.push(imgui, { { 'ImGuiCol_ChildBg', { 0, 0, 0, 0 } } }) or nil;
+    local open;
     if noScroll then
         local wflags = (G('ImGuiWindowFlags_NoScrollbar') or 0) + (G('ImGuiWindowFlags_NoScrollWithMouse') or 0);
-        return imgui.BeginChild(id, { px(w), px(h) }, flags, wflags), true;
+        open = imgui.BeginChild(id, { px(w), px(h) }, flags, wflags);
+    else
+        open = imgui.BeginChild(id, { px(w), px(h) }, flags);
     end
-    return imgui.BeginChild(id, { px(w), px(h) }, flags), true;
+    if clear then U.pop(imgui, clear); end
+    return open, true;
 end
 
 local function endChild(began) if began and has('EndChild') then imgui.EndChild(); end end
@@ -1073,18 +1577,19 @@ end
 local function campRow()
     local camp = S.camp;
     if camp == nil then return; end
-    gap(2);
-    colorText(C.gold, 'Camp'); imgui.SameLine(0, 10);
+    X.rowLabel('Camp');
     if button(camp.on and 'Move camp here' or 'Set camp here', 'campset', 124, 0, camp.on and 'on' or nil) then
-        campCommand('camp'); camp.on = true;
+        X.campSetOrMove(camp);
     end
-    tooltip('Your squad holds this spot and fights whatever comes within 20 yalms of it');
+    tooltip(camp.on and X.caps and X.caps.campmove and 'The camp moves to where you stand; the puller, the picks and Start / Pause stay'
+        or 'Your squad holds this spot and fights whatever comes within 20 yalms of it');
     if camp.on then
         imgui.SameLine(0, 6);
         if button('Camp off', 'campoff', 84, 0) then campCommand('camp off'); camp.on = false; end
         tooltip('They follow you again');
     end
-    imgui.SameLine(0, 14);
+    local contentX = px(U.SIZE.labelCol);   -- (1.34) where this row's controls start: a wrapped group goes back to here
+    X.fitAt(X.textW('Puller') + X.sv(8) + px(110), contentX, 14);
     dimText('Puller'); imgui.SameLine(0, 8);
     local names, current = { 'You' }, 'You';
     local tips = { You = 'You pull: bring monsters back to camp and the squad joins in' };
@@ -1116,7 +1621,7 @@ local function campRow()
     end
     local someonePulls = camp.puller ~= 0 or camp.botPuller ~= nil;
     if camp.on and someonePulls then
-        imgui.SameLine(0, 6);
+        X.fitAt(px(72), contentX);
         -- (1.22) a new camp waits for Start before the first pull (squad.lua, from Jon Tanta's Squad Update)
         local fresh = camp.paused and (camp.pulls or 0) == 0;
         if button(camp.paused and (fresh and 'Start' or 'Resume') or 'Pause', 'camppause', 72, 0, camp.paused and 'selected' or nil) then
@@ -1125,15 +1630,22 @@ local function campRow()
         tooltip(camp.paused and (fresh and 'The puller starts pulling' or 'The puller goes back to pulling') or 'No new pulls (the squad still holds camp)');
     end
     if camp.on then
-        imgui.SameLine(0, 12);
-        dimText(camp.pulls == 1 and '1 pull' or (tostring(camp.pulls or 0) .. ' pulls'));
+        -- (1.33) what the camp is doing now (campst), before the pull count; (1.34) measured, so it is never cut at the
+        -- window's edge ("Paused, 0" was the end of "Paused, 0 pulls")
+        local stateText = camp.state and X.CAMP_STATE[camp.state] or nil;
+        local line = (stateText and (stateText .. ', ') or '') .. (camp.pulls == 1 and '1 pull' or (tostring(camp.pulls or 0) .. ' pulls'));
+        X.fitAt(X.textW(line), contentX, 12);
+        dimText(line);
     end
+    X.campSettings(camp, someonePulls, contentX);
     -- what the mate pulls: any number of kinds of monster around the camp, each one toggles
     if camp.on and someonePulls and camp.kinds then
+        X.lineAt(contentX);
         dimText('Pull'); imgui.SameLine(0, 8);
         local wants = camp.wants or {};
         local any = true;
         for _ in pairs(wants) do any = false; end
+        local anyX = X.cursorX() or contentX;   -- (1.34) the kinds that do not fit this line start again under Anything
         if button('Anything', 'campany', 82, 0, any and 'selected' or nil) then
             campCommand('camp want any');
             camp.wants, camp.want = {}, nil;
@@ -1144,7 +1656,7 @@ local function campRow()
                 local key = k.name:lower():gsub('_', ' ');
                 -- (1.24) the count is how many are up right now; none up = all defeated and waiting to come back
                 local label = string.format('%s lv%d%s %s', (k.name:gsub('_', ' ')), k.lo, k.hi ~= k.lo and ('-' .. k.hi) or '', k.count > 0 and ('x' .. k.count) or '(none up)');
-                imgui.SameLine(0, 6);
+                X.fitAt(X.textW(label) + X.sv(12), anyX);
                 if button(label, 'campkind' .. k.name, 0, 0, wants[key] and 'selected' or nil) then
                     campCommand('camp want ' .. k.name);
                     wants[key] = (not wants[key]) and true or nil;
@@ -1155,6 +1667,133 @@ local function campRow()
             end
         end
     end
+end
+
+-- ---------------------------------------------------------------- (1.33) camp state, pull settings, the compact camp bar
+-- Community feedback F5-F7 (2026-11-25). The server's campst line (squad.lua SQUAD_CAMPX) carries the camp's state and the two
+-- pull settings, in each panel answer and by itself whenever the camp changes (a command, a click, the server's own pulls),
+-- so the Camp row and the compact bar show what is true without a refresh. An older server sends no campst: no state word,
+-- no pull settings, and the compact bar's toggle is not offered.
+X.CAMP_STATE = { idle = 'Ready', pulling = 'Pulling', fighting = 'Fighting', paused = 'Paused', off = 'No camp' };
+X.PULL_AT = { '0', '25', '40', '50', '60', '75' };
+X.PULL_AT_LABEL = { ['0'] = 'Off', ['25'] = '25%', ['40'] = '40%', ['50'] = '50%', ['60'] = '60%', ['75'] = '75%' };
+X.PULL_AT_HELP = {
+    ['0'] = 'One monster at a time: the next pull starts after the fight (the default)',
+    ['25'] = 'The puller fetches the next monster once this one is at 25% HP, if no link or pet is on the party and the puller is not the one it hits',
+};
+for _, k in ipairs({ '40', '50', '60', '75' }) do X.PULL_AT_HELP[k] = 'The same at ' .. k .. '% HP: earlier means more overlap'; end
+X.HEALER_MP = { '0', '20', '30', '40', '50', '60', '80' };
+X.HEALER_MP_LABEL = { ['0'] = 'Default', ['20'] = '20%', ['30'] = '30%', ['40'] = '40%', ['50'] = '50%', ['60'] = '60%', ['80'] = '80%' };
+X.HEALER_MP_HELP = {
+    ['0'] = 'Every mate with MP needs 30% MP before a pull (the default)',
+};
+for _, k in ipairs({ '20', '30', '40', '50', '60', '80' }) do
+    X.HEALER_MP_HELP[k] = 'The healers (mates with the Role Healer, else the White Mages) need ' .. k .. '% MP; the other mates 30%. No healer out: no change';
+end
+
+function X.campSt(st)
+    local function apply(camp)
+        camp.on, camp.paused, camp.pulls, camp.state = st.on, st.paused, st.pulls, st.state;
+        camp.pullAt, camp.healerMp = st.pullAt, st.healerMp;
+    end
+    if S.incomingCamp then apply(S.incomingCamp); return; end
+    if S.camp then
+        apply(S.camp);
+    elseif st.on then
+        S.camp = { on = true, puller = 0 };
+        apply(S.camp);
+        ask(1);   -- (the puller and the kinds come with a full answer)
+    end
+end
+
+-- Set camp here / Move camp here. A server that can move a camp (cap|campmove) keeps the puller, the picks and Start / Pause;
+-- an older one sets a new camp, as before.
+function X.campSetOrMove(camp)
+    if camp.on and X.caps and X.caps.campmove then campCommand('camp move'); else campCommand('camp'); end
+    camp.on = true;
+end
+
+function X.campSettings(camp, someonePulls, contentX)
+    if not camp.on or camp.pullAt == nil then return; end   -- (an older server: no campst, nothing to show)
+    contentX = contentX or px(U.SIZE.labelCol);
+    X.lineAt(contentX);   -- (1.34) under the Camp row's controls, not at the window's edge
+    local first = true;
+    if someonePulls then
+        -- (1.34) each label with its list is one group: it moves to the next line whole, back under the first one
+        local at = tostring(camp.pullAt or 0);
+        if X.PULL_AT_LABEL[at] == nil then X.PULL_AT_LABEL[at] = at .. '%'; end
+        dimText('Next pull at'); imgui.SameLine(0, 6);
+        local pick = combo('camppullat', at, X.PULL_AT, 70, X.PULL_AT_HELP, nil, X.PULL_AT_LABEL);
+        if pick then campCommand('camp pullat ' .. (pick == '0' and 'off' or pick)); camp.pullAt = tonumber(pick); end
+        tooltip('Enemy HP at which the puller fetches the next monster while the squad finishes this one');
+        local mp = tostring(camp.healerMp or 0);
+        if X.HEALER_MP_LABEL[mp] == nil then X.HEALER_MP_LABEL[mp] = mp .. '%'; end
+        X.fitAt(X.textW('Healer MP') + X.sv(6) + px(80), contentX, 12);
+        dimText('Healer MP'); imgui.SameLine(0, 6);
+        local pickMp = combo('camphealermp', mp, X.HEALER_MP, 80, X.HEALER_MP_HELP, nil, X.HEALER_MP_LABEL);
+        if pickMp then campCommand('camp healermp ' .. (pickMp == '0' and 'default' or pickMp)); camp.healerMp = tonumber(pickMp); end
+        tooltip('MP the healers need before the next pull');
+        first = false;
+    end
+    local compact = S.cfg.camp_compact == 'true';
+    local barLabel = compact and 'Hide camp bar' or 'Camp bar';
+    if not first then X.fitAt(X.textW(barLabel) + X.sv(12), contentX, 12); end
+    if button(barLabel, 'campbar', 0, 0, compact and 'selected' or nil) then
+        setCfg('camp_compact', compact and 'false' or 'true');
+    end
+    tooltip('A small window with the camp\'s state and its Start / Pause, Camp on / off and Move buttons, open while you play');
+end
+
+-- the compact camp bar: its own small window, shown while it is switched on and the server said what the camp is doing
+function X.campBar()
+    if S.cfg.camp_compact ~= 'true' or not X.inWorld() then return; end
+    local camp = S.camp;
+    if camp == nil or camp.pullAt == nil then return; end
+    -- (the server tells the menu about changes for 30 minutes after the last panel answer: ask once in a while so the bar
+    --  keeps following while the menu itself stays closed)
+    if not S.open[1] and now() - (S.lastAsk or 0) > 600 then ask(0); end
+    local flags = 0;
+    for _, name in ipairs({ 'ImGuiWindowFlags_NoResize', 'ImGuiWindowFlags_NoScrollbar', 'ImGuiWindowFlags_NoCollapse',
+                            'ImGuiWindowFlags_AlwaysAutoResize', 'ImGuiWindowFlags_NoFocusOnAppearing' }) do
+        flags = flags + (G(name) or 0);
+    end
+    if has('SetNextWindowPos') then imgui.SetNextWindowPos({ 240, 240 }, G('ImGuiCond_FirstUseEver') or 4); end
+    local token = U.push(imgui, X.menu.window, X.vars());   -- (the menu's theme and metrics; popped again below)
+    local open = { true };
+    local fontPushed = X.pushFont();   -- (1.34) the text at this Size, laid out for it (see X.pushFont)
+    local shown = imgui.Begin('Camp###sm_campbar', open, flags);
+    local ok, err = pcall(function ()
+        if not shown then return; end
+        scaleWindow();
+        local state = camp.on and (camp.paused and 'paused' or camp.state or 'idle') or 'off';
+        colorText(state == 'fighting' and C.warn or (state == 'pulling' and C.good or C.dim), X.CAMP_STATE[state] or state);
+        imgui.SameLine(0, 10);
+        if camp.on then
+            local someonePulls = camp.puller ~= 0 or camp.botPuller ~= nil;
+            if someonePulls then
+                local fresh = camp.paused and (camp.pulls or 0) == 0;
+                if button(camp.paused and (fresh and 'Start' or 'Resume') or 'Pause', 'barpause', 66, 0, camp.paused and 'selected' or nil) then
+                    campCommand(camp.paused and (fresh and 'camp start' or 'camp resume') or 'camp pause'); camp.paused = not camp.paused;
+                end
+                tooltip(camp.paused and 'The puller starts pulling' or 'No new pulls (the squad still holds camp)');
+                imgui.SameLine(0, 4);
+            end
+            if button('Move here', 'barmove', 76, 0) then X.campSetOrMove(camp); end
+            tooltip('The camp moves to where you stand');
+            imgui.SameLine(0, 4);
+            if button('Camp off', 'baroff', 70, 0) then campCommand('camp off'); camp.on = false; end
+            tooltip('They follow you again');
+        else
+            if button('Set camp here', 'barset', 104, 0) then campCommand('camp'); camp.on = true; end
+            tooltip('Your squad holds this spot and fights whatever comes within 20 yalms of it');
+        end
+    end);
+    S.scaledNow = false;
+    imgui.End();
+    X.popFont(fontPushed);
+    U.pop(imgui, token);
+    if not open[1] then setCfg('camp_compact', 'false'); end
+    if not ok then error(err, 0); end
 end
 
 -- ---------------------------------------------------------------- the Style row (range, weapon skills) and body size
@@ -1187,18 +1826,19 @@ local function setWs(mate, opt, when, which)
     opt.ws = which ~= 'best' and which or nil;
 end
 
+-- (1.30) Range in the first column, the two weapon skill controls together in the second (under Role and Mode)
 local function styleRow(mate, opt)
-    dimText('Range'); imgui.SameLine(0, 8);
-    local range = combo('range' .. mate.slot, RANGES[(opt.range or 0) + 1], RANGES, 90, RANGE_HELP);
+    dimText('Range'); imgui.SameLine(px(X.COL.setLabel), 0);
+    local range = combo('range' .. mate.slot, RANGES[(opt.range or 0) + 1], RANGES, 120, RANGE_HELP);
     if range then
         changeMate(mate, 'range', range);
         for i, r in ipairs(RANGES) do if r == range then opt.range = i - 1; end end
     end
-    imgui.SameLine(0, 18);
-    dimText('WS at'); imgui.SameLine(0, 8);
+    local stayed = X.column2(290);
+    dimText('WS at'); imgui.SameLine(px(stayed and X.COL.secondCtl or X.COL.setLabel), 0);
     local when = combo('wswhen' .. mate.slot, (opt.tp or 0) > 0 and tostring(opt.tp) or 'chain', WS_WHEN, 80, WS_WHEN_HELP);
     if when then setWs(mate, opt, when, nil); end
-    imgui.SameLine(0, 10);
+    imgui.SameLine(0, 6);
     local items, current = { 'best' }, 'best';
     for _, name in ipairs(opt.list or {}) do
         items[#items + 1] = name;
@@ -1211,18 +1851,44 @@ local function styleRow(mate, opt)
         or 'Which weapon skill it uses. Call this mate to see the ones it can use now.');
 end
 
+-- (1.35) Position: where the mate stands in a fight (!squad position <slot> normal | behind | ta). It takes effect at once,
+-- also for a mate that is out, so it leaves no "Apply" behind. Offered when the server says cap|...,matepos.
+X.POSITIONS = { 'normal', 'behind', 'ta' };
+X.POSITION_LABEL = { normal = 'Normal', behind = 'Behind enemy', ta = 'TA partner' };
+X.POSITION_HELP = {
+    normal = 'Stands where its job usually stands',
+    behind = 'Stands on the monster\'s back side: melee next to it, casters and ranged at their distance. Several mates '
+        .. 'with this share the space behind it, each on its own spot. Out of breath and cone attacks, but some monsters '
+        .. 'hit what is behind them (tails).',
+    ta = 'Stands right behind the monster, turned towards you (up to 60 degrees to either side): when you are a Thief '
+        .. 'anywhere behind the monster, this mate is in line for your Trick Attack (and takes the hate it moves). '
+        .. 'One mate takes this spot; others set to it stand behind.',
+};
+function X.positionRow(mate, opt)
+    dimText('Position'); imgui.SameLine(px(X.COL.setLabel), 0);
+    local current = X.POSITIONS[(opt.pos or 0) + 1] or 'normal';
+    local pick = combo('position' .. mate.slot, current, X.POSITIONS, 120, X.POSITION_HELP, nil, X.POSITION_LABEL);
+    if pick then
+        enqueue(string.format('/say !squad position %d %s', mate.slot, pick));
+        for i, p in ipairs(X.POSITIONS) do if p == pick then opt.pos = i - 1; end end
+        ask(1.5);
+    end
+end
+
 -- body size: picked once, like at character creation
 local function sizeRow(mate, opt)
-    dimText('Size'); imgui.SameLine(0, 8);
+    dimText('Size'); imgui.SameLine(px(X.COL.setLabel), 0);
     S.sizePick = S.sizePick or {};
-    local pick = combo('size' .. mate.slot, S.sizePick[mate.slot] or 'medium', SIZES, 100);
+    local pick = combo('size' .. mate.slot, S.sizePick[mate.slot] or 'medium', SIZES, 120);
     if pick then S.sizePick[mate.slot] = pick; end
-    imgui.SameLine(0, 10);
-    if button('Set for good', 'setsize' .. mate.slot, 100, 0) then
+    imgui.SameLine(0, 8);
+    -- (1.30) "Save size": !squad size stores it on the server (SQUAD_SIZE), and every later call uses it. Once: the
+    -- server refuses a second change, and this row is only there while no size is stored.
+    if button('Save size', 'setsize' .. mate.slot, 84, 0) then
         changeMate(mate, 'size', S.sizePick[mate.slot] or 'medium');
         opt.size = ({ small = 1, medium = 2, large = 3 })[S.sizePick[mate.slot] or 'medium'];
     end
-    tooltip('His body size. It can be set only once, so pick carefully.');
+    tooltip('Saves this body size for this mate: it has it at every call from now on. It can be saved only ONCE (the server keeps it for good), so pick carefully.');
 end
 
 -- ---------------------------------------------------------------- Advanced (follow distance, camp rest, call order, engage delay)
@@ -1325,28 +1991,435 @@ local function advancedPanel()
     gap(2);
 end
 
+-- (1.27) is the Gambits editor loaded for this character? It leaves a small file while it is (Gambits.lua); looked at
+-- every two seconds. Without it the Gambits button is not drawn, so no unknown command is ever sent to the game.
+function X.gambitsLoaded()
+    local t = now();
+    if X.gsqAt == nil or t - X.gsqAt > 2 then
+        X.gsqAt = t;
+        -- the character the theme follower holds (it keeps the character through a moment without one, as while a
+        -- zone loads); a mark that another game process left behind (a crash) does not count
+        local dir = U.pref_dir(installPath(), (X.follow and X.follow.id) or U.current_identity());
+        X.gsqOn = dir ~= nil and U.presence_valid(dir .. 'gambits.loaded');
+    end
+    return X.gsqOn == true;
+end
+function X.openGambits(slot)
+    local chat = chatManager();
+    -- (1.30) without a slot (the launcher's Gambits half): the editor opens on the mate it had last
+    if chat then pcall(function() chat:QueueCommand(1, slot and string.format('/gambits show %d', slot) or '/gambits show'); end); end
+    X.gsqShownGuess = { value = true, at = now() };   -- (lit at once; the editor's own word follows in a frame or two)
+end
+function X.closeGambits()
+    local chat = chatManager();
+    if chat then pcall(function() chat:QueueCommand(1, '/gambits hide'); end); end
+    X.gsqShownGuess = { value = false, at = now() };
+end
+
+-- (1.34) Is the Gambits window shown right now? Gambits 0.3.9 keeps a small file (gambits.open, beside gambits.loaded) while
+-- its window is shown and says "/xifogambits" whenever that changes, however it changed (its X, /gambits, a card's
+-- button, this launcher). The file is read again at once on that line, and once a second otherwise. For a second after a
+-- click the click's own result is shown (the command is still on its way). An older Gambits has no such file: the half
+-- then never shows lit and works as an open button, as before.
+X.GAMBITS_SIGNAL = '/xifogambits';
+function X.gambitsShown(force)
+    local t = now();
+    if force or X.gsqOpenAt == nil or t - X.gsqOpenAt > 1 then
+        X.gsqOpenAt = t;
+        local dir = U.pref_dir(installPath(), (X.follow and X.follow.id) or U.current_identity());
+        X.gsqOpen = dir ~= nil and U.presence_valid(dir .. 'gambits.open');   -- (false without the file)
+    end
+    local guess = X.gsqShownGuess;
+    if guess and t - guess.at < 1 then return guess.value; end
+    return X.gsqOpen == true;
+end
+
+-- (1.34) Options > "Show Gambits shortcut" (setting launcher_gambits; on unless it was turned off)
+function X.gambitsShortcut()
+    return S.cfg.launcher_gambits ~= 'false';
+end
+
+-- (1.32) "/xifotheme": the character's theme was just chosen, look at it now. A line between the two add-ons, never
+-- typed and never sent to the game: each of them answers it and stops it, so it is harmless when the other is not
+-- loaded. It carries no theme: the saved choice stays the one source.
+X.THEME_SIGNAL = '/xifotheme';
+function X.themeSignal()
+    local chat = chatManager();
+    if chat then pcall(function() chat:QueueCommand(1, X.THEME_SIGNAL); end); end
+end
+
+-- (1.27) Theme, Size and Opacity, behind the Options button of the header (they were chat commands only)
+function X.pickTheme(name)
+    if not U.valid(name) then return false; end
+    -- the character's shared choice (Gambits follows it); at the title screen there is no character: this menu's own setting
+    local shared = X.follow and X.follow:pick(name, mkdir);
+    if not shared then setCfg('theme', name); end
+    X.applyTheme(name);
+    -- (1.32) tell the other add-on now: it reads the character's choice once, at its next frame, instead of at its
+    -- next look (up to a second later, five when its window is closed)
+    if shared then X.themeSignal(); end
+    return true;
+end
+-- (the value as the lists show it; opacityOf itself stands further down, with the windows)
+function X.opacityText(key)
+    return tostring(math.floor(math.max(10, math.min(100, tonumber(S.cfg[key] or '100') or 100)) + 0.5));
+end
+function X.optionsRow()
+    dimText('Theme'); imgui.SameLine(0, 8);
+    local theme = combo('smtheme', X.themeName, U.THEME_ORDER, 110, nil, nil, U.THEME_NAMES);
+    if theme then X.pickTheme(theme); end
+    tooltip('The colours of the Squads menu, the Profile and Spells windows and the Gambits editor, for this character.');
+    X.fit(170, 16);
+    dimText('Size'); imgui.SameLine(0, 8);
+    local pct = math.floor(userScale() * 100 + 0.5);
+    if button('-', 'smsizedown', 24, 0) and pct > 75 then setCfg('scale', math.max(0.75, (pct - 10) / 100)); end
+    tooltip('Smaller (75-300 %)');
+    imgui.SameLine(0, 4);
+    if button(pct .. '%', 'smsizereset', 56, 0) then setCfg('scale', 1); end
+    tooltip('Back to 100 %');
+    imgui.SameLine(0, 4);
+    if button('+', 'smsizeup', 24, 0) and pct < 300 then setCfg('scale', math.min(3, (pct + 10) / 100)); end
+    tooltip('Larger (75-300 %)');
+    X.fit(330, 16);
+    dimText('Opacity'); imgui.SameLine(0, 8);
+    local steps = { '100', '90', '75', '50', '25', '10' };
+    dimText('button'); imgui.SameLine(0, 6);
+    local ob = combo('smopbutton', X.opacityText('button_opacity'), steps, 64);
+    if ob then setCfg('button_opacity', ob); end
+    tooltip('How see-through the Squads button is (solid under the mouse)');
+    imgui.SameLine(0, 10);
+    dimText('menu'); imgui.SameLine(0, 6);
+    local om = combo('smopmenu', X.opacityText('menu_opacity'), steps, 64);
+    if om then setCfg('menu_opacity', om); end
+    tooltip('How see-through the menu\'s background is');
+    -- (1.34) the launcher's Gambits half: on by default; off leaves a Squads-only button at the same place
+    X.fit(190, 16);
+    local shortcut = X.gambitsShortcut();
+    if has('Checkbox') then
+        local box = { shortcut };
+        if imgui.Checkbox('Show Gambits shortcut##smgsqshortcut', box) and box[1] ~= shortcut then setCfg('launcher_gambits', box[1] and 'true' or 'false'); end
+    elseif button((shortcut and '[x] ' or '[ ] ') .. 'Show Gambits shortcut', 'smgsqshortcut', 0, 0, shortcut and 'selected' or nil) then
+        setCfg('launcher_gambits', shortcut and 'false' or 'true');
+    end
+    tooltip('The Gambits half of the Squads | Gambits launcher. Off: a Squads button only, at the same place. /gambits and the Gambits buttons on the mates stay.');
+    if has('Separator') then imgui.Separator(); end
+end
+
+-- (1.28) One mate's card. What is needed every day is always there, in the same place on every card:
+--   row 1  name | jobs and levels | out / away | Call or Dismiss, the call timer next to it (muted), Apply when needed
+--   row 2  Rules: what the mate runs, as the server reports it (only from a server that does)
+--   row 3  Actions | Gambits | Gear | Profile | Food | Settings, then what the settings are, in a few muted words
+-- Role, Mode, Range, the weapon skill choices and the jobs are behind Settings: they are changed rarely. Nothing
+-- about them changed but the place. The card is as high as its content was in the last frame (X.card / X.cardEnd).
+X.COL = { jobs = 110, status = 236, action = 322, label = 52, setLabel = 64, second = 200, secondCtl = 250 };   -- (1.35) setLabel: the Settings and Jobs rows' first column, wide enough for "Position"
+-- (1.29) Calling. A mate is "being called" from the click on Call (or Call all, or an Apply that sends it off and
+-- calls it again) until the server's squad list says it is out. The server has no state in between (its list says
+-- out or not), so there is no "on its way" to show: exactly one word stands on the card, Away, Calling... or Out.
+-- It ends without the mate when 12 seconds pass, or at once when the list comes back with a call timer for that mate
+-- (the server refused the call: it says why in chat).
+function X.markCalling(slot, delay)
+    X.callAt = X.callAt or {};
+    X.callAt[slot] = now() + (delay or 0);
+end
+function X.calling(mate, wait)
+    if mate == nil or mate.out then return false; end
+    local slot = mate.slot;
+    -- sent for by this menu's button (X.callAt) or by any "!squad call" / "!squad reapply" line that passed (rsTouch)
+    local at = math.max(X.recalledAt(slot), (X.callAt and X.callAt[slot]) or -1000);
+    if now() - at >= 12 then return false; end
+    local verb = X.recallVerb and X.recallVerb[slot];
+    if verb ~= 'reapply' and (wait or 0) > 0 and now() - at > 1 then return false; end   -- (the server answered with a call timer: refused)
+    return true;
+end
+-- where Call / Dismiss stand on every card: after the longest status word, whatever the font
+function X.actionX()
+    return math.max(px(X.COL.action), px(X.COL.status) + X.textW('Calling...') + X.sv(14));
+end
+
+function X.mateCard(mate)
+    local slot = mate.slot;
+    local opt = S.opts and S.opts[slot];
+    local open = S.more[slot] == true;
+    local jobsOpen = S.jobsOpen ~= nil and S.jobsOpen[slot] == true;
+    local waitSecs = S.showAdvanced and S.adv and S.adv.delay[slot];
+    local rs = S.rs and S.rs[slot];   -- (1.26n) the Rules line: only from a server that reports it
+    -- the first frame's height; after that the card is as high as its content was
+    local height = 62 + (rs and 23 or 0) + 20;
+    if jobsOpen then height = height + 4 + 23; end
+    if open then height = height + 4 + 23 + (opt and 23 or 0) + ((opt and opt.size == 0) and 23 or 0); end
+    if waitSecs then height = height + 25; end
+    local cardId = '##sm_mate' .. slot;
+    local cardOpen, cardBegan = X.card(cardId, px(height));
+    if cardOpen then
+        local wait = S.readyAt and S.readyAt[slot] and (S.readyAt[slot] - os.time()) or 0;
+        local calling = X.calling(mate, wait);
+        -- ---- row 1
+        local name = X.clip and X.clip(mate.name, px(X.COL.jobs - 8)) or mate.name;
+        colorText(C.gold, name);
+        if name ~= mate.name then tooltip(mate.name); end
+        imgui.SameLine(px(X.COL.jobs), 0);
+        local jobs = string.format('%s %d', mate.main, mate.mainLevel);
+        if mate.sub ~= '-' then jobs = jobs .. string.format(' / %s %d', mate.sub, mate.subLevel); end
+        colorText(C.text, jobs);
+        imgui.SameLine(px(X.COL.status), 0);
+        -- (1.29) one word: Out (the server's list says so), Calling... (sent for, not there yet), Away
+        if mate.out then
+            colorText(C.good, 'Out');
+        elseif calling then
+            colorText(C.warn, 'Calling...');
+            tooltip('This mate was sent for and is not here yet. The word changes to Out when the server says it has come.');
+        else
+            colorText(C.dim, 'Away');
+        end
+        -- Call and Dismiss in the same place and of the same width, so the row does not move while a mate comes
+        imgui.SameLine(X.actionX(), 0);
+        if mate.out then
+            -- (1.13) out: send just this one off, and how long before a dismiss and call works straight away
+            if button('Dismiss', 'dismiss' .. slot, 70, 0) then
+                enqueue('/say !squad dismiss ' .. slot); ask(1.5);
+                if X.callAt then X.callAt[slot] = nil; end
+            end
+            tooltip('Sends only this mate off; the others stay');
+            if wait > 0 then
+                imgui.SameLine(0, 8);
+                colorText(C.faint, string.format('recall in %d:%02d', math.floor(wait / 60), wait % 60));
+                tooltip('If you dismiss this mate now, the call timer lets you call them again after this');
+            end
+        elseif calling then
+            button('Call', 'call' .. slot, 70, 0, 'busy');   -- (there, greyed and not clickable: it was pressed)
+            tooltip('Already called: waiting for the server to say that this mate is out.');
+        elseif wait > 0 then
+            colorText(C.faint, string.format('ready in %d:%02d', math.floor(wait / 60), wait % 60));
+            tooltip('The call timer: this mate can be called again then (the launcher\'s Rates tab sets how long)');
+        else
+            if button('Call', 'call' .. slot, 70, 0) then
+                enqueue('/say !squad call ' .. slot); ask(3);
+                X.markCalling(slot);
+            end
+        end
+        -- (1.27) Apply for this mate alone
+        if X.pending(mate) then
+            X.fit(64, 10);
+            if button('Apply', 'applyone' .. slot, 64, 0, 'go') then X.applyMate(mate); end
+            tooltip(X.applyTip(mate));
+        end
+
+        -- ---- row 2: Rules (1.26n: what this mate runs now, the server's report; the selected Rule Set; Apply needed)
+        -- (1.29) while a mate is being called the line says what it is EXPECTED to run ("Next call: ..."), in the
+        -- muted colour; what it runs ("Gambits: ...", green) is shown only on the server's word, once it is out
+        local rsStale = rs ~= nil and ROLE_INFO.rsStale(slot);
+        if rs then
+            dimText('Rules'); imgui.SameLine(px(X.COL.label), 0);
+            local expecting = calling and rs.state == 'off';
+            local parts, rulesTip = ROLE_INFO.rules(mate, rs, rsStale and not expecting, expecting);
+            local whole, width = {}, 0;
+            for _, part in ipairs(parts) do whole[#whole + 1] = part[2]; width = width + X.textW(part[2]); end
+            local left = U.avail(imgui);
+            if left ~= nil and width > left then
+                -- (1.27) a long Rule Set name: the whole line wraps instead of running out of the card
+                wrapped(table.concat(whole), C[parts[#parts][1]] or C.text);
+                ROLE_INFO.tip(rulesTip);
+            else
+                for i, part in ipairs(parts) do
+                    if i > 1 then imgui.SameLine(0, 0); end
+                    colorText(C[part[1]] or C.text, part[2]);
+                    ROLE_INFO.tip(rulesTip);
+                end
+            end
+        end
+
+        -- ---- row 3: the everyday buttons
+        -- one click: all four action switches (melee, ranged, abilities, magic) for this mate
+        S.act = S.act or {};
+        -- the state is the server's: all four switches off = OFF (the mate list carries the mask). Older servers: what you last clicked.
+        local actOn;
+        if mate.switches ~= nil then actOn = mate.switches ~= 0; else actOn = S.act[slot] ~= false; end
+        -- while any Actions change is on its way (sent, not yet confirmed by the server) every Actions button is greyed out
+        local busy = S.want ~= nil and next(S.want) ~= nil;
+        if busy then
+            button(S.want[slot] and 'Working...' or (actOn and 'Actions ON' or 'Actions OFF'), 'act' .. slot, 96, 0, 'busy');
+        elseif button(actOn and 'Actions ON' or 'Actions OFF', 'act' .. slot, 96, 0, actOn and 'on' or nil) then
+            S.want = S.want or {}; S.want[slot] = actOn and 'off' or 'on'; S.tries = S.tries or {}; S.tries[slot] = 0;
+            S.wantAt = now();
+            S.act[slot] = not actOn;
+            enqueue(string.format('/say !squad sw %d all %s', slot, actOn and 'off' or 'on'));
+            S.actKick = now() + 2.5;   -- one `!actions` check after the change settles (see pump)
+            -- turning a mate ON: her spells and abilities only take the new switches when she is called, so send her off and call her
+            -- again (each line waits its turn in the queue). Turning OFF needs no recall: the server stops her at once.
+            if not actOn and mate.out then
+                enqueue('/say !squad dismiss ' .. slot, 2.5);
+                enqueue('/say !squad call ' .. slot, 9);
+            end
+            ask(4);
+        end
+        tooltip('OFF means off: the mate stops fighting, following, Sneak Attack, eating and casting. ON also sends this mate off and calls her again (about 12 seconds), because spells and abilities only take the switches at a call. The button shows the real state from the server.');
+        -- (1.29) Jobs is a button of its own again: the main and the support job, right on the card
+        X.fit(64);
+        if button(jobsOpen and 'Jobs v' or 'Jobs >', 'jobs' .. slot, 64, 0, jobsOpen and 'selected' or nil) then
+            S.jobsOpen = S.jobsOpen or {};
+            S.jobsOpen[slot] = not jobsOpen;
+        end
+        tooltip('Change this mate\'s main and support job');
+        -- (1.27) the way to its Rule Sets
+        if rs and X.gambitsLoaded() then
+            X.fit(72);
+            if button('Gambits', 'gsq' .. slot, 72, 0) then X.openGambits(slot); end
+            tooltip('Opens the Gambits editor on ' .. mate.name .. '\'s Rule Sets.');
+        end
+        X.fit(52);
+        if button('Gear', 'gear' .. slot, 52, 0) then openSheet(slot, 'gear'); end
+        tooltip('Opens his profile window on Gear: what he wears, change a piece, lockstyle');
+        X.fit(64);
+        if button('Profile', 'sheet' .. slot, 64, 0) then openSheet(slot, 'stats'); end
+        tooltip('Opens his profile window: stats, HP/MP/TP, haste and jobs');
+        -- (1.26f, the user) the food menu: the game's own menu opens, as for !squad food <slot>
+        X.fit(52);
+        if button('Food', 'food' .. slot, 52, 0) then enqueue('/say !squad food ' .. slot); end
+        tooltip('Choose what this mate eats. The game opens a menu: "As it comes" (its own pick by job and level) or a food of your choice. A food is unlocked once for about what it costs on the auction house, then it is free for every mate.');
+        -- (1.29) the button says Settings in both states; the mark after the word says whether they are open
+        X.fit(88);
+        if button(open and 'Settings v' or 'Settings >', 'more' .. slot, 88, 0, open and 'selected' or nil) then S.more[slot] = not open; end
+        tooltip('Role, Mode, Range, weapon skills and body size');
+
+        -- what the settings are, while they are folded away
+        if not open then
+            -- Role and Mode first, each with its own help under the mouse (the same texts as in their lists)
+            local roleText, modeText = 'Role ' .. tostring(mate.role), '  \194\183  Mode ' .. tostring(mate.mode);
+            U.same_if_fits(imgui, X.textW(roleText .. modeText) + X.sv(4), 12);
+            colorText(C.faint, roleText);
+            ROLE_INFO.tip(ROLE_INFO.TIPS[mate.role]);
+            imgui.SameLine(0, 0);
+            colorText(C.faint, modeText);
+            ROLE_INFO.tip(MODE_HELP[mate.mode]);
+            local bits = {};
+            if opt then
+                bits[#bits + 1] = 'Range ' .. (RANGES[(opt.range or 0) + 1] or 'auto');
+                if X.caps and X.caps.matepos and (opt.pos or 0) > 0 then   -- (1.35) only when not Normal
+                    bits[#bits + 1] = X.POSITION_LABEL[X.POSITIONS[opt.pos + 1] or 'normal'] or '';
+                end
+                bits[#bits + 1] = 'WS ' .. ((opt.tp or 0) > 0 and ('at ' .. opt.tp) or 'chain') .. (opt.ws and (', ' .. tostring(opt.ws):gsub('_', ' ')) or '');
+            end
+            if #bits > 0 then
+                local summary = '  \194\183  ' .. table.concat(bits, '  \194\183  ');
+                U.same_if_fits(imgui, X.textW(summary) + X.sv(4), 0);
+                colorText(C.faint, summary);
+                tooltip((X.caps and X.caps.matepos) and 'Settings opens these: Role, Mode, Range, Position and weapon skills.'
+                    or 'Settings opens these: Role, Mode, Range and weapon skills.');
+            end
+        end
+        -- (role clarity) a quiet gold note when the Role restricts this job's default healing (ROLE_INFO.note)
+        local note, noteRole, noteJob = ROLE_INFO.note(mate);
+        if note and not (rs and rs.state == 'set' and not rsStale) then   -- (1.26n: not while a Rule Set runs)
+            local noteText = '(i) ' .. noteJob .. ' - Role: ' .. noteRole;
+            U.same_if_fits(imgui, X.textW(noteText) + X.sv(4), 12);
+            colorText(C.gold, noteText);
+            ROLE_INFO.tip(note);
+        end
+
+        if waitSecs then
+            dimText('Wait'); imgui.SameLine(px(X.COL.label), 0);
+            local w = combo('wait' .. slot, tostring(waitSecs), DELAYS, 70);
+            if w then
+                changeMate(mate, 'delay', w);
+                S.adv.delay[slot] = tonumber(w);
+            end
+            X.fit(210, 8);
+            dimText('seconds before joining a fight');
+        end
+
+        -- ---- Jobs: the main and the support job (the server checks them, as it always did)
+        if jobsOpen then
+            X.group();
+            local jobTip = 'A job your character has not unlocked is refused by the server (it says so in chat).';
+            dimText('Job'); imgui.SameLine(px(X.COL.setLabel), 0);
+            local jl = (S.jobLevels or {})[slot] or {};
+            local jobLabels = {};
+            for _, j in ipairs(JOBS) do if jl[j] then jobLabels[j] = string.format('%s (%d)', j, jl[j]); end end
+            local job = combo('job' .. slot, mate.main, JOBS, 120, nil, nil, jobLabels);
+            tooltip('This mate\'s main job. ' .. jobTip);
+            if job then changeMate(mate, 'job', job); end
+            -- (1.31) Sub in the second column: its name where Mode and WS at begin, its list where theirs begin
+            local subStayed = X.column2(180);
+            dimText('Sub'); imgui.SameLine(px(subStayed and X.COL.secondCtl or X.COL.setLabel), 0);
+            local subs = { 'none' };
+            for _, j in ipairs(JOBS) do if j ~= mate.main then subs[#subs + 1] = j; end end
+            local sub = combo('sub' .. slot, mate.sub == '-' and 'none' or mate.sub, subs, 120, nil, nil, jobLabels);
+            tooltip('This mate\'s support job. ' .. jobTip);
+            if sub then changeMate(mate, 'sub', sub); end
+        end
+
+        -- ---- Settings: what is changed rarely. (1.30) a thin line under the buttons, then two columns: Role | Mode,
+        -- Range | the weapon skill controls; Size and its button on a row of their own
+        if open then
+            if has('Separator') then imgui.Separator(); end
+            dimText('Role'); imgui.SameLine(px(X.COL.setLabel), 0);
+            local role = combo('role' .. mate.slot, mate.role, ROLES, 120, ROLE_INFO.TIPS, ROLE_INFO.tip);
+            if role then changeMate(mate, 'role', role); end
+            local stayed = X.column2(180);
+            dimText('Mode'); imgui.SameLine(px(stayed and X.COL.secondCtl or X.COL.setLabel), 0);
+            local mode = combo('mode' .. slot, mate.mode, MODES, 120, MODE_HELP, ROLE_INFO.tip);
+            if mode then changeMate(mate, 'mode', mode); end
+            if opt then styleRow(mate, opt); end
+            if opt and X.caps and X.caps.matepos then X.positionRow(mate, opt); end
+            if opt and opt.size == 0 then sizeRow(mate, opt); end
+        end
+    end
+    X.cardEnd(cardId, cardBegan, cardOpen);
+end
+
+
 local function squadTab()
-    if button('Call all', 'callall', 92, 26) then enqueue('/say !squad call all'); ask(3); end
+    -- (1.28) the commands in groups, each with its caption in the same column: the squad as a whole, the fight, the
+    -- camp, and what is set up once. Every button has the usual height (only the tabs are higher).
+    X.rowLabel('Squad');
+    if button('Call all', 'callall', 76, 0) then
+        enqueue('/say !squad call all'); ask(3);
+        local k = 0;
+        for _, m in ipairs(S.mates) do
+            local w = S.readyAt and S.readyAt[m.slot] and (S.readyAt[m.slot] - os.time()) or 0;
+            if not m.out and w <= 0 then X.markCalling(m.slot, k * 1.5); k = k + 1; end   -- (the server brings them one after another)
+        end
+    end
     tooltip('Bring every squad mate out, one after another');
-    imgui.SameLine(0, 6);
-    if button('Dismiss all', 'dismiss', 112, 26) then enqueue('/say !squad dismiss'); ask(1.5); end
-    imgui.SameLine(0, 6);
-    if button('Refresh', 'refresh', 80, 26) then ask(); end
+    X.fit(92);
+    if button('Dismiss all', 'dismiss', 92, 0) then enqueue('/say !squad dismiss'); ask(1.5); X.callAt = nil; end
+    X.fit(68);
+    if button('Refresh', 'refresh', 68, 0) then ask(); X.dropGear(); end
+    tooltip('Ask the server for your squad again');
+    X.fit(60, 12);
+    dimText(#S.mates == 1 and '1 mate' or (#S.mates .. ' mates'));
+
+    -- (1.26j, Hasuko: "I'm a WHM. I shouldn't have to pull my weapon"; Yenkei) send the squad at your target while
+    -- you stay out of the fight. The server reads your target itself, so nothing is drawn and nothing stands you up.
+    X.rowLabel('Fight');
+    if button('Attack my target', 'sqattack', 124, 0) then enqueue('/say !squad attack'); end
+    tooltip('Your squad attacks the monster you have targeted: they fight, you stay out of it. You do not draw your weapon:\nstay back, sit and rest, heal. Bot players in your party go in too.\nIn a macro:  /say !squad attack');
+    X.fit(52);
+    if button('Stop', 'sqstop', 52, 0) then enqueue('/say !squad stop'); end
+    tooltip('Calls your squad back from that fight.  In a macro:  /say !squad stop');
     if S.engage then
-        imgui.SameLine(0, 6);
+        -- (1.28) said as what it is (squad.lua: TrustEngageType 1 = as soon as you engage, 2 = after your first swing)
+        X.fit(190, 12);
         local first = S.engage == 'first';
-        if button(first and 'Engage: first' or 'Engage: with you', 'engage', 136, 26, first and 'on' or nil) then
+        if button(first and 'Engage: when you engage' or 'Engage: after first hit', 'engage', 178, 0) then
             enqueue('/say !squad engage ' .. (first and 'normal' or 'first'));
             S.engage = first and 'normal' or 'first';
             ask(1.5);
         end
-        tooltip(first and 'Your mates attack a monster as soon as you or any of them is fighting it (click: wait for you)'
-            or 'Your mates attack when you do (click: they may start the fight before you swing)');
+        tooltip(first and 'When your mates join a fight: as soon as you engage (draw your weapon on a monster), without waiting for your first swing.\nClick: they wait for your first hit, like retail trusts.'
+            or 'When your mates join a fight: after your first hit lands or misses, like retail trusts.\nClick: they join as soon as you engage, before your first swing.');
+    end
+
+    campRow();
+
+    local setup = false;
+    local function setupRow(w)
+        if setup then X.fit(w); else X.rowLabel('Setup'); setup = true; end
     end
     if S.autoEquip ~= nil then
-        imgui.SameLine(0, 6);
+        setupRow(128);
         local on = S.autoEquip == true;
-        if button(on and 'Auto-equip: on' or 'Auto-equip: off', 'autoequip', 128, 26, on and 'on' or nil) then
+        if button(on and 'Auto-equip: on' or 'Auto-equip: off', 'autoequip', 128, 0, on and 'on' or nil) then
             enqueue('/say !squad autoequip ' .. (on and 'off' or 'on'));
             S.autoEquip = not on;
             ask(1.5);
@@ -1356,15 +2429,15 @@ local function squadTab()
             or 'Click: every mate puts on the best gear you gave the squad for its job and level, and the button lights up.\nFor best gear just once, click it again: the gear stays and the choice is yours again.\nWith the launcher\'s "Squad gets all gear" on, the choice is from everything their jobs can wear.');
     end
     if S.adv then
-        imgui.SameLine(0, 6);
-        if button('Advanced', 'advanced', 92, 26, S.showAdvanced and 'selected' or nil) then S.showAdvanced = not S.showAdvanced; end
+        setupRow(84);
+        if button('Advanced', 'advanced', 84, 0, S.showAdvanced and 'selected' or nil) then S.showAdvanced = not S.showAdvanced; end
         tooltip('Follow distance, resting at camp, call order and each mate\'s wait before fighting');
     end
     if S.behs and #S.behs > 0 then
-        imgui.SameLine(0, 6);
+        setupRow(160);
         local allOff = true;
         for _, b in ipairs(S.behs) do if b.state ~= 'off' then allOff = false; end end
-        if button(allOff and 'Forwarded to Gambits' or 'Forward to Gambits', 'behall', 176, 26, allOff and 'on' or nil) then
+        if button(allOff and 'Forwarded to Gambits' or 'Forward to Gambits', 'behall', 160, 0, allOff and 'on' or nil) then
             enqueue('/say !squad behave all ' .. (allOff and 'on' or 'off'));
             for _, b in ipairs(S.behs) do b.state = allOff and 'on' or 'off'; end
             ask(1.5);
@@ -1372,32 +2445,25 @@ local function squadTab()
         tooltip(allOff and 'The built-in squad AI is off. Everything is set in Gambits. Click to take it back.'
             or 'Turns the built-in squad AI off for every job so each mate runs on what you set in Gambits.');
     end
-    imgui.SameLine(0, 14);
-    dimText(#S.mates == 1 and '1 mate' or (#S.mates .. ' mates'));
     if S.adv and S.showAdvanced then
         gap(2);
         advancedPanel();
     end
 
-    if S.pendingApply then
+    -- (1.27) the banner shows while a mate that is out has something only its next call applies: what the server
+    -- reports (a Rule Set chosen or saved in Gambits, a Role or job change: the Rules line says "Apply needed") or a
+    -- change this menu sent that the server does not report (gear, sub job, range...). It goes when the mate was called.
+    local waiting = 0;
+    for _, mate in ipairs(S.mates) do if X.pending(mate) then waiting = waiting + 1; end end
+    if waiting > 0 then
         gap(2);
         colorText(C.warn, 'Changes take effect when your mates are called again.');
-        imgui.SameLine(0, 10);
-        if button('Apply now', 'apply', 96, 0, 'selected') then applyNow(); end
-        tooltip('Dismisses the squad and calls everyone again');
+        X.fit(96, 10);
+        if button('Apply now', 'apply', 96, 0, 'go') then applyNow(); end
+        tooltip('Dismisses the squad and calls everyone again.'
+            .. ((X.caps and X.caps.reapply1) and ' To call only one mate again, use Apply on its card.' or ''));
     end
-    -- (1.26j, Hasuko: "I'm a WHM. I shouldn't have to pull my weapon"; Yenkei) send the squad at your target while
-    -- you stay out of the fight. The server reads your target itself, so nothing is drawn and nothing stands you up.
-    gap(2);
-    if button('Attack my target', 'sqattack', 148, 26) then enqueue('/say !squad attack'); end
-    tooltip('Your squad attacks the monster you have targeted. You do not draw your weapon:\nstay back, sit and rest, heal. Bot players in your party go in too.\nIn a macro:  /say !squad attack');
-    imgui.SameLine(0, 6);
-    if button('Stop', 'sqstop', 64, 26) then enqueue('/say !squad stop'); end
-    tooltip('Calls your squad back from that fight.  In a macro:  /say !squad stop');
-    imgui.SameLine(0, 10);
-    dimText('they fight, you stay out of it');
-    campRow();
-    gap(4);
+    X.group();
 
     local open, began = beginChild('##sm_squadlist', 0, -2, false);
     if open then
@@ -1407,129 +2473,7 @@ local function squadTab()
             dimText('   Make one in chat:  !squad new Bob WAR');
         end
         for _, mate in ipairs(S.mates) do
-            local opt = S.opts and S.opts[mate.slot];
-            local height = S.more[mate.slot] and 128 or 88;
-            if opt then height = height + 26 + ((S.more[mate.slot] and opt.size == 0) and 26 or 0); end
-            local waitSecs = S.showAdvanced and S.adv and S.adv.delay[mate.slot];
-            if waitSecs then height = height + 26; end
-            local cardOpen, cardBegan = beginChild('##sm_mate' .. mate.slot, 0, height, true, true);
-            if cardOpen then
-                colorText(C.gold, mate.name);
-                imgui.SameLine(0, 10);
-                local jobs = string.format('%s %d', mate.main, mate.mainLevel);
-                if mate.sub ~= '-' then jobs = jobs .. string.format(' / %s %d', mate.sub, mate.subLevel); end
-                colorText(C.text, jobs);
-                imgui.SameLine(0, 12);
-                colorText(mate.out and C.good or C.dim, mate.out and 'out' or 'away');
-                imgui.SameLine(0, 12);
-                local wait = S.readyAt and S.readyAt[mate.slot] and (S.readyAt[mate.slot] - os.time()) or 0;
-                if not mate.out then
-                    if wait > 0 then
-                        colorText(C.dim, string.format('ready in %d:%02d', math.floor(wait / 60), wait % 60));
-                        tooltip('The call timer: this mate can be called again then (the launcher\'s Rates tab sets how long)');
-                    elseif button('Call', 'call' .. mate.slot, 56, 0) then enqueue('/say !squad call ' .. mate.slot); ask(3); end
-                    imgui.SameLine(0, 6);
-                else
-                    -- (1.13) out: send just this one off, and how long before a dismiss and call works straight away
-                    if button('Dismiss', 'dismiss' .. mate.slot, 70, 0) then enqueue('/say !squad dismiss ' .. mate.slot); ask(1.5); end
-                    tooltip('Sends only this mate off; the others stay');
-                    imgui.SameLine(0, 6);
-                    if wait > 0 then
-                        colorText(C.dim, string.format('recall in %d:%02d', math.floor(wait / 60), wait % 60));
-                        tooltip('If you dismiss this mate now, the call timer lets you call them again after this');
-                        imgui.SameLine(0, 6);
-                    end
-                end
-                -- one click: all four action switches (melee, ranged, abilities, magic) for this mate, next to its Call / Dismiss
-                S.act = S.act or {};
-                -- the state is the server's: all four switches off = OFF (the mate list carries the mask). Older servers: what you last clicked.
-                local actOn;
-                if mate.switches ~= nil then actOn = mate.switches ~= 0; else actOn = S.act[mate.slot] ~= false; end
-                -- while any Actions change is on its way (sent, not yet confirmed by the server) every Actions button is greyed out
-                local busy = S.want ~= nil and next(S.want) ~= nil;
-                if busy then
-                    local n = pushColors({ { 'ImGuiCol_Button', { 0.22, 0.24, 0.28, 1 } }, { 'ImGuiCol_ButtonHovered', { 0.22, 0.24, 0.28, 1 } }, { 'ImGuiCol_ButtonActive', { 0.22, 0.24, 0.28, 1 } } });
-                    imgui.Button((S.want[mate.slot] and 'Working...' or (actOn and 'Actions ON' or 'Actions OFF')) .. '##act' .. mate.slot, { px(96), px(0) });
-                    if n > 0 then imgui.PopStyleColor(n); end
-                elseif button(actOn and 'Actions ON' or 'Actions OFF', 'act' .. mate.slot, 96, 0, actOn and 'on' or nil) then
-                    S.want = S.want or {}; S.want[mate.slot] = actOn and 'off' or 'on'; S.tries = S.tries or {}; S.tries[mate.slot] = 0;
-                    S.wantAt = now();
-                    S.act[mate.slot] = not actOn;
-                    enqueue(string.format('/say !squad sw %d all %s', mate.slot, actOn and 'off' or 'on'));
-                    S.actKick = now() + 2.5;   -- one `!actions` check after the change settles (see pump)
-                    -- turning a mate ON: her spells and abilities only take the new switches when she is called, so send her off and call her
-                    -- again (each line waits its turn in the queue). Turning OFF needs no recall: the server stops her at once.
-                    if not actOn and mate.out then
-                        enqueue('/say !squad dismiss ' .. mate.slot, 2.5);
-                        enqueue('/say !squad call ' .. mate.slot, 9);
-                    end
-                    ask(4);
-                end
-                tooltip('OFF means off: the mate stops fighting, following, Sneak Attack, eating and casting. ON also sends this mate off and calls her again (about 12 seconds), because spells and abilities only take the switches at a call. The button shows the real state from the server.');
-                imgui.SameLine(0, 6);
-                if button(S.more[mate.slot] and 'Less' or 'Jobs', 'more' .. mate.slot, 56, 0) then S.more[mate.slot] = not S.more[mate.slot]; end
-                tooltip('Change this mate\'s main and support job');
-                imgui.SameLine(0, 6);
-                if button('Profile', 'sheet' .. mate.slot, 64, 0) then openSheet(mate.slot); end
-                tooltip('Opens his profile window: stats, HP/MP/TP, haste, jobs and equipment');
-                -- (1.26f, the user) the food menu: the game's own menu opens, as for !squad food <slot>
-                imgui.SameLine(0, 6);
-                if button('Food', 'food' .. mate.slot, 52, 0) then enqueue('/say !squad food ' .. mate.slot); end
-                tooltip('Choose what this mate eats. The game opens a menu: "As it comes" (its own pick by job and level) or a food of your choice. A food is unlocked once for about what it costs on the auction house, then it is free for every mate.');
-
-                gap(2);
-                dimText('Role'); imgui.SameLine(0, 8);
-                local role = combo('role' .. mate.slot, mate.role, ROLES, 120, ROLE_INFO.TIPS, ROLE_INFO.tip);
-                if role then changeMate(mate, 'role', role); end
-                imgui.SameLine(0, 18);
-                dimText('Mode'); imgui.SameLine(0, 8);
-                local mode = combo('mode' .. mate.slot, mate.mode, MODES, 120, MODE_HELP, ROLE_INFO.tip);
-                if mode then changeMate(mate, 'mode', mode); end
-                -- (role clarity) a quiet gold note when the Role restricts this job's default healing (ROLE_INFO.note)
-                local note, noteRole, noteJob = ROLE_INFO.note(mate);
-                if note then
-                    imgui.SameLine(0, 12);
-                    colorText(C.gold, '(i) ' .. noteJob .. ' - Role: ' .. noteRole);
-                    ROLE_INFO.tip(note);
-                end
-                if opt then
-                    gap(2);
-                    styleRow(mate, opt);
-                end
-                if waitSecs then
-                    gap(2);
-                    dimText('Wait '); imgui.SameLine(0, 8);
-                    local w = combo('wait' .. mate.slot, tostring(waitSecs), DELAYS, 70);
-                    if w then
-                        changeMate(mate, 'delay', w);
-                        S.adv.delay[mate.slot] = tonumber(w);
-                    end
-                    imgui.SameLine(0, 8);
-                    dimText('seconds before joining a fight');
-                end
-
-                if S.more[mate.slot] then
-                    gap(2);
-                    dimText('Job '); imgui.SameLine(0, 8);
-                    local jl = (S.jobLevels or {})[mate.slot] or {};
-                    local jobLabels = {};
-                    for _, j in ipairs(JOBS) do if jl[j] then jobLabels[j] = string.format('%s (%d)', j, jl[j]); end end
-                    local job = combo('job' .. mate.slot, mate.main, JOBS, 120, nil, nil, jobLabels);
-                    if job then changeMate(mate, 'job', job); end
-                    imgui.SameLine(0, 18);
-                    dimText('Sub '); imgui.SameLine(0, 8);
-                    local subs = { 'none' };
-                    for _, j in ipairs(JOBS) do if j ~= mate.main then subs[#subs + 1] = j; end end
-                    local sub = combo('sub' .. mate.slot, mate.sub == '-' and 'none' or mate.sub, subs, 120, nil, nil, jobLabels);
-                    if sub then changeMate(mate, 'sub', sub); end
-                    dimText('A job your character has not unlocked is refused by the server (it says so in chat).');
-                    if opt and opt.size == 0 then
-                        gap(2);
-                        sizeRow(mate, opt);
-                    end
-                end
-            end
-            endChild(cardBegan);
+            X.mateCard(mate);
             gap(2);
         end
     end
@@ -1674,10 +2618,10 @@ gambitsPanel = function(height)
     end
     endChild(began);
 
-    if button('Reset rows', 'resetrows', 110, 26) then queueDuo({ reset = true }); end
+    if button('Reset rows', 'resetrows', 110, 0) then queueDuo({ reset = true }); end
     tooltip('Puts this job\'s rows back to the normal sheet (the engine keeps a .bak), then re-applies the profile');
     imgui.SameLine(0, 8);
-    if button('Engine window', 'titanui', 120, 26) and not old then queueDuo({ ops = { 'titanui' } }); end
+    if button('Engine window', 'titanui', 120, 0) and not old then queueDuo({ ops = { 'titanui' } }); end
     tooltip('Shows or hides the gambit engine\'s own big window in the second game window');
     imgui.SameLine(0, 12);
     dimText(S.duoPending and 'sending...' or (S.sheet and (#S.sheet.rows .. ' rows') or ''));
@@ -2058,7 +3002,10 @@ end
 
 local function setOpen(open)
     S.open[1] = open;
-    if open then ask(); end
+    if open then
+        X.syncTheme(now(), true);   -- (1.32) a menu that opens has the character's theme in its first frame
+        ask();
+    end
 end
 
 -- (1.26g, K-Andy) how see-through the Squads button and the menu's background are: 10-100 percent.
@@ -2069,48 +3016,63 @@ local function opacityOf(key)
     return math.max(10, math.min(100, v)) / 100;
 end
 
+-- (1.32) the background of a card or panel in the menu at the menu's opacity: the theme's own colour, its alpha times
+-- the opacity (one table per theme and value). Text, buttons, lists and the title bar are not made see-through.
+function X.childBg(op)
+    local key = tostring(X.themeName) .. ':' .. tostring(op);
+    if X.childBgKey ~= key then
+        local base = nil;
+        for _, item in ipairs(X.menu.window) do if item[1] == 'ImGuiCol_ChildBg' then base = item[2]; end end
+        X.childBgKey, X.childBgColor = key, base and { base[1], base[2], base[3], (base[4] or 1) * op } or nil;
+    end
+    return X.childBgColor;
+end
+
 local function menuWindow()
     if not S.open[1] then return; end
     imgui.SetNextWindowSize({ px(620), px(560) }, G('ImGuiCond_FirstUseEver') or 4);
     if has('SetNextWindowSizeConstraints') then imgui.SetNextWindowSizeConstraints({ px(600), px(420) }, { px(1200), px(1000) }); end
-    local vars = pushVars({ { 'ImGuiStyleVar_WindowRounding', 8 }, { 'ImGuiStyleVar_ChildRounding', 6 }, { 'ImGuiStyleVar_FrameRounding', 5 },
-                            { 'ImGuiStyleVar_WindowPadding', { 14, 12 } }, { 'ImGuiStyleVar_ItemSpacing', { 8, 6 } }, { 'ImGuiStyleVar_FramePadding', { 8, 4 } } });
-    local colors = pushColors({ { 'ImGuiCol_WindowBg', { 0.07, 0.08, 0.11, 0.96 } }, { 'ImGuiCol_ChildBg', { 0.10, 0.11, 0.15, 0.80 } },
-                                { 'ImGuiCol_Border', { 0.32, 0.34, 0.42, 0.55 } }, { 'ImGuiCol_Button', { 0.17, 0.19, 0.25, 1 } },
-                                { 'ImGuiCol_ButtonHovered', { 0.25, 0.28, 0.37, 1 } }, { 'ImGuiCol_ButtonActive', { 0.30, 0.34, 0.45, 1 } },
-                                { 'ImGuiCol_FrameBg', { 0.14, 0.16, 0.21, 1 } }, { 'ImGuiCol_FrameBgHovered', { 0.20, 0.22, 0.29, 1 } },
-                                { 'ImGuiCol_CheckMark', C.gold }, { 'ImGuiCol_Header', { 0.20, 0.22, 0.29, 1 } },
-                                { 'ImGuiCol_HeaderHovered', { 0.26, 0.29, 0.38, 1 } }, { 'ImGuiCol_Separator', { 0.32, 0.34, 0.42, 0.55 } },
-                                { 'ImGuiCol_Text', C.text } });
-    local flags = (G('ImGuiWindowFlags_NoTitleBar') or 0) + (G('ImGuiWindowFlags_NoCollapse') or 0);
-    if has('SetNextWindowBgAlpha') and opacityOf('menu_opacity') < 1 then imgui.SetNextWindowBgAlpha(opacityOf('menu_opacity')); end
-    if imgui.Begin('XI: Forever Offline##servermenu', S.open, flags) then
+    -- (1.27) the theme's colours and the shared metrics (xifo_ui: the Gambits editor's padding, spacing and rounding).
+    -- Whatever is pushed is popped again, also when something in the window fails (1.26g left 19 pushes open).
+    local token = U.push(imgui, X.menu.window, X.vars());
+    -- (1.28) ImGui's own title bar, as the Gambits window and the Profile have it: the same height, the same close
+    -- button, the same colours from the theme. (Until 1.27 this window drew its own heading and an X button.) The
+    -- window's ImGui name is new with it, so it opens once at its first-use place and size.
+    local flags = (G('ImGuiWindowFlags_NoCollapse') or 0);
+    -- the menu's opacity: the window's background, and (1.32) the cards and panels in it. Until 1.31 only the window's
+    -- background followed it: at 10 % the cards kept their 80 %.
+    local op = opacityOf('menu_opacity');
+    local faded = nil;
+    if has('SetNextWindowBgAlpha') and op < 1 then
+        imgui.SetNextWindowBgAlpha(op);
+        local bg = X.childBg(op);
+        if bg then faded = U.push(imgui, { { 'ImGuiCol_ChildBg', bg } }); end
+    end
+    local fontPushed = X.pushFont();   -- (1.34) the text at this Size, laid out for it (see X.pushFont)
+    local shown = imgui.Begin('Squads - XI: Forever Offline###sm_menu', S.open, flags);
+    local ok, err = pcall(function ()
+        if not shown then return; end
         scaleWindow();
-        colorText(C.gold, 'SQUADS');
-        imgui.SameLine(0, 8);
-        dimText('XI: Forever Offline');
-        if has('GetWindowWidth') then
-            local w = imgui.GetWindowWidth();
-            if type(w) == 'number' then imgui.SameLine(w - px(44), 0); else imgui.SameLine(0, 20); end
-        else
-            imgui.SameLine(0, 20);
-        end
-        if button('X', 'close', 26, 0) then S.open[1] = false; end
-        tooltip('Close (the FFXI button or /menu opens it again)');
-        gap(2);
+        -- the main tabs, and Options at the right end of their row (Theme, Size, Opacity)
         for i, name in ipairs(TABS) do
-            if i > 1 then imgui.SameLine(0, 4); end
-            if button(name, 'tab' .. name, 132, 30, S.tab == name and 'selected' or nil) then setTab(name); end
+            if i > 1 then imgui.SameLine(0, X.sv(4)); end
+            if X.tab(name, 'tab' .. name, S.tab == name) then setTab(name); end
         end
+        X.right(72);
+        if button('Options', 'options', 72, U.SIZE.tab, S.showOptions and 'selected' or nil) then S.showOptions = not S.showOptions; end
+        tooltip('Theme, size and opacity of the Squads windows');
+        if S.showOptions then X.optionsRow(); end
         if has('Separator') then imgui.Separator(); end
         gap(2);
         local draw = TAB_DRAW[S.tab] or squadTab;
         draw();
-    end
+    end);
     S.scaledNow = false;
     imgui.End();
-    if colors > 0 then imgui.PopStyleColor(colors); end
-    if vars > 0 then imgui.PopStyleVar(vars); end
+    if faded then U.pop(imgui, faded); end
+    X.popFont(fontPushed);
+    U.pop(imgui, token);
+    if not ok then error(err, 0); end
 end
 
 -- ---------------------------------------------------------------- the small FFXI button
@@ -2119,65 +3081,155 @@ local function xy(a, b)
     return tonumber(a), tonumber(b);
 end
 
+-- (1.30) Is the character in the world? Logged in (Ashita's player: login status 2, as its settings library asks),
+-- not between two zones, and with a name and server id. At the title screen, at character selection and while a zone
+-- loads this is false. A binding without those calls: the name and id alone decide, as they do for the theme.
+function X.inWorld()
+    local ok, ready = pcall(function ()
+        local player = AshitaCore:GetMemoryManager():GetPlayer();
+        if player:GetLoginStatus() ~= 2 then return false; end
+        if type(player.GetIsZoning) == 'function' then
+            local z = player:GetIsZoning();
+            if z == true or (type(z) == 'number' and z ~= 0) then return false; end
+        end
+        return U.current_identity() ~= nil;
+    end);
+    if not ok then return U.current_identity() ~= nil; end
+    return ready == true;
+end
+
+-- the right-click menu of the launcher (on either half)
+function X.launcherMenu(id)
+    if has('BeginPopupContextItem') and imgui.BeginPopupContextItem(id) then
+        if has('MenuItem') then
+            if imgui.MenuItem(S.cfg.button_locked == 'true' and 'Unlock position' or 'Lock position') then
+                setCfg('button_locked', S.cfg.button_locked == 'true' and 'false' or 'true');
+            end
+            for _, pct in ipairs({ 100, 75, 50, 25 }) do
+                if imgui.MenuItem(string.format('Opacity %d%%%s', pct, tonumber(S.cfg.button_opacity or '100') == pct and '   (now)' or '')) then
+                    setCfg('button_opacity', pct);
+                end
+            end
+            if imgui.MenuItem(X.gambitsShortcut() and 'Hide Gambits shortcut' or 'Show Gambits shortcut') then   -- (1.34)
+                setCfg('launcher_gambits', X.gambitsShortcut() and 'false' or 'true');
+            end
+            if imgui.MenuItem('Hide button  (/menu button brings it back)') then
+                setCfg('button_hidden', 'true');
+                say('button hidden. /menu opens the menu, /menu button shows the button again.');
+            end
+        end
+        imgui.EndPopup();
+    end
+end
+
+-- (1.30) The launcher: ONE small rounded control with two halves, "Squads" and "Gambits", and a thin line between
+-- them. Each half is a button of its own: its own highlight under the mouse, its own click. Squads opens and closes
+-- the menu and is lit while the menu is open. Gambits opens the Rule Set editor on the mate it had last (the
+-- editor's own choice; "/gambits show", which this add-on has always sent with a slot from a mate's card). Either
+-- half can be dragged to move the control (unless locked); a drag is never a click. The saved position is the
+-- control's top left corner, as it was the Squads button's. Shown only while the character is in the world.
+X.LAUNCHER_H = 20;   -- (1.31; a button of the menu is 19 high at the usual size: the text and 3 px above and below)
 local function buttonWindow()
     if S.cfg.button_hidden == 'true' then return; end
+    if not X.inWorld() then S.dragging, S.dragMoved, S.buttonHot, X.launcherFor = false, false, false, nil; return; end   -- (nothing is drawn: nothing can be clicked)
+    -- (1.31) The first frame in the world, and the first frame of another character: the character's theme is read
+    -- NOW. (While no window of the menu is open the theme is looked at every 5 seconds only, and at the title screen
+    -- there was no character to read it for: the launcher stood in the earlier colours until the next look.)
+    local who = U.current_identity();
+    if who ~= nil and X.launcherFor ~= who then
+        X.launcherFor = who;
+        X.syncTheme(now(), true);
+    end
     local x, y = tonumber(S.cfg.button_x) or 18, tonumber(S.cfg.button_y) or 240;
     imgui.SetNextWindowPos({ x, y }, S.dragging and (G('ImGuiCond_Always') or 1) or (S.placeButton and (G('ImGuiCond_Always') or 1)) or (G('ImGuiCond_FirstUseEver') or 4));
     S.placeButton = false;
-    -- the whole button fades to its opacity; under the mouse (or while dragged) it is solid, so it is easy to find
+    -- the whole control fades to its opacity; under the mouse (or while dragged) it is solid, so it is easy to find
     local fade = (S.buttonHot or S.dragging) and 1 or opacityOf('button_opacity');
-    local vars = pushVars({ { 'ImGuiStyleVar_WindowRounding', 7 }, { 'ImGuiStyleVar_WindowPadding', { 3, 3 } }, { 'ImGuiStyleVar_FrameRounding', 6 },
-                            { 'ImGuiStyleVar_Alpha', fade } });
-    local colors = pushColors({ { 'ImGuiCol_WindowBg', { 0.05, 0.06, 0.09, 0.70 } }, { 'ImGuiCol_Border', { 0.89, 0.74, 0.40, 0.55 } },
-                                { 'ImGuiCol_Button', { 0.13, 0.16, 0.26, 0.95 } }, { 'ImGuiCol_ButtonHovered', { 0.22, 0.27, 0.42, 1 } },
-                                { 'ImGuiCol_ButtonActive', { 0.30, 0.36, 0.55, 1 } }, { 'ImGuiCol_Text', C.gold } });
+    -- (1.31) the theme's colours, in ONE shape: the window itself is the button (its face is the launcher's button
+    -- colour, its border the one outline, rounded); the two halves have no face and no border of their own, only a
+    -- highlight under the mouse or when lit, so there is one outline with a thin line in the middle
+    local face = nil;
+    for _, item in ipairs(X.menu.button) do if item[1] == 'ImGuiCol_Button' then face = item[2]; end end
+    local colors = {};
+    for _, item in ipairs(X.menu.button) do colors[#colors + 1] = item; end
+    if face then colors[#colors + 1] = { 'ImGuiCol_WindowBg', face }; end
+    colors[#colors + 1] = { 'ImGuiCol_Button', { 0, 0, 0, 0 } };
+    local token = U.push(imgui, colors, { { 'ImGuiStyleVar_WindowRounding', X.sv(6) }, { 'ImGuiStyleVar_WindowBorderSize', 1 },
+                                          { 'ImGuiStyleVar_WindowPadding', { 1, 1 } }, { 'ImGuiStyleVar_WindowMinSize', { 1, 1 } },
+                                          { 'ImGuiStyleVar_FrameRounding', X.sv(5) }, { 'ImGuiStyleVar_FrameBorderSize', 0 },
+                                          { 'ImGuiStyleVar_ItemSpacing', { 0, 0 } }, { 'ImGuiStyleVar_Alpha', fade } });
     local flags = 0;
     for _, name in ipairs({ 'ImGuiWindowFlags_NoTitleBar', 'ImGuiWindowFlags_NoResize', 'ImGuiWindowFlags_NoScrollbar', 'ImGuiWindowFlags_NoCollapse',
                             'ImGuiWindowFlags_AlwaysAutoResize', 'ImGuiWindowFlags_NoSavedSettings', 'ImGuiWindowFlags_NoFocusOnAppearing' }) do
         flags = flags + (G(name) or 0);
     end
     if S.cfg.button_locked == 'true' then flags = flags + (G('ImGuiWindowFlags_NoMove') or 0); end
-    if imgui.Begin('##servermenu_button', { true }, flags) then
+    local fontPushed = X.pushFont();   -- (1.34) the text at this Size, laid out for it (see X.pushFont)
+    local shown = imgui.Begin('##servermenu_button', { true }, flags);
+    local ok, err = pcall(function ()
+        if not shown then return; end
         scaleWindow();
-        local clicked = imgui.Button('Squads##sm_open', { px(76), px(30) });
-        S.buttonHot = has('IsItemHovered') and imgui.IsItemHovered() or false;
-        -- dragging the button moves it (unless locked); a drag is not a click
-        if S.cfg.button_locked ~= 'true' and has('IsItemActive') and has('IsMouseDragging') and has('GetMouseDragDelta') then
-            if imgui.IsItemActive() and imgui.IsMouseDragging(0, 3) then
-                local dx, dy = xy(imgui.GetMouseDragDelta(0));
-                if dx and dy then
-                    if not S.dragging then S.dragging, S.dragFrom = true, { x, y }; end
-                    setCfg('button_x', math.floor(S.dragFrom[1] + dx));
-                    setCfg('button_y', math.floor(S.dragFrom[2] + dy));
-                    S.dragMoved = true;
-                end
-            elseif S.dragging and not imgui.IsItemActive() then
-                S.dragging = false;
-            end
-        end
-        if clicked then
-            if S.dragMoved then S.dragMoved = false; else setOpen(not S.open[1]); end
-        elseif not S.dragging then
-            S.dragMoved = false;
-        end
-        if not S.dragging then tooltip('Squads  (/menu)   drag to move, right-click for options'); end
-        if has('BeginPopupContextItem') and imgui.BeginPopupContextItem('##sm_buttonmenu') then
-            if has('MenuItem') then
-                if imgui.MenuItem(S.cfg.button_locked == 'true' and 'Unlock position' or 'Lock position') then
-                    setCfg('button_locked', S.cfg.button_locked == 'true' and 'false' or 'true');
-                end
-                for _, pct in ipairs({ 100, 75, 50, 25 }) do
-                    if imgui.MenuItem(string.format('Opacity %d%%%s', pct, tonumber(S.cfg.button_opacity or '100') == pct and '   (now)' or '')) then
-                        setCfg('button_opacity', pct);
+        local hot = false;
+        -- one half: a button `w` wide (as laid out for the usual font) and X.LAUNCHER_H high: (1.31) about a menu button's height
+        local function half(label, id, w, lit, muted, tip, onClick)
+            local colors = nil;
+            if lit then colors = { { 'ImGuiCol_Button', C.sel }, { 'ImGuiCol_ButtonHovered', C.selHi }, { 'ImGuiCol_ButtonActive', C.selHi } };
+            elseif muted then colors = { { 'ImGuiCol_Text', C.faint } }; end
+            local t2 = U.push(imgui, colors);
+            local okB, clicked = pcall(imgui.Button, label .. '##' .. id, { px(w), px(X.LAUNCHER_H) });
+            U.pop(imgui, t2);
+            if not okB then error(clicked, 0); end
+            if has('IsItemHovered') and imgui.IsItemHovered() then hot = true; end
+            -- dragging this half moves the control (unless locked); a drag is not a click
+            if S.cfg.button_locked ~= 'true' and has('IsItemActive') and has('IsMouseDragging') and has('GetMouseDragDelta') then
+                if imgui.IsItemActive() and imgui.IsMouseDragging(0, 3) then
+                    local dx, dy = xy(imgui.GetMouseDragDelta(0));
+                    if dx and dy then
+                        if not S.dragging then S.dragging, S.dragFrom = id, { x, y }; end
+                        if S.dragging == id then
+                            setCfg('button_x', math.floor(S.dragFrom[1] + dx));
+                            setCfg('button_y', math.floor(S.dragFrom[2] + dy));
+                            S.dragMoved = true;
+                        end
                     end
-                end
-                if imgui.MenuItem('Hide button  (/menu button brings it back)') then
-                    setCfg('button_hidden', 'true');
-                    say('button hidden. /menu opens the menu, /menu button shows the button again.');
+                elseif S.dragging == id and not imgui.IsItemActive() then
+                    S.dragging = false;
                 end
             end
-            imgui.EndPopup();
+            if clicked == true then
+                if S.dragMoved then S.dragMoved = false; else onClick(); end
+            elseif not S.dragging then
+                S.dragMoved = false;
+            end
+            if not S.dragging then tooltip(tip); end
+            X.launcherMenu('##sm_buttonmenu_' .. id);
         end
+
+        half('Squads', 'sm_open', 54, S.open[1] == true, false, 'Squads  (/menu)   drag to move, right-click for options', function ()
+            setOpen(not S.open[1]);
+        end);
+        -- (1.34) Options > "Show Gambits shortcut" off: the Squads half alone, at the same saved place (the window sizes
+        -- itself to what it holds, so the control is simply shorter). /gambits and the cards' Gambits buttons stay.
+        if X.gambitsShortcut() then
+            -- the thin line between the two halves
+            imgui.SameLine(0, 0);
+            local pos = U.cursor(imgui);   -- (xifo_ui's: the menu's own position helpers stand further down in this file)
+            if pos then U.frame(imgui, pos[1], pos[2] + px(3), 1, px(X.LAUNCHER_H - 6), C.line, nil, 0); end
+            if has('Dummy') then imgui.Dummy({ 1, px(X.LAUNCHER_H) }); end
+            imgui.SameLine(0, 0);
+            local loaded = X.gambitsLoaded();
+            -- (1.34) Gambits opens AND closes its window, like the Squads half, and is lit while the window is really
+            -- shown, however it was opened or closed (its X, /gambits, a card's button): the editor's own word
+            local shownNow = loaded and X.gambitsShown();
+            half('Gambits', 'sm_gsq', 60, shownNow, not loaded,
+                loaded and (shownNow and 'Gambits: close the Rule Set editor   (drag to move)'
+                    or 'Gambits: the Rule Set editor, on the squad mate it had last   (drag to move)')
+                    or 'Gambits is not loaded for this character (/addon load gambits).', function ()
+                if not loaded then say('Gambits is not loaded: /addon load gambits'); return; end
+                if X.gambitsShown() then X.closeGambits(); else X.openGambits(); end
+            end);
+        end
+        S.buttonHot = hot;
         -- when ImGui moved the window by its edge, remember where it went
         if not S.dragging and has('GetWindowPos') then
             local wx, wy = xy(imgui.GetWindowPos());
@@ -2186,11 +3238,12 @@ local function buttonWindow()
                 setCfg('button_y', math.floor(wy));
             end
         end
-    end
+    end);
     S.scaledNow = false;
     imgui.End();
-    if colors > 0 then imgui.PopStyleColor(colors); end
-    if vars > 0 then imgui.PopStyleVar(vars); end
+    X.popFont(fontPushed);
+    U.pop(imgui, token);
+    if not ok then error(err, 0); end
 end
 
 -- ---------------------------------------------------------------- the sheet window
@@ -2208,9 +3261,12 @@ end
 
 local function screenPos()
     if not (imgui and imgui.GetCursorScreenPos) then return nil; end
-    local ok, value = pcall(imgui.GetCursorScreenPos);
+    -- (1.29) Ashita hands back two numbers (x, y); a table was all this read, so in the game there never was a position:
+    -- the Gear rows of 1.28 were drawn the older way, and the Profile's band of 1.27 too
+    local ok, value, second = pcall(imgui.GetCursorScreenPos);
     if not ok or value == nil then return nil; end
     if type(value) == 'table' then return { number(value[1] or value.x), number(value[2] or value.y) }; end
+    if type(value) == 'number' and type(second) == 'number' then return { value, second }; end
     return nil;
 end
 
@@ -2264,6 +3320,7 @@ fit = function(text, maxWidth)
     end
     return '...';
 end
+X.clip = fit;   -- (1.28: the mate cards, which stand above this, cut a long name the same way)
 
 local function tint(rgba, text)
     if imgui and imgui.TextColored then
@@ -2273,16 +3330,7 @@ local function tint(rgba, text)
     end
 end
 
-local function wrappedColored(rgba, text)
-    local id = G('ImGuiCol_Text');
-    local pushed = 0;
-    if id ~= nil and imgui and imgui.PushStyleColor then
-        local ok = pcall(imgui.PushStyleColor, id, rgba);
-        if ok then pushed = 1; end
-    end
-    imgui.TextWrapped(tostring(text));
-    if pushed > 0 and imgui and imgui.PopStyleColor then pcall(imgui.PopStyleColor, 1); end
-end
+local function wrappedColored(rgba, text) U.wrapped(imgui, rgba, text); end   -- (1.27: never read as a format)
 
 local function newLine()
     if has('NewLine') then imgui.NewLine(); else imgui.Text(''); end
@@ -2345,9 +3393,15 @@ end
 
 local function itemDisplayName(itemId, name)
     local id = tonumber(itemId);
+    -- (1.27) an item's name is asked from the game once, not every frame for every piece shown (56 times a frame with
+    -- a full gear list); a name the game could not give yet is asked again
+    if id and id > 0 and X.names[id] then return X.names[id]; end
     if id and id > 0 and AshitaCore and type(AshitaCore.GetResourceManager) == 'function' then
         local ok, item = pcall(function () return AshitaCore:GetResourceManager():GetItemById(id); end);
-        if ok and item and item.Name and item.Name[1] and item.Name[1] ~= '' then return tostring(item.Name[1]); end
+        if ok and item and item.Name and item.Name[1] and item.Name[1] ~= '' then
+            X.names[id] = tostring(item.Name[1]);
+            return X.names[id];
+        end
     end
     local text = tostring(name or ''):gsub('|%d+$', ''):gsub('_', ' ');
     text = text:gsub('(%a)([%w]*)', function (first, rest) return first:upper() .. rest; end);
@@ -2378,10 +3432,59 @@ local function itemStatsText(itemId, fallback)
     return text or nil;
 end
 
-local function drawGear(slot, name, itemId, textMax)
+-- (1.27) one equipment slot of the Gear view: the item's icon, then one button "Slot:  Item name" that selects the
+-- slot (lit while it is the selected one). `width` is in pixels. A slot that cannot be chosen (Look: a slot that does
+-- not show on a character) is plain text. Returns true when it was clicked.
+-- (1.28) The row is one clickable strip, `width` pixels wide: the icon's place (kept also when the slot is empty), the
+-- slot's name in its own column, then the item's name ("Empty" muted). The selected slot has the theme's row frame
+-- (a thin line and a light tint), which leaves the names as readable as they were. Returns true when it was clicked.
+-- (Without the calls to place things on the screen the older drawing below is used.)
+X.SLOT_COL = 50;
+function X.slotCell(mateSlot, eq, name, itemId, width, selected, enabled)
     local empty = emptySlot(name);
-    local display = itemDisplayName(itemId, name);
+    local display = empty and '' or itemDisplayName(itemId, name);
     local icon = (not empty) and itemIcon(itemId, display) or nil;
+    local pos = screenPos();
+    if pos and has('SetCursorScreenPos') and has('Dummy') then
+        local rowH = math.max(ICON, px(20));
+        local slotName = SLOT_LABEL[eq + 1] or tostring(eq);
+        if selected then U.frame(imgui, pos[1], pos[2], width, rowH, C.rowFill, C.rowLine, 4); end
+        local clicked = false;
+        if enabled then
+            -- the strip: a button without a face of its own (the frame above is the selection, the tint under the mouse its feedback)
+            local token = U.push(imgui, { { 'ImGuiCol_Button', { 0, 0, 0, 0 } }, { 'ImGuiCol_ButtonHovered', C.hover }, { 'ImGuiCol_ButtonActive', C.rowFill } },
+                                 { { 'ImGuiStyleVar_FrameBorderSize', 0 } });
+            local ok, hit = pcall(imgui.Button, '##slot' .. tostring(mateSlot) .. '_' .. eq, { width, rowH });
+            U.pop(imgui, token);
+            if not ok then error(hit, 0); end
+            clicked = hit == true;
+        else
+            imgui.Dummy({ width, rowH });
+        end
+        if not empty then
+            local stats = itemStatsText(itemId, display);
+            if stats then tooltip(stats); end
+        elseif not enabled then
+            tooltip('This slot does not show on a character.');
+        end
+        -- what the strip shows, drawn over it
+        local iconY = pos[2] + math.floor((rowH - ICON) / 2);
+        seek(pos[1], iconY);
+        local drew = false;
+        if icon ~= nil and imgui.Image ~= nil then drew = pcall(imgui.Image, icon.ptr, { ICON, ICON }); end
+        if not drew then fillRect(windowDraw(), pos[1] + 2, iconY + 2, ICON - 4, ICON - 4, { 1, 1, 1, 0.05 }, 4); end
+        local textY = pos[2] + math.max(0, math.floor((rowH - px(13)) / 2));
+        local x = pos[1] + ICON + 6;
+        seek(x, textY);
+        tint(enabled and C.text or C.faint, slotName);   -- (1.29) the slot's name in the usual text colour
+        seek(x + px(X.SLOT_COL), textY);
+        -- "Empty" in the theme's colour for secondary text; an item's name in the usual one
+        tint((not enabled) and C.faint or (empty and C.dim or C.text), empty and 'Empty' or fit(display, width - ICON - 6 - px(X.SLOT_COL) - 6));
+        -- the row itself is the last thing drawn, so what follows (the other column, the next row) is placed from it
+        seek(pos[1], pos[2]);
+        imgui.Dummy({ width, rowH });
+        return clicked;
+    end
     local shown = false;
     if icon ~= nil and imgui.Image ~= nil then
         shown = pcall(imgui.Image, icon.ptr, { ICON, ICON });
@@ -2389,26 +3492,31 @@ local function drawGear(slot, name, itemId, textMax)
 
     if not shown then
         local pos = screenPos();
-        if pos then
-            local draw = windowDraw();
-            fillRect(draw, pos[1], pos[2], ICON, ICON, { 1, 1, 1, 0.05 }, 4);
-        end
+        if pos then fillRect(windowDraw(), pos[1], pos[2], ICON, ICON, { 1, 1, 1, 0.05 }, 4); end
         imgui.Dummy({ ICON, ICON });
     end
 
-    imgui.SameLine(0, 8);
-    imgui.BeginGroup();
-    tint(C.dim, SLOT_LABEL[slot + 1] or tostring(slot));
-    if empty then
-        tint(C.faint, 'Empty');
+    imgui.SameLine(0, 6);
+    local buttonW = math.max(60, width - ICON - 6);
+    local text = fit((SLOT_LABEL[eq + 1] or tostring(eq)) .. ':  ' .. (empty and 'Empty' or display), buttonW - 14);
+    local clicked = false;
+    if enabled then
+        local colors = selected and { { 'ImGuiCol_Button', C.sel }, { 'ImGuiCol_ButtonHovered', C.selHi }, { 'ImGuiCol_ButtonActive', C.selHi } } or nil;
+        local token = U.push(imgui, colors, { { 'ImGuiStyleVar_ButtonTextAlign', { 0, 0.5 } } });
+        local ok, hit = pcall(imgui.Button, text .. '##slot' .. tostring(mateSlot) .. '_' .. eq, { buttonW, ICON });
+        U.pop(imgui, token);
+        if not ok then error(hit, 0); end
+        clicked = hit == true;
     else
-        tint(C.text, fit(display, textMax));
+        tint(C.faint, text);
     end
-    imgui.EndGroup();
+
     if not empty then
         local stats = itemStatsText(itemId, display);
         if stats then tooltip(stats); end
     end
+
+    return clicked;
 end
 
 -- (1.19) Blue magic: a Blue Mage mate's set spells, like the Set Spells menu. Automatic until you click a spell;
@@ -2436,7 +3544,7 @@ local function bluePicker(slot, h)
     imgui.SameLine(0, 10);
     if button('Fill automatically', 'bluauto' .. slot, 0, 0, b.auto and 'selected' or nil) then
         enqueue(string.format('/say !squad blu %d auto', slot));
-        S.pendingApply = true;
+        X.pendMate(slot);
         askBlue(slot, 2);
         b.done = false;
     end
@@ -2446,7 +3554,7 @@ local function bluePicker(slot, h)
         local label = string.format('%s (%d)', item.name, item.points);
         if button(label, 'blu' .. slot .. '_' .. item.id, px(150), 0, item.set and 'on' or nil) then
             enqueue(string.format('/say !squad blu %d %s %d', slot, item.set and 'unset' or 'set', item.id));
-            S.pendingApply = true;
+            X.pendMate(slot);
             askBlue(slot, 2);
             b.done = false;
         end
@@ -2458,97 +3566,212 @@ end
 
 -- (1.14) Change gear: pick a slot, see the given gear this mate can wear there (from the server), click to put it on.
 -- Works at home and in a friend's world (it only uses !squad commands).
+-- (1.27) the Gear view of the profile window: the 16 slots are the slot picker (a click on what is worn lists the gear
+-- for that slot), Equipment and Look (lockstyle) are two clearly named views instead of a "Picking:" switch, the piece
+-- that is worn is marked, the list has a name filter and is kept for a while, and a change says that it shows at the
+-- next call, with Apply next to it. What may be worn, what the squad owns, Auto-equip and lockstyle are the server's,
+-- unchanged: the same !squad gearlist / equip / unequip / lockstyle lines as before.
 local SLOT_KEY = { [0] = 'main', 'sub', 'range', 'ammo', 'head', 'body', 'hands', 'legs', 'feet', 'neck', 'waist', 'ear1', 'ear2', 'ring1', 'ring2', 'back' };
 -- (1.21) lockstyle: the slots a look can be locked in (the ones you see on a character)
 local LOOK_SLOTS = { [0] = true, [1] = true, [2] = true, [4] = true, [5] = true, [6] = true, [7] = true, [8] = true };
-local function lockstyleRow(slot, d)
-    colorText(C.gold, 'Lockstyle');
-    imgui.SameLine(0, 8);
-    local parts = {};
-    for i = 0, 8 do
-        local l = d and d.ls and d.ls[i];
-        if l then parts[#parts + 1] = SLOT_KEY[i] .. ': ' .. tostring(l.name); end
+
+-- the gear list of one mate and slot: from the lists kept (two minutes; dropped after a job change, an Apply, Refresh
+-- or Reload), else asked from the server
+function X.askGear(slot, eq)
+    local hit = X.gearCache[slot .. ':' .. eq];
+    if hit and now() - hit.at < 120 then
+        S.gear = { slot = slot, eq = eq, items = hit.items, done = true, total = hit.total };
+        return false;
     end
-    dimText(#parts > 0 and table.concat(parts, ', ') or 'off (shows the gear it wears)');
-    if button('Lock current look', 'lsset' .. slot, 0, 0) then
-        enqueue(string.format('/say !squad lockstyle %d set', slot));
-        askSheet(2);
-    end
-    tooltip('Keep the look it has now, whatever gear it wears later');
-    imgui.SameLine(0, 6);
-    if button('Lockstyle off', 'lsoff' .. slot, 0, 0) then
-        enqueue(string.format('/say !squad lockstyle %d off', slot));
-        askSheet(2);
-    end
-    tooltip('Show the gear it really wears');
-    imgui.SameLine(0, 6);
-    local looking = S.gearLook == true;
-    if button(looking and 'Picking: look' or 'Picking: gear', 'lsmode' .. slot, 0, 0, looking and 'selected' or nil) then
-        S.gearLook = not looking;
-    end
-    tooltip('Picking: gear = the items below are put on. Picking: look = they only change how the mate looks');
-    gap(2);
+    S.gear = { slot = slot, eq = eq, items = {}, done = false };
+    enqueue(string.format('/say !squad gearlist %d %d', slot, eq));
+    S.waitUntil = now() + 5;
+    return true;
 end
 
-local function gearPicker(slot)
-    if slot == nil then return; end
-    if has('Separator') then imgui.Separator(); end
-    lockstyleRow(slot, S.profile);
-    colorText(C.gold, S.gearLook and 'Choose the look' or 'Change gear');
-    gap(2);
-    local g = S.gear;
-    if g == nil or g.slot ~= slot then g = { slot = slot, eq = nil, items = {}, done = false }; S.gear = g; end
-    for i = 0, 15 do
-        if i > 0 and i ~= 8 then imgui.SameLine(0, 3); end
-        if button(SLOT_LABEL[i + 1], 'gp' .. slot .. '_' .. i, 0, 0, g.eq == i and 'selected' or nil) then
-            g.eq, g.items, g.done, g.total = i, {}, false, nil;
-            enqueue(string.format('/say !squad gearlist %d %d', slot, i));
-            S.waitUntil = now() + 5;
+-- after a piece was put on, taken off or shown: the mate wears it at its next call, so say so (and offer Apply); the
+-- sheet is read again, and the squad list too (putting a piece on by hand switches Auto-equip off on the server)
+function X.gearChanged(slot)
+    X.pendMate(slot, true);
+    askSheet(2);
+    ask(4.5);
+end
+
+-- the equipment slots as the Gear view shows them (slot numbers: 0 main, 1 sub, 2 ranged, 3 ammo, 4 head, 5 body,
+-- 6 hands, 7 legs, 8 feet, 9 neck, 10 waist, 11 / 12 ears, 13 / 14 rings, 15 back)
+X.GEAR_GROUPS = {
+    { 'Weapons',     { { 0, 1 }, { 2, 3 } } },
+    { 'Armor',       { { 4, 5 }, { 6, 7 }, { 8, 15 } } },
+    { 'Accessories', { { 9, 10 }, { 11, 12 }, { 13, 14 } } },
+};
+function X.gearView(slot, d)
+    local mate = nil;
+    for _, m in ipairs(S.mates or {}) do if m.slot == slot then mate = m; end end
+    local look = S.gearLook == true;
+    local who = (mate and mate.name) or (d.hdr and d.hdr.name) or 'the mate';
+
+    if X.pend and X.pend[slot] and X.pend[slot].gear then
+        if mate and mate.out then
+            colorText(C.warn, 'Gear changed: ' .. who .. ' shows it when called again.');
+            X.fit(64, 10);
+            if button('Apply', 'gearapply' .. slot, 64, 0, 'go') then X.applyMate(mate); end
+            tooltip(X.applyTip(mate));
+        else
+            colorText(C.dim, 'Gear changed: ' .. who .. ' wears it at the next call.');
+        end
+        gap(2);
+    end
+
+    -- (1.28) the smaller kind of tab: a choice inside the Gear view
+    if X.tab('Equipment', 'gvgear' .. slot, not look, true) then S.gearLook = false; end
+    tooltip('What ' .. who .. ' wears. A click on a piece in the list puts it on.');
+    imgui.SameLine(0, X.sv(4));
+    if X.tab('Look (lockstyle)', 'gvlook' .. slot, look, true) then S.gearLook = true; end
+    tooltip('How ' .. who .. ' looks, whatever it wears. A click on a piece in the list only changes the look.');
+    if look then
+        X.fit(140, 14);
+        if button('Lock current look', 'lsset' .. slot, 140, 0) then
+            enqueue(string.format('/say !squad lockstyle %d set', slot));
+            X.gearChanged(slot);
+        end
+        tooltip('Keep the look it has now, whatever gear it wears later');
+        X.fit(112);
+        if button('Lockstyle off', 'lsoff' .. slot, 112, 0) then
+            enqueue(string.format('/say !squad lockstyle %d off', slot));
+            X.gearChanged(slot);
+        end
+        tooltip('Show the gear it really wears');
+        -- whether a look is locked at all: without one the cells below show the gear that is worn, and nothing else said so
+        local locked = 0;
+        for e in pairs(LOOK_SLOTS) do if d.ls and d.ls[e] then locked = locked + 1; end end
+        if locked == 0 then
+            dimText('Lockstyle: off (shows the gear it wears)');
+        else
+            colorText(C.good, 'Lockstyle: on');
+            imgui.SameLine(0, 8);
+            dimText(locked >= 8 and '(every slot that shows)' or string.format('(%d of 8 slots; the others show the gear it wears)', locked));
         end
     end
-    if g.eq == nil then
-        dimText('Pick a slot to see the gear your squad has for it.');
+    gap(2);
+
+    -- the 16 slots, two columns: what is worn (Look: what is shown there). A click selects the slot.
+    local width = contentWidth();
+    if width <= 0 then width = px(540); end
+    local column = math.floor(width / 2);
+    local eq, ls = d.eq or {}, d.ls or {};
+    -- (1.28) in three groups, two slots a row: weapons and ammunition, armour, accessories; the two ears next to
+    -- each other, the two rings too. Only where a slot is drawn: its number, its commands and what is saved for it
+    -- are what they were.
+    for gi, group in ipairs(X.GEAR_GROUPS) do
+        if gi > 1 then X.group(); end
+        tint(C.faint, group[1]);
+        for _, pair in ipairs(group[2]) do
+            for side, e in ipairs(pair) do
+                if side == 2 then imgui.SameLine(column, 0); end
+                local name, id = eq[e], d.eqId and d.eqId[e];
+                local enabled = (not look) or LOOK_SLOTS[e] == true;
+                if look and ls[e] then name, id = ls[e].name, ls[e].id; end
+                if X.slotCell(slot, e, name, id, column - 8, S.gearEq == e, enabled) then
+                    S.gearEq = e;
+                    X.askGear(slot, e);
+                end
+            end
+        end
+    end
+    X.group();
+
+    if has('Separator') then imgui.Separator(); end
+    local e = S.gearEq;
+    if e == nil then
+        dimText('Click a slot above to see the gear your squad has for it.');
         return;
     end
-    gap(2);
-    if not g.done then dimText('Looking...'); return; end
-    local look = S.gearLook == true;
-    if look and not LOOK_SLOTS[g.eq] then
+    if look and not LOOK_SLOTS[e] then
         dimText('This slot does not show on a character: pick main, sub, range, head, body, hands, legs or feet.');
         return;
     end
-    if button(look and 'Real gear' or 'Take off', 'gpoff' .. slot, 80, 0) then
+    local g = S.gear;
+    if g == nil or g.slot ~= slot or g.eq ~= e then
+        X.askGear(slot, e);
+        g = S.gear;
+    end
+
+    colorText(C.gold, (look and 'Look: ' or 'Gear: ') .. (SLOT_LABEL[e + 1] or tostring(e)));
+    X.fit(84, 10);
+    if button(look and 'Real gear' or 'Take off', 'gpoff' .. slot, 84, 0) then
         if look then
-            enqueue(string.format('/say !squad lockstyle %d off %s', slot, SLOT_KEY[g.eq]));
+            enqueue(string.format('/say !squad lockstyle %d off %s', slot, SLOT_KEY[e]));
         else
-            enqueue(string.format('/say !squad unequip %d %s', slot, SLOT_KEY[g.eq]));
+            enqueue(string.format('/say !squad unequip %d %s', slot, SLOT_KEY[e]));
         end
-        askSheet(2);
+        X.gearChanged(slot);
     end
     tooltip(look and 'Show the gear it really wears in this slot' or 'Leave this slot empty');
+    S.gearFilter = S.gearFilter or { '' };
+    if has('InputText') then
+        X.fit(200, 14);
+        dimText('Filter'); imgui.SameLine(0, 6);
+        if has('PushItemWidth') then imgui.PushItemWidth(px(140)); end
+        pcall(imgui.InputText, '##sm_gearfilter', S.gearFilter, 32);
+        if has('PopItemWidth') then imgui.PopItemWidth(); end
+        tooltip('Show only the pieces whose name has these letters.');
+    end
+    X.fit(64);
+    if button('Reload', 'gpreload' .. slot, 64, 0) then
+        X.gearCache[slot .. ':' .. e] = nil;
+        X.askGear(slot, e);
+        g = S.gear;
+    end
+    tooltip('Ask the server for this list again (after you gave the squad a new piece).');
+    gap(2);
+    if not g.done then dimText('Looking...'); return; end
     if #g.items == 0 then
-        imgui.SameLine(0, 10);
         dimText('Nothing for this slot yet: trade a piece to a mate (or !squad give) first.');
         return;
     end
+
+    local wornId = nil;
+    if look then wornId = ls[e] and ls[e].id or nil; else wornId = d.eqId and d.eqId[e] or nil; end
+    local needle = tostring(S.gearFilter[1] or ''):lower():gsub('^%s+', ''):gsub('%s+$', '');
+    local drawn = 0;
     for k, item in ipairs(g.items) do
-        if k > 1 and (k - 1) % 2 ~= 0 then imgui.SameLine(0, 6); end
-        local label = string.format('Lv%d %s', item.level, itemDisplayName(item.id, item.name));
-        if button(label, 'gpi' .. slot .. '_' .. item.id .. '_' .. k, 0, 0) then
-            if look then
-                enqueue(string.format('/say !squad lockstyle %d %d %s', slot, item.id, SLOT_KEY[g.eq]));
-            else
-                enqueue(string.format('/say !squad equip %d %d %s', slot, item.id, SLOT_KEY[g.eq]));
+        local itemName = itemDisplayName(item.id, item.name);
+        if needle == '' or itemName:lower():find(needle, 1, true) then
+            local worn = wornId ~= nil and wornId ~= 0 and item.id == wornId;
+            local label = string.format('Lv%d %s%s', item.level, itemName, worn and (look and '  (shown)' or '  (worn)') or '');
+            if drawn > 0 then U.same_if_fits(imgui, X.textW(label) + X.sv(12), 6); end
+            drawn = drawn + 1;
+            if button(label, 'gpi' .. slot .. '_' .. item.id .. '_' .. k, 0, 0, worn and 'on' or nil) and not worn then
+                if look then
+                    enqueue(string.format('/say !squad lockstyle %d %d %s', slot, item.id, SLOT_KEY[e]));
+                else
+                    enqueue(string.format('/say !squad equip %d %d %s', slot, item.id, SLOT_KEY[e]));
+                end
+                X.gearChanged(slot);
             end
-            askSheet(2);
+            local stats = itemStatsText(item.id, item.name);
+            tooltip((stats and (stats .. '\n\n') or '') .. (worn and (look and 'This is the look shown in this slot now.' or who .. ' wears this now.')
+                or (look and 'Click to look like this (only the look; it shows at the next call)' or 'Click to put it on (it shows at the next call)')));
         end
-        local stats = itemStatsText(item.id, item.name);
-        tooltip((stats and (stats .. '\n\n') or '') .. (look and 'Click to look like this (only the look; call the mate again to see it)'
-            or 'Click to put it on (call the mate again to see it on them)'));
     end
-    if (g.total or 0) > #g.items then dimText(string.format('(%d more not shown)', g.total - #g.items)); end
+    if drawn == 0 then dimText('No piece in this list has "' .. tostring(S.gearFilter[1]) .. '" in its name.'); end
+    if (g.total or 0) > #g.items then dimText(string.format('(%d more not shown: the server lists the best 40)', g.total - #g.items)); end
 end
 
+-- "MNK 5 / WAR 2" from a sheet's header (a support job the player does not have yet: "(locked)")
+function X.jobsOf(h)
+    local jobs = tostring(h.job or '?') .. ' ' .. tostring(h.main or 0);
+    if h.sub ~= '-' and h.sub ~= '' and h.sub ~= nil then
+        if (tonumber(h.subLevel) or 0) > 0 then
+            jobs = jobs .. ' / ' .. tostring(h.sub) .. ' ' .. tostring(h.subLevel);
+        else
+            jobs = jobs .. ' / ' .. tostring(h.sub) .. ' (locked)';   -- support jobs work once you have them yourself
+        end
+    end
+    return jobs;
+end
+
+-- (until 1.27 the Profile began with this band; 1.28 has the mate row instead. Kept: nothing else changed here.)
 local function drawHeader(h)
     local role = string.lower(tostring(h.role or 'auto'));
     local rgba = ROLE_COLORS[role] or ROLE_COLORS.auto;
@@ -2658,6 +3881,144 @@ local function toggleSheetSwitch(h, name)
     askSheet(0.8);
 end
 
+-- (1.30) Are the numbers of this sheet LIVE? The server reads HP / MP / TP, the attributes, the combat values and
+-- haste from the mate itself, and only while it is called (squad.lua, !squad sheet: for a mate that is away it sends
+-- none of them and a note instead). So they are live when: the sheet has them, it is the selected mate's sheet (it
+-- always is when it is shown: X.sheetShown), the squad list says that mate is out, and the reading is fresh (the
+-- window asks again every 5 seconds; after 12 without an answer it no longer says so). EXP, jobs and gear are the
+-- mate's stored data: they are the same whether it is called or not.
+function X.sheetLive(d)
+    if d == nil or d.vitals == nil or #d.vitals == 0 or d.forSlot ~= S.sheetSlot then return false; end
+    if now() - (d.at or -1000) > 12 then return false; end
+    for _, m in ipairs(S.mates or {}) do
+        if m.slot == S.sheetSlot then return m.out == true; end
+    end
+    return false;
+end
+
+-- the four switches of a mate (squad.lua SQUAD_SW: what it is allowed to do), as the Profile names them
+X.SW_LABEL = { melee = 'Melee', ranged = 'Ranged', ja = 'Job abilities', magic = 'Magic' };
+X.SW_TIP = {
+    melee  = 'Melee: attacking with its weapon.',
+    ranged = 'Ranged: ranged attacks.',
+    ja     = 'Job abilities: its job abilities (Provoke, Sneak Attack, Convert ...).',
+    magic  = 'Magic: casting spells.',
+};
+
+-- (1.27) the Stats view of the profile window: what the window showed before its gear part
+-- (1.30) in groups, with the names said: Role / Mode / Race, Actions, the vitals, Attributes and Combat
+function X.statsView(d)
+    local h = d.hdr;
+    local width = contentWidth();
+    local statWidth = width > 0 and width or 440;
+
+    -- Role, Mode, Race: a muted name and its value, like on the mate's card
+    local function pair(label, value, first)
+        if not first then U.same_if_fits(imgui, X.textW(label .. '  ' .. value) + X.sv(8), 16); end
+        dimText(label); imgui.SameLine(0, 6);
+        colorText(C.text, value);
+    end
+    pair('Role', tostring(h.role or 'auto'), true);
+    if h.mode and h.mode ~= '' then pair('Mode', tostring(h.mode)); end
+    if h.race and h.race ~= '' and h.race ~= '?' then pair('Race', tostring(h.race)); end
+
+    -- Actions: what this mate is allowed to do (the server's switches). Each one says its state; a click changes it.
+    dimText('Actions'); imgui.SameLine(px(X.COL.label + 8), 0);
+    for i, name in ipairs(SWITCHES) do
+        local on = hasBit(h.mask or 15, SW_BIT[name]);
+        local label = X.SW_LABEL[name] .. (on and ': on' or ': off');
+        if i > 1 then U.same_if_fits(imgui, X.textW(label) + X.sv(12), 4); end
+        if button(label, 'sheetsw' .. tostring(S.sheetSlot or 0) .. name, 0, 0, on and 'on' or nil) then
+            toggleSheetSwitch(h, name);
+        end
+        tooltip(X.SW_TIP[name] .. ' Now: ' .. (on and 'allowed' or 'not allowed') .. '. Click to switch it ' .. (on and 'off.' or 'on.'));
+    end
+    X.group();
+
+    -- the numbers. "Live stats" only when they are read from this mate while it is out (X.sheetLive)
+    local live = X.sheetLive(d);
+    colorText(C.gold, live and 'Live stats' or 'Stats');
+    if live then
+        tooltip('Read from this mate while it is out, every few seconds: HP, MP, TP, the attributes, the combat values and haste. They include its gear. EXP and jobs are its stored data.');
+    elseif d.vitals and #d.vitals > 0 then
+        imgui.SameLine(0, 10);
+        dimText('(the last reading: not live now)');
+    end
+    drawVitalRow(d.vitals);      -- HP, MP and TP on one row
+    drawExpRow(d.exp);           -- EXP below them
+    if d.note then
+        wrapped(d.note, C.faint);
+        gap(2);
+    end
+
+    if d.stats or d.combat then
+        if has('Separator') then imgui.Separator(); end
+        local rows = math.max(d.stats and #d.stats or 0, d.combat and #d.combat or 0);
+        local rightX = math.floor(statWidth * 0.50);
+        -- every number ends at the same place in its column
+        local aEnd, cEnd = px(96), rightX + px(190);
+        local token = U.push(imgui, nil, { { 'ImGuiStyleVar_ItemSpacing', { X.sv(6), X.sv(8) } } });
+        local ok, err = pcall(function ()
+            colorText(C.gold, 'Attributes');
+            imgui.SameLine(rightX, 0);
+            colorText(C.gold, 'Combat');
+            for i = 1, rows do
+                local s = d.stats and d.stats[i];
+                local c = d.combat and d.combat[i];
+                if s then
+                    tint(C.dim, s[1]);
+                    local v = tostring(s[2]);
+                    imgui.SameLine(math.max(px(40), aEnd - X.textW(v)), 0);
+                    tint(C.text, v);
+                else
+                    imgui.Text(' ');
+                end
+                if c then
+                    imgui.SameLine(rightX, 0);
+                    tint(C.dim, c[1]);
+                    local v = tostring(c[2]);
+                    imgui.SameLine(math.max(rightX + px(110), cEnd - X.textW(v)), 0);
+                    tint(C.text, v);
+                end
+            end
+        end);
+        U.pop(imgui, token);
+        if not ok then error(err, 0); end
+    end
+
+    if d.haste and #d.haste > 0 then
+        local parts = {};
+        for _, v in ipairs(d.haste) do parts[#parts + 1] = string.format('%s %.2f%%', v[1], v[2] / 100); end
+        tint(C.dim, 'Haste');
+        imgui.SameLine(0, 12);
+        tint(C.text, table.concat(parts, '     '));
+    end
+
+    if d.jobs and #d.jobs > 0 then
+        local parts = {};
+        for i, j in ipairs(d.jobs) do
+            if i > 8 then break; end
+            parts[#parts + 1] = j[1] .. ' ' .. tostring(j[2]);
+        end
+        wrapped('Jobs: ' .. table.concat(parts, ', '), C.text);
+    end
+
+    -- (1.26l, Frost) what this mate can cast and use, in a window of its own
+    do
+        local nSpells, nAbilities = d.spells and #d.spells or 0, d.abilities and #d.abilities or 0;
+        local label = (nSpells + nAbilities > 0) and string.format('Spells and abilities (%d / %d)', nSpells, nAbilities)
+            or 'Spells and abilities';
+        if button(label, 'sheetactions', 0, 0, S.actionsOpen[1] and 'on' or nil) then
+            S.actionsOpen[1] = not S.actionsOpen[1];
+            S.actionsFresh = S.actionsOpen[1];
+        end
+        tooltip('The spells and job abilities this mate can use right now (its jobs and levels). Only while it is called.');
+        gap(2);
+    end
+
+    bluePicker(S.sheetSlot, d.hdr);
+end
+
 local function renderSheet()
     if not imgui or not S.sheetOpen[1] then return; end
     if S.sheetFresh then
@@ -2672,156 +4033,88 @@ local function renderSheet()
         end
         if has('SetNextWindowFocus') then imgui.SetNextWindowFocus(); end
     end
-    local d = S.profile;
-    local title = 'Squad sheet  v' .. tostring(addon.version) .. '###sm_sheet';
-    if d and d.hdr then
-        title = string.format('%s (%s %d)###sm_sheet', d.hdr.name, tostring(d.hdr.job), tonumber(d.hdr.main) or 0);
-    end
+    local d = X.sheetShown();
+    -- (1.28) one fixed title, in the theme's title colours like the menu and the Gambits window; who the window is
+    -- about is its first row (until 1.27 the title, a coloured band and the Mate list all said the name)
+    local title = 'Profile###sm_sheet';
     if has('SetNextWindowSize') and G('ImGuiCond_FirstUseEver') then
         imgui.SetNextWindowSize({ px(580), px(660) }, G('ImGuiCond_FirstUseEver'));
     end
     if has('SetNextWindowSizeConstraints') then
         imgui.SetNextWindowSizeConstraints({ px(540), px(420) }, { px(800), px(900) });
     end
-    local role = d and d.hdr and string.lower(tostring(d.hdr.role or 'auto')) or 'auto';
-    local roleColor = ROLE_COLORS[role] or ROLE_COLORS.auto;
-    local colors = pushColors({
-        { 'ImGuiCol_WindowBg', C.panel }, { 'ImGuiCol_Border', C.line },
-        { 'ImGuiCol_Separator', C.line }, { 'ImGuiCol_Text', C.text },
-        { 'ImGuiCol_TitleBg', { roleColor[1] * 0.52, roleColor[2] * 0.52, roleColor[3] * 0.52, 1 } },
-        { 'ImGuiCol_TitleBgActive', { roleColor[1] * 0.66, roleColor[2] * 0.66, roleColor[3] * 0.66, 1 } },
-    });
-    local vars = pushVars({
-        { 'ImGuiStyleVar_WindowRounding', 6 }, { 'ImGuiStyleVar_ChildRounding', 5 }, { 'ImGuiStyleVar_FrameRounding', 4 },
-        { 'ImGuiStyleVar_WindowPadding', { 12, 10 } }, { 'ImGuiStyleVar_ItemSpacing', { 8, 5 } }, { 'ImGuiStyleVar_FramePadding', { 6, 3 } },
-    });
+    local colors = X.windowColors('sheet', function ()
+        return { { 'ImGuiCol_WindowBg', C.panel }, { 'ImGuiCol_Border', C.line }, { 'ImGuiCol_Separator', C.line }, { 'ImGuiCol_Text', C.text } };
+    end);
+    local token = U.push(imgui, colors, X.vars());
     local flags = (G('ImGuiWindowFlags_NoCollapse') or 0);
-    if imgui.Begin(title, S.sheetOpen, flags) then
+    local fontPushed = X.pushFont();   -- (1.34) the text at this Size, laid out for it (see X.pushFont)
+    local shown = imgui.Begin(title, S.sheetOpen, flags);
+    local ok, err = pcall(function ()
+        if not shown then return; end
         scaleWindow();
-        if d == nil or d.hdr == nil then
-            dimText(now() < (S.sheetWaitUntil or 0) and 'Asking the server...' or 'No answer from the server. Press Sheet again.');
-        else
-            local h = d.hdr;
-            local width = contentWidth();
-            local statWidth = width > 0 and width or 440;
-            drawHeader(h);
-
-            local bits = { tostring(h.role or 'auto') };
-            if h.mode and h.mode ~= '' then bits[#bits + 1] = h.mode; end
-            if h.race and h.race ~= '' and h.race ~= '?' then bits[#bits + 1] = h.race; end
-            local left = table.concat(bits, '  \194\183  ');
-            tint(C.dim, left);
-            for i, name in ipairs(SWITCHES) do
-                imgui.SameLine(0, i == 1 and 12 or 4);
-                local on = hasBit(h.mask or 15, SW_BIT[name]);
-                if button(name, 'sheetsw' .. tostring(S.sheetSlot or 0) .. name, 0, 0, on and 'on' or nil) then
-                    toggleSheetSwitch(h, name);
-                end
-                tooltip(name .. ': ' .. (on and 'on' or 'off'));
-            end
-            gap(4);
-
-            drawVitalRow(d.vitals);
-            drawExpRow(d.exp);
-            if d.note then
-                wrappedColored(C.faint, d.note);
-                gap(2);
-            end
-
-            if d.stats or d.combat then
-                if has('Separator') then imgui.Separator(); end
-                colorText(C.gold, 'Current calculated stats');
-                gap(2);
-                local rows = math.max(d.stats and #d.stats or 0, d.combat and #d.combat or 0);
-                local rightX = math.floor(statWidth * 0.50);
-                for i = 1, rows do
-                    local s = d.stats and d.stats[i];
-                    local c = d.combat and d.combat[i];
-                    if s then
-                        tint(C.dim, s[1]);
-                        imgui.SameLine(px(56), 0);
-                        tint(C.text, tostring(s[2]));
-                    else
-                        imgui.Text(' ');
-                    end
-                    if c then
-                        local labelWidth = textWidth(c[1]) or 100;
-                        local valueX = rightX + math.max(110, labelWidth + 10);
-                        imgui.SameLine(rightX, 0);
-                        tint(C.dim, c[1]);
-                        imgui.SameLine(valueX, 0);
-                        tint(C.text, tostring(c[2]));
-                    end
-                    newLine();
-                end
-            end
-
-            if d.haste and #d.haste > 0 then
-                local parts = {};
-                for _, v in ipairs(d.haste) do parts[#parts + 1] = string.format('%s %.2f%%', v[1], v[2] / 100); end
-                tint(C.dim, 'Haste');
-                imgui.SameLine(0, 12);
-                tint(C.text, table.concat(parts, '     '));
-                newLine();
-            end
-
-            if d.jobs and #d.jobs > 0 then
-                local parts = {};
-                for i, j in ipairs(d.jobs) do
-                    if i > 8 then break; end
-                    parts[#parts + 1] = j[1] .. ' ' .. tostring(j[2]);
-                end
-                wrapped('Jobs: ' .. table.concat(parts, ', '), C.text);
-            end
-
-            -- (1.26l, Frost) what this mate can cast and use, in a window of its own
-            do
-                local nSpells, nAbilities = d.spells and #d.spells or 0, d.abilities and #d.abilities or 0;
-                local label = (nSpells + nAbilities > 0) and string.format('Spells and abilities (%d / %d)', nSpells, nAbilities)
-                    or 'Spells and abilities';
-                if button(label, 'sheetactions', 0, 0, S.actionsOpen[1] and 'on' or nil) then
-                    S.actionsOpen[1] = not S.actionsOpen[1];
-                    S.actionsFresh = S.actionsOpen[1];
-                end
-                tooltip('The spells and job abilities this mate can use right now (its jobs and levels). Only while it is called.');
-                gap(2);
-            end
-
-            if has('Separator') then imgui.Separator(); end
-            colorText(C.gold, 'Equipped items');
-            gap(2);
-            local gearWidth = contentWidth();
-            if gearWidth <= 0 then gearWidth = statWidth; end
-            local column = math.floor(gearWidth / 2);
-            local textMax = math.max(40, column - ICON - 18);
-            local eq = d.eq or {};
-            for i = 1, 8 do
-                drawGear(SHEET_LEFT[i], eq[SHEET_LEFT[i]], d.eqId and d.eqId[SHEET_LEFT[i]], textMax);
-                imgui.SameLine(column, 0);
-                drawGear(SHEET_RIGHT[i], eq[SHEET_RIGHT[i]], d.eqId and d.eqId[SHEET_RIGHT[i]], textMax);
-                newLine();
-            end
-
-            gearPicker(S.sheetSlot);   -- (1.18: was `slot`, which is not set in this function, so the picker never showed)
-            bluePicker(S.sheetSlot, d.hdr);
-
-            if has('Separator') then imgui.Separator(); end
-            wrappedColored(C.faint, 'The stats are read from your squad mate while they are out, so they already include their gear. '
-                .. 'Gear shown for a mate who is away is what they wear as this job.');
-            gap(2);
-            tint(C.faint, 'servermenu ' .. tostring(addon.version));
+        -- the first row, right below the title bar (the Gambits window has the same): the mate, as a list to pick
+        -- another one from, then its jobs. The name in the list is the selected slot's; the jobs are the sheet's, and
+        -- a sheet is only ever shown when it is that mate's (X.sheetShown).
+        local names, bySlot, current = {}, {}, nil;
+        for _, m in ipairs(S.mates or {}) do
+            names[#names + 1] = m.name;
+            bySlot[m.name] = m.slot;
+            if m.slot == S.sheetSlot then current = m.name; end
         end
-    end
+        if current then
+            local pick = combo('sheetmate', current, names, 150);
+            if pick and bySlot[pick] and bySlot[pick] ~= S.sheetSlot then
+                -- nothing more in this frame: `d` is the sheet of the mate before, the slot is the new mate's
+                openSheet(bySlot[pick], S.sheetTab);
+                return;
+            end
+            tooltip('Another squad mate, in this window (the same view and slot stay selected).');
+        elseif d and d.hdr then
+            colorText(C.gold, tostring(d.hdr.name));
+        else
+            dimText('Squad mate ' .. tostring(S.sheetSlot or ''));
+        end
+        if d == nil or d.hdr == nil then
+            X.fit(260, 12);
+            dimText(now() < (S.sheetWaitUntil or 0) and 'Asking the server...' or 'No answer from the server. Press Sheet again.');
+            return;
+        end
+        imgui.SameLine(0, 10);
+        colorText(C.text, X.jobsOf(d.hdr));
+
+        -- the two views: the main tabs of this window
+        if X.tab('Stats', 'sheettabstats', S.sheetTab ~= 'gear') then S.sheetTab = 'stats'; end
+        tooltip('Stats, HP/MP/TP, haste, jobs, spells and abilities');
+        imgui.SameLine(0, X.sv(4));
+        if X.tab('Gear', 'sheettabgear', S.sheetTab == 'gear') then S.sheetTab = 'gear'; end
+        tooltip('What the mate wears, changing a piece, and its look (lockstyle)');
+        if has('Separator') then imgui.Separator(); end
+        gap(2);
+
+        if S.sheetTab == 'gear' then
+            X.gearView(S.sheetSlot, d);
+        else
+            X.statsView(d);
+        end
+
+        if has('Separator') then imgui.Separator(); end
+        wrapped('The stats are read from your squad mate while they are out, so they already include their gear. '
+            .. 'Gear shown for a mate who is away is what they wear as this job.', C.faint);
+        gap(2);
+        tint(C.faint, 'servermenu ' .. tostring(addon.version));
+    end);
     S.scaledNow = false;
     imgui.End();
-    if colors > 0 then imgui.PopStyleColor(colors); end
-    if vars > 0 then imgui.PopStyleVar(vars); end
+    X.popFont(fontPushed);
+    U.pop(imgui, token);
+    if not ok then error(err, 0); end
 end
 
 -- (1.26l, Frost) the Spells and abilities window, next to the profile; it follows the sheet that is open
 local function renderActions()
     if not imgui or not S.actionsOpen[1] or not S.sheetOpen[1] then return; end
-    local d = S.profile;
+    local d = X.sheetShown();
     if S.actionsFresh then
         S.actionsFresh = false;
         if has('SetNextWindowFocus') then imgui.SetNextWindowFocus(); end
@@ -2831,9 +4124,15 @@ local function renderActions()
     end
     local title = 'Spells and abilities###sm_actions';
     if d and d.hdr then title = string.format('%s: spells and abilities###sm_actions', d.hdr.name); end
-    local colors = pushColors({ { 'ImGuiCol_WindowBg', C.panel }, { 'ImGuiCol_Border', C.line }, { 'ImGuiCol_Text', C.text } });
-    local vars = pushVars({ { 'ImGuiStyleVar_WindowRounding', 6 }, { 'ImGuiStyleVar_WindowPadding', { 12, 10 } }, { 'ImGuiStyleVar_ItemSpacing', { 8, 4 } } });
-    if imgui.Begin(title, S.actionsOpen, G('ImGuiWindowFlags_NoCollapse') or 0) then
+    -- (1.27) the theme's colours and the shared metrics, like the menu and the profile
+    local colors = X.windowColors('actions', function ()
+        return { { 'ImGuiCol_WindowBg', C.panel }, { 'ImGuiCol_Border', C.line }, { 'ImGuiCol_Text', C.text } };
+    end);
+    local token = U.push(imgui, colors, X.vars());
+    local fontPushed = X.pushFont();   -- (1.34) the text at this Size, laid out for it (see X.pushFont)
+    local shown = imgui.Begin(title, S.actionsOpen, G('ImGuiWindowFlags_NoCollapse') or 0);
+    local ok, err = pcall(function ()
+        if not shown then return; end
         scaleWindow();
         if d == nil or d.hdr == nil then
             dimText('Asking the server...');
@@ -2874,17 +4173,19 @@ local function renderActions()
             wrappedColored(C.faint, 'Ask for one in party chat, e.g. /p cure <me>, /p provoke. A mate you call again '
                 .. 'after a level up or a job change shows the new list.');
         end
-    end
+    end);
     S.scaledNow = false;
     imgui.End();
-    if colors > 0 then imgui.PopStyleColor(colors); end
-    if vars > 0 then imgui.PopStyleVar(vars); end
+    X.popFont(fontPushed);
+    U.pop(imgui, token);
+    if not ok then error(err, 0); end
 end
 
 local function render()
     if not imgui then return; end
     buttonWindow();
     menuWindow();
+    X.campBar();   -- (1.33) the compact camp bar, when switched on
     renderSheet();
     renderActions();
 end
@@ -2893,6 +4194,16 @@ end
 ashita.events.register('load', 'servermenu_load', function ()
     S.menuLoadedAt = os.time();   -- (1.26c) an autobox flag older than this is left over from an earlier game
     local hadWide, hadCfg = loadCfg();
+    -- (1.27) the theme. A settings file from before themes has no theme line: that installation keeps the look it has
+    -- (Squad is this menu's look as it always was). No settings file at all is a new installation: Crimson. Either is
+    -- then written down, and from then on only the player changes it. Nothing here touches the character's shared
+    -- choice (xifo_ui: made only when a theme is picked), which wins while that character is logged in.
+    if not U.valid(S.cfg.theme) then
+        S.cfg.theme = hadCfg and 'squad' or U.DEFAULT;
+        S.cfgDirty = true;
+    end
+    X.follow = U.follow.new(installPath());
+    X.syncTheme(now(), true);
     -- auto mode always starts off at login (phoenixsolo sends the off switches), so the tab must say OFF
     if S.cfg.auto_me ~= 'false' then S.cfg.auto_me = 'false'; S.cfgDirty = true; end
     writeAutoFlag(false);
@@ -2912,6 +4223,8 @@ ashita.events.register('d3d_present', 'servermenu_present', function ()
     syncAutoFlag()
     local t = now();
     pump(t);
+    ROLE_INFO.rsBurstTick(t);   -- (1.26n, M3) the few asks right after a change
+    X.syncTheme(t);             -- (1.27) the character's theme, also when Gambits changed it a moment ago
     -- (1.26d) no background refresh within 8 s of a click, so the next click is not stuck 2.2 s behind one
     local idle = t - (S.lastClick or -1000) > 8;
     if idle and S.open[1] and #S.queue == 0 and t - S.lastAsk > 15 and S.tab == 'Squad' then ask(); end   -- keeps the squad current while it is shown
@@ -2956,6 +4269,28 @@ ashita.events.register('command', 'servermenu_command', function (e)
     if #args == 0 then return; end
     local first = args[1]:lower();
     local sub = (args[2] or ''):lower();
+    -- (1.32) the theme was chosen a moment ago, here or in Gambits: read it once, now (also when Gambits stopped the line first)
+    if first == X.THEME_SIGNAL then
+        e.blocked = true;
+        X.syncTheme(now(), true);
+        return;
+    end
+    -- (1.34) the Gambits window was just shown or hidden (Gambits 0.3.9 says so, also when it stopped the line first):
+    -- the launcher's Gambits half follows at its next frame
+    if first == X.GAMBITS_SIGNAL then
+        e.blocked = true;
+        X.gsqShownGuess = nil;
+        X.gambitsShown(true);
+        return;
+    end
+    -- (1.26n) a chat line another add-on or you sent (never blocked or changed: it still runs as it is):
+    --   M1: the menu waits SAY_GAP after it before typing its own next line;
+    --   a !squad panel asked by someone else is counted, so its answer is not credited to one of the menu's asks (M2);
+    --   a squad change (!squad ruleset / reapply / job ...): the Rules line waits for a fresh answer, asked at +2, +7, +11 s (M3)
+    if ROLE_INFO.RS_CHAT[first] and ROLE_INFO.rsSeenSay(e.command, now()) and first == '/say' then
+        if e.command:lower():match('^/say%s+!squad%s+panel') then ROLE_INFO.rsSent(now()); end
+        if ROLE_INFO.rsCommand(e.command) then return; end
+    end
     -- (1.26c) you switched autobox yourself (not a line this menu sent): your choice wins, the kept /autobox off is dropped
     if first == '/autobox' and (sub == 'on' or sub == 'off' or sub == 'toggle') then
         local t, own = now(), false;
@@ -2973,10 +4308,10 @@ ashita.events.register('command', 'servermenu_command', function (e)
     if first == '/sq' or first == '/squadpanel' then
         e.blocked = true;
         setTab('Squad');
-        if sub == 'sheet' then
+        if sub == 'sheet' or sub == 'gear' then   -- (1.27) /sq gear [slot]: the profile window on its Gear view
             setOpen(true);
             local slot = tonumber(args[3] or '') or S.sheetSlot or (S.mates[1] and S.mates[1].slot);
-            if slot then openSheet(slot) else S.sheetOpen[1] = true; say('no mate in the list yet; press Refresh first.'); end
+            if slot then openSheet(slot, sub == 'gear' and 'gear' or nil) else S.sheetOpen[1] = true; say('no mate in the list yet; press Refresh first.'); end
         elseif sub == 'refresh' or sub == 'on' then setOpen(true);
         elseif sub == 'off' then S.open[1] = false;
         else setOpen(not S.open[1]); end
@@ -3004,6 +4339,14 @@ ashita.events.register('command', 'servermenu_command', function (e)
             say(string.format('/menu opacity <10-100>   the Squads button (solid under the mouse). Now: %d%%   |   /menu opacity menu <10-100>   the menu\'s background. Now: %d%%',
                 math.floor(opacityOf('button_opacity') * 100 + 0.5), math.floor(opacityOf('menu_opacity') * 100 + 0.5)));
         end
+    elseif sub == 'theme' then
+        -- (1.27) /menu theme classic | squad | crimson: this character's theme, here and in Gambits
+        local name = string.lower(tostring(args[3] or ''));
+        if X.pickTheme(name) then
+            say('theme: ' .. U.THEME_NAMES[name] .. '.');
+        else
+            say('/menu theme classic | squad | crimson   Now: ' .. tostring(U.THEME_NAMES[X.themeName]));
+        end
     elseif sub == 'scale' then
         local v = tonumber(args[3] or '');
         if v then
@@ -3021,7 +4364,7 @@ ashita.events.register('command', 'servermenu_command', function (e)
         setTab(sub:sub(1, 1):upper() .. sub:sub(2));
         setOpen(true);
     elseif sub == 'help' then
-        say('/menu  open or close  |  /menu squad|dualbox  |  /menu gambits (dualbox)  |  /menu button  |  /menu resetbutton  |  /menu scale <0.75-3>  |  /menu opacity <10-100>  |  /sq');
+        say('/menu  open or close  |  /menu squad|dualbox  |  /menu gambits (dualbox)  |  /menu button  |  /menu resetbutton  |  /menu scale <0.75-3>  |  /menu opacity <10-100>  |  /menu theme classic|squad|crimson  |  /sq  |  /sq gear [slot]');
     else
         setOpen(not S.open[1]);
     end

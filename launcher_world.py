@@ -272,6 +272,27 @@ class World:
                 self.say(note)
         except Exception as e:
             self.say(f"Could not apply the rates ({e}) - starting with the server's normal settings.")
+        # (2026-11-25) the HARDCORE server files, as PLAY writes them: this world's hardcore switches, open or not, and on
+        # The Hub whether visitors play at the rates they bring from home (hardcore.json "visitor_rates")
+        try:
+            import launcher_hardcore
+            import launcher_passport as pp
+            name = ""
+            try:
+                conn = pp.connect(self.cfg)
+                try:
+                    name = pp.world_identity(conn)["name"]
+                finally:
+                    conn.close()
+            except Exception:
+                pass
+            is_open = bool(self.hosting and self.settings.get("open"))
+            for problem in launcher_hardcore.write_server_files(self.kit, self.cfg["server_dir"], is_open, name):
+                self.say(problem)
+            if is_open and launcher_hardcore.settings(self.kit).get("visitor_rates"):
+                self.say("Visitors play at the rates they bring from home.")
+        except Exception as e:
+            self.say(f"Could not write the Hardcore files ({e}).")
 
     def spawn(self, name):
         return core.start_server(self.cfg, name, self.logs)

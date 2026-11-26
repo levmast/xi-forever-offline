@@ -1,0 +1,26 @@
+{
+  "name": "Chronicle",
+  "about": "A theme that is always there to pick on the Theme page (see launcher_theme.py and README.txt in this folder): the launcher as an old illustrated chronicle of Vana'diel: tooled leather, gold leaf, aged vellum, the official pencil sketches printed into the page and illuminated red capitals. Its buttons are the pictures in the chronicle-ui folder and its banners the chronicle_*__theme-chronicle pictures (art-src\\scripts\\chron_buttons.py and chron_banners.py draw them, from the concept art in art-src\\newart). Lettering in the pictures is Cinzel, Cinzel Decorative and IM FELL English (art-src\\fonts, SIL Open Font License); the launcher's own text stays in the usual font (Segoe UI on Windows). It was the standard look from 2026-11-24 until Windurst took over on 2026-11-25; it stays pickable on the Theme page. Its song is JØ's \"Roots\".",
+  "colours": {
+    "BG": "#1b110b",
+    "PANEL": "#2a1a11",
+    "PANEL2": "#372318",
+    "FG": "#f1e3c4",
+    "DIM": "#bda57f",
+    "BORDER": "#7a5530",
+    "LINE": "#4b3220",
+    "OFF": "#6e6052",
+    "GOLD": "#d9a845",
+    "GOLD_LIT": "#f6d57e",
+    "GOLD_DIM": "#8d6a2d",
+    "PARCH": "#ecd8a8",
+    "ACCENT": "#a8302a",
+    "GREEN": "#5f9446",
+    "RED": "#c23a2e",
+    "GREY": "#8c7f6e"
+  },
+  "art": {
+    "folder": "chronicle-ui"
+  },
+  "sound": "chronicle_roots.mp3"
+}

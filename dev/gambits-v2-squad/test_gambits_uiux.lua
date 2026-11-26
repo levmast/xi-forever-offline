@@ -497,7 +497,7 @@ do
             local depthAt = 0
             for i, l in ipairs(g.log) do
                 if l == 'child ##gsq-right-body' then depthAt = i end
-                if l:find('button Save##gsq-save', 1, true) or l:find('button Save %*##gsq-save') then save = i end
+                if l:find('##gsq-save', 1, true) or l:find('##gsq-assign', 1, true) or l:find('##gsq-apply', 1, true) then save = i end -- (0.3.4: any action of the bar)
             end
             local closes = 0
             for i = depthAt, (save or 0) do if g.log[i] == 'endchild' then closes = closes + 1 end end
@@ -512,10 +512,14 @@ do
     MATES[1].chosen = 3
     d.dirty = true
     M.draw()
-    check(hasLabel(g, '3  Mage 28   (in use, editing, not saved)##gsq-set-3') and hasLabel(g, '5  Mage 75 plan##gsq-set-5'),
-          'the set list marks "in use" and "editing" separately')
-    check(hasText(g, 'in use by Mira'), 'the editor heading says "in use by Mira"')
-    check(logHas(g, 'disabled') and hasText(g, 'Save first'), 'Assign & Apply is disabled while the open set has unsaved changes ("Save first")')
+    -- (0.3.5) "in use" was said from the choice alone. The row now says what the mate does with the set ("chosen" here:
+    -- this stand-in server does not report what a mate runs; "active" only on the server's word, test_gambits_save_apply),
+    -- and the heading's "in use by" became the status area's "<mate> runs" line.
+    -- (0.3.6) the row is the set's name; chosen / editing / not saved are in the status area and the row's tooltip (section Q)
+    check(hasLabel(g, '3  Mage 28##gsq-set-3') and hasLabel(g, '5  Mage 75 plan##gsq-set-5'),
+          'the set list shows the names; nothing is squeezed in after them')
+    check(hasText(g, 'Mira runs') and hasText(g, 'Editing') and not hasText(g, 'in use by Mira'), 'the status area says what is edited and what Mira runs; the heading no longer says "in use by"')
+    check(hasLabel(g, 'Save *##gsq-save') and not hasLabel(g, 'Assign & Apply##gsq-assign'), '(0.3.4) with unsaved changes the bar offers Save, never an Assign & Apply of the older saved rules')
     sent = {}
     g.clicks['Assign & Apply##gsq-assign'] = true
     M.draw()
@@ -523,7 +527,7 @@ do
     local assigned = false
     for _, l in ipairs(sent) do assigned = assigned or l:find('!squad ruleset', 1, true) ~= nil end
     check(not assigned, 'and a click on it does nothing then')
-    check(hasText(g, 'Unsaved changes') and hasText(g, '(then Assign & Apply to use them)'), 'the Save bar says what is not saved')
+    check(hasText(g, 'Unsaved changes') and hasText(g, 'Mira uses this Rule Set and is not summoned: the saved rules apply when it is called.'), 'the bar says what is not saved and when it applies')
     MATES[1].chosen = 0
     -- the Starter dropdown (THF has two), the single starter button (WAR)
     local gt = fakeGui()
@@ -711,7 +715,8 @@ do
     S.wsOpen = true
     M.draw(); M.draw(); M.draw()
     local openH = g.sizes['##gsq-rules'][2]
-    local saveAfter = logHas(g, 'button Save##gsq-save') or logHas(g, 'button Save *##gsq-save')
+    local saveAfter = false -- (0.3.4: the bar shows the actions that fit; any of them counts)
+    for _, l in ipairs(g.log) do saveAfter = saveAfter or l:find('##gsq-save', 1, true) ~= nil or l:find('##gsq-assign', 1, true) ~= nil or l:find('##gsq-apply', 1, true) ~= nil end
     check(closedH > 4 * 24 + 10 and openH < closedH and openH >= 4 * 24 + 10 and saveAfter,
           string.format('20 rules in 900 px: %d px with Weapon Skills closed, fewer with it open (%d px, >= 4 rows); the Save bar is drawn', closedH, openH))
     S.wsOpen = false
@@ -1241,8 +1246,8 @@ do
     M.roles_section()
     check(S.rolesOpen == true and prefs.roles_open == true, 'K8 clicking the header opens it and remembers roles_open')
     local gs = readAll(ADDON_DIR .. '/Gambits.lua')
-    check(gs:find('roles_open = true }', 1, true) and gs:find("s.roles_open = s.roles_open == true", 1, true) and gs:find("addon.version = '0.3.3'", 1, true),
-          'K8 Gambits.lua: roles_open whitelisted and cleaned; version 0.3.3')
+    check(gs:find('roles_open = true }', 1, true) and gs:find("s.roles_open = s.roles_open == true", 1, true) and gs:find("addon.version = '0.3.9'", 1, true),
+          'K8 Gambits.lua: roles_open whitelisted and cleaned; version 0.3.9')
     serve()
     -- K9: themes and sizes, open with every dropdown and tooltip, narrow window: balanced, no format calls
     for _, case in ipairs({ { 'classic', 1, { 1000, 560 } }, { 'squad', 0.7, { 700, 400 } }, { 'crimson', 2, { 1060, 580 } } }) do
@@ -1270,6 +1275,242 @@ do
     for i = #SQUAD, 1, -1 do SQUAD[i] = nil end
     for i, m in ipairs(savedSquad) do SQUAD[i] = m end
     S.roles, S.rolesOpen = nil, false
+end
+
+-- ================================================================= P. (0.3.5) one look with the Squads menu and the Profile
+section('P (0.3.5): mate row, divider, row states, status area (Editing / runs), rule controls, value widths')
+do
+    local U2 = M.UI
+    -- ---- the states are made from the palette, in every theme; no palette value is touched
+    for _, name in ipairs(M.THEME_ORDER) do
+        local c = M.THEMES[name]
+        local before = string.format('%.3f %.3f %.3f|%.3f %.3f %.3f|%.3f %.3f %.3f', c.tabSel[1], c.tabSel[2], c.tabSel[3], c.rowSel[1], c.rowSel[2], c.rowSel[3], c.ok[1], c.ok[2], c.ok[3])
+        local st = U2.states(c)
+        local after = string.format('%.3f %.3f %.3f|%.3f %.3f %.3f|%.3f %.3f %.3f', c.tabSel[1], c.tabSel[2], c.tabSel[3], c.rowSel[1], c.rowSel[2], c.rowSel[3], c.ok[1], c.ok[2], c.ok[3])
+        check(before == after and st.tab == c.tabSel and st.active == c.ok and st.warn == c.warn and st.muted == c.muted
+            and st.rowFill[1] == c.rowSel[1] and st.rowFill[4] < 0.5 and st.rowLine[1] >= c.tabSel[1] and U2.states(c) == st,
+              name .. ': selected tab = tabSel, selected row = a light tint of rowSel with a brighter line, active = ok, warning = warn; the palette is untouched')
+    end
+
+    -- ---- the divider's place
+    local function draft(nRules)
+        local rules = {}
+        for i = 1, nRules do rules[i] = rule('PARTY', 'HPP_LT', tostring(10 + i), nil, nil, 'family', 'CURE') end
+        return { num = 3, job = 'RDM', name = 'Mage 28', flags = 'o', rules = rules, dirty = false }
+    end
+    setup(fakeGui({ avail = { 1064, 560 } }), 1, draft(3))
+    local w, lo, hi, bar
+    S.leftW = nil
+    w, lo, hi, bar = M.split_width(1064)
+    check(w == 287 and lo == 200 and hi == 1064 - 420 - bar and bar == 6, 'a 1064 px body: the Rule Set column is 287 px (27 %; 0.3.4: 383), between 200 and what leaves the editor 420')
+    check(M.split_width(704) == 220 and M.split_width(2000) == 300, 'the narrowest window (704 px body): 220 px; a very wide one: 300 px, the rest is the editor\'s')
+    S.leftW = 900
+    check(M.split_width(1064) == 1064 - 420 - 6, 'dragged too far right: stops where the editor still has 420 px')
+    S.leftW = 20
+    check(M.split_width(1064) == 200, 'dragged too far left: stops at 200 px')
+    S.leftW = 260
+    setup(fakeGui({ avail = { 2128, 560 } }), 1, draft(3), 2)
+    check(M.split_width(2128) == 520, 'the place is kept at 100 %: at 200 % it is twice as wide (260 -> 520)')
+    S.leftW = nil
+
+    -- ---- what a set is to the mate, and what the mate runs: the server's word only
+    local function mate(over) local m = { slot = 1, name = 'Mira', job = 'RDM', level = 28, chosen = 3, out = true } for k, v in pairs(over or {}) do m[k] = v end return m end
+    local function live(state, num, dropped) return { state = state, num = num or 0, why = '-', fb = 0, dropped = dropped or 0 } end
+    local g = fakeGui({ avail = { 1064, 560 } })
+    local d = draft(3)
+    setup(g, 1, d)
+    local st = U2.states(M.theme)
+    S.server.caps = { live = true }
+    S.liveUnsure, S.liveFailed = nil, nil
+    local mark, tone = M.set_mark(3, mate({ live = live('set', 3) }))
+    check(mark == 'active' and tone == st.active, 'the server reports that the mate runs the set: "active", green')
+    mark, tone = M.set_mark(3, mate({ live = live('job') }))
+    check(mark == 'Apply needed' and tone == st.warn, 'chosen, the mate is out and runs something else: "Apply needed", the warning colour (never "active")')
+    check(M.set_mark(3, mate({ out = false, live = live('off') })) == 'next call', 'chosen, the mate is not called: "next call"')
+    check(M.set_mark(5, mate({ live = live('set', 3) })) == nil and M.set_mark(5, mate({ live = live('pending', 5) })) == 'still running',
+          'another set: no mark; one the mate still runs from its last call although another is chosen: "still running"')
+    S.liveUnsure = true
+    check(M.set_mark(3, mate({ live = live('set', 3) })) == 'chosen', 'while what the mate runs is being checked: "chosen", not "active"')
+    S.liveUnsure = nil
+    S.server.caps = nil
+    mark, tone = M.set_mark(3, mate({ live = live('set', 3) }))
+    check(mark == 'chosen' and tone == nil, 'a server that does not report what runs: "chosen" from the choice, never "active"')
+    S.server.caps = { live = true }
+    local text, t2 = M.running_line(mate({ live = live('set', 5, 2) }), d)
+    check(text:find('Mage 75 plan', 1, true) and text:find('not the set open here', 1, true) and text:find('2 rules skipped', 1, true) and t2 == 'ok',
+          'editing set 3 while the mate runs set 5: the line names set 5 and says it is not the set open here: ' .. text)
+    text = M.running_line(mate({ live = live('set', 3) }), d)
+    check(text:find('Mage 28', 1, true) and not text:find('not the set open here', 1, true), 'the mate runs the set that is open: just its name')
+    text, t2 = M.running_line(mate({ live = live('pending', 5) }), d)
+    check(text:find('Apply needed', 1, true) and t2 == 'gold', 'pending: what still runs, and "Apply needed" for what is chosen: ' .. text)
+    check(M.running_line(mate({ out = false, live = live('off') }), d):find('not called', 1, true) and M.running_line(mate({ live = live('job') }), d) == 'default job rules'
+        and M.running_line(mate({ live = live('fallback') }), d):find('not used', 1, true), 'not called / default job rules / fallback are said as such')
+    S.server.caps = nil
+    check(M.running_line(mate({ live = live('set', 3) }), d):find('not reported by this server', 1, true), 'a server that does not report it: said so, with what is chosen')
+
+    -- ---- drawn: the mate row, the divider, a row that is selected AND active, the status area, the rule controls
+    S.server.caps = { live = true }
+    MATES[1].chosen, MATES[1].out, MATES[1].live = 3, true, live('set', 3)
+    S.selectedSet, S.sel = 3, 1
+    d.dirty = false
+    local pushed, bars, widths = {}, 0, {}
+    g.PushStyleColor = function(_, c) g.colors = g.colors + 1; pushed[#pushed + 1] = c end
+    g.SetNextItemWidth = function(wd) widths[#widths + 1] = wd end
+    g.GetItemRectMin, g.GetItemRectMax = function() return { 10, 10 } end, function() return { 210, 28 } end
+    g.ColorConvertFloat4ToU32 = function(c) return c end
+    g.GetWindowDrawList = function() return { AddRectFilled = function(_, a, b, col) if col == st.rowLine then bars = bars + 1 end end } end
+    M.draw()
+    check(balanced(g), 'drawn with every new part: balanced')
+    local firstCombo
+    for _, l in ipairs(g.log) do if l:find('^combo ') then firstCombo = l; break end end
+    check(firstCombo == 'combo ##gsq-mate = Mira' and hasText(g, 'RDM 28'), 'the first control is the mate list, showing the name only; its jobs and levels stand next to it')
+    check(logHas(g, 'button ##gsq-split') and not hasText(g, 'Squad mate'), 'the divider is drawn between the two panels; the "Squad mate" caption is gone')
+    local sawFill, sawGreen = false, false
+    for _, c in ipairs(pushed) do sawFill = sawFill or c == st.rowFill; sawGreen = sawGreen or c == M.theme.ok end
+    check(hasLabel(g, '3  Mage 28   (active)##gsq-set-3') and sawFill and sawGreen and bars == 8,
+          'a set that is selected AND active: the row tint and line (selected), green text and the word "active" (' .. bars .. ' line bars: its row and the selected rule\'s)')
+    check(hasText(g, 'Editing') and hasText(g, '"Mage 28"  (#3)') and hasText(g, 'Mira runs') and hasText(g, 'Active on Mira') and not hasText(g, 'in use by'),
+          'the status area: Editing "Mage 28" (#3) with its state, and what Mira runs; the heading no longer says "in use by"')
+    local lines = M.status_lines(d, M.mate())
+    check(#lines == 2 and lines[1][1] == 'Editing' and lines[1][4] == 'Active on Mira' and lines[2][1] == 'Mira runs' and lines[2][3] == 'ok', 'M.status_lines: Editing (+ state), <mate> runs (the server\'s word)')
+    check(M.footer_height(d) >= 2 * 18, 'the status area has room for its two lines (' .. tostring(M.footer_height(d)) .. ' px)')
+    check(hasLabel(g, 'Add rule##gsq-add') and hasLabel(g, 'Up##gsq-up') and hasLabel(g, 'Down##gsq-down') and hasLabel(g, 'Remove##gsq-remove')
+        and not hasLabel(g, 'Top##gsq-top') and not hasLabel(g, 'Bottom##gsq-bottom') and not hasLabel(g, 'On / off##gsq-toggle') and logHas(g, 'combo ##gsq-rulemore = More'),
+          'next to the list: Add rule, Up, Down, Remove and More; no Top, Bottom or On / off button')
+    if #d.rules >= 3 then
+        local third = d.rules[3]
+        S.sel = 3
+        g.combos['##gsq-rulemore'], g.picks['##gsq-rulemore'] = true, 'Move to top'
+        M.draw()
+        g.combos['##gsq-rulemore'] = nil
+        check(d.rules[1] == third and S.sel == 1 and d.dirty, 'More > Move to top: the selected rule is the first now (the same M.move_rule_end as the Top button was)')
+        S.sel = 1
+        g.combos['##gsq-rulemore'], g.picks['##gsq-rulemore'] = true, 'Move to bottom'
+        M.draw()
+        g.combos['##gsq-rulemore'] = nil
+        check(d.rules[#d.rules] == third and S.sel == #d.rules, 'More > Move to bottom: it is the last')
+    end
+    -- value fields take the room there is, and keep their smallest width in a narrow panel
+    local widest = 0
+    for _, wd in ipairs(widths) do widest = math.max(widest, wd) end
+    check(widest == 340, 'a wide window: the control with the rule\'s action name is 340 px (0.3.4: 260), up to its limit')
+    widths = {}
+    g.avail = { 300, 400 }
+    M.draw()
+    local narrowMax, kept = 0, false
+    for _, wd in ipairs(widths) do narrowMax = math.max(narrowMax, wd); kept = kept or wd == 260 end
+    check(kept and narrowMax <= 300 and balanced(g), 'a narrow panel (300 px): it keeps its smallest width, 260 px, and no control is asked to be wider than the panel (' .. narrowMax .. ')')
+    MATES[1].chosen, MATES[1].out, MATES[1].live = 0, false, nil
+    S.server.caps = nil
+end
+
+-- ================================================================= Q. (0.3.6) follow-up from the first DEV session
+section('Q (0.3.6): the list row is the set\'s name; the Save buttons stay on the screen')
+do
+    local function draft(nRules)
+        local rules = {}
+        for i = 1, nRules do rules[i] = rule('PARTY', 'HPP_LT', tostring(10 + i), nil, nil, 'family', 'CURE') end
+        return { num = 3, job = 'RDM', name = 'Mage 28', flags = 'o', rules = rules, dirty = false }
+    end
+    local function live(state, num) return { state = state, num = num or 0, why = '-', fb = 0, dropped = 0 } end
+
+    -- ---- 7. the Rule Set list: the name, and "active" when the server says so; the rest is in the status area
+    local g = fakeGui({ avail = { 1064, 560 } })
+    local d = draft(3)
+    setup(g, 1, d)
+    S.server.caps = { live = true }
+    MATES[1].chosen, MATES[1].out, MATES[1].live = 3, false, live('off')
+    d.dirty = true
+    M.draw()
+    check(hasLabel(g, '3  Mage 28##gsq-set-3') and not hasLabel(g, 'next call') and not hasLabel(g, 'editing') and not hasLabel(g, 'chosen'),
+          'a set chosen for a mate that is not called, open with unsaved changes: the row is "3  Mage 28", nothing after the name')
+    check(hasText(g, 'Mira runs') and hasText(g, 'nothing: not called.  Next call: Mage 28') and hasText(g, 'Unsaved changes'),
+          'the status area says it: "Mira runs  nothing: not called.  Next call: Mage 28", and "Unsaved changes" on the Editing line')
+    local gh = fakeGui({ avail = { 1064, 560 }, hover = true })
+    setup(gh, 1, d)
+    S.server.caps = { live = true }
+    M.draw()
+    local tip = false
+    for _, t in ipairs(gh.tips) do tip = tip or (tostring(t):find('Chosen for Mira: used when Mira is called', 1, true) ~= nil and tostring(t):find('with unsaved changes', 1, true) ~= nil) end
+    check(tip, 'the row\'s tooltip still has the details (chosen for the next call; open in the editor, with unsaved changes)')
+    MATES[1].out, MATES[1].live = true, live('set', 3)
+    d.dirty = false
+    local g2 = fakeGui({ avail = { 1064, 560 } })
+    local pushed = {}
+    g2.PushStyleColor = function(_, c) g2.colors = g2.colors + 1; pushed[#pushed + 1] = c end
+    setup(g2, 1, d)
+    S.server.caps = { live = true }
+    M.draw()
+    local green, fill = false, false
+    for _, c in ipairs(pushed) do green = green or c == M.theme.ok; fill = fill or c == M.UI.states(M.theme).rowFill end
+    check(hasLabel(g2, '3  Mage 28   (active)##gsq-set-3') and green and fill and hasLabel(g2, '5  Mage 75 plan##gsq-set-5'),
+          'the set the server reports as running: "(active)" after the name, green, and the selection tint when it is selected; other rows are just names')
+    MATES[1].live = live('job')
+    local g3 = fakeGui({ avail = { 1064, 560 } })
+    setup(g3, 1, d)
+    S.server.caps = { live = true }
+    M.draw()
+    check(hasLabel(g3, '3  Mage 28##gsq-set-3') and not hasLabel(g3, 'Apply needed)') and hasText(g3, 'Apply needed'),
+          'chosen but not running: the row is the name only; "Apply needed" is in the status area')
+
+    -- ---- 8. the panels end where the screen ends
+    local function drawn(scale, avail, screenH, cursorY, dirty)
+        local gg = fakeGui({ avail = avail })
+        gg.GetCursorScreenPos = function() return 0, cursorY end
+        -- (the stand-in says the window's room everywhere; inside a panel ImGui says the PANEL's room, and the rules'
+        -- height is worked out from that, so it is modelled here)
+        local stack, realBegin, realEnd = {}, gg.BeginChild, gg.EndChild
+        gg.BeginChild = function(id, size, ...)
+            local r = realBegin(id, size, ...)
+            stack[#stack + 1] = (type(size) == 'table' and (size[2] or 0) > 0) and size[2] or (stack[#stack] or avail[2])
+            return r
+        end
+        gg.EndChild = function(...) table.remove(stack); return realEnd(...) end
+        gg.GetContentRegionAvail = function() return { avail[1], stack[#stack] or avail[2] } end
+        local dd = draft(12)
+        dd.dirty = dirty ~= false
+        api.display_h = screenH and function() return screenH end or nil
+        setup(gg, 1, dd, scale)
+        S.server.caps = { live = true }
+        MATES[1].chosen, MATES[1].out, MATES[1].live = 3, true, live('set', 3)
+        M.draw(); M.draw()
+        local left = gg.sizes['##gsq-left'] and gg.sizes['##gsq-left'][2]
+        local body = gg.sizes['##gsq-right-body'] and gg.sizes['##gsq-right-body'][2]
+        return gg, left, body, M.footer_height(dd), dd
+    end
+    local gA, leftA = drawn(1, { 1064, 900 }, 2000, 100)
+    check(leftA == 900 - 6, 'the window wholly on the screen: the panels have the window\'s height, as before (' .. tostring(leftA) .. ')')
+    local gB, leftB, bodyB, footB = drawn(1, { 1064, 900 }, 700, 300)
+    check(leftB == 700 - 300 - 6 - 10 and bodyB + footB <= leftB and balanced(gB),
+          string.format('the window reaching 500 px below the screen\'s bottom: the panels end at the screen (%s px), and the rules (%s) plus the status area and buttons (%s) fit in that', tostring(leftB), tostring(bodyB), tostring(footB)))
+    local after, save, apply = false, false, false
+    for i, l in ipairs(gB.log) do
+        if l == 'child ##gsq-right-body' then after = i end
+        if after and l:find('##gsq-save', 1, true) and not l:find('apply', 1, true) then save = true end
+        if after and l:find('##gsq-save-apply', 1, true) then apply = true end
+    end
+    check(save and apply, 'Save and Save & Apply are drawn below the scrolling rules, inside that height: reachable')
+    local gC, leftC = drawn(1, { 1064, 900 }, nil, 300)
+    check(leftC == 900 - 6, 'an ImGui that does not say the screen\'s size: the window\'s height is used, as before')
+    for _, scale in ipairs({ 0.75, 1, 1.5, 2 }) do
+        local screenH, y = 1080, 1080 - math.floor(520 * scale)   -- (the window's content starts 520 px, scaled, above the bottom)
+        local gS, leftS, bodyS, footS = drawn(scale, { math.floor(1064 * scale), math.floor(900 * scale) }, screenH, y)
+        local room = math.floor(screenH - y - 6 * scale - 10 * scale)
+        check(leftS == room and bodyS + footS <= leftS and balanced(gS),
+              string.format('%d %%: the panels end at the screen\'s bottom (%s of %s px room), rules + status area + buttons fit', scale * 100, tostring(leftS), tostring(room)))
+    end
+    -- narrow: the smallest window (720 x 420 at 100 %), low on the screen
+    local gN, leftN, bodyN, footN = drawn(1, { 704, 380 }, 768, 768 - 300)
+    check(leftN == 768 - 468 - 16 and bodyN + footN <= leftN and hasLabel(gN, '##gsq-save-apply'),
+          string.format('the smallest window, 300 px above the screen\'s bottom: panels %s px, Save & Apply still drawn inside', tostring(leftN)))
+    -- the limit: when less than 240 px (at 100 %) of the window is on the screen the panels keep 240 px
+    local gL, leftL = drawn(1, { 1064, 900 }, 700, 600)
+    check(leftL == 240, 'a window that is almost off the screen (84 px of room): the panels keep their 240 px; the buttons cannot be kept on the screen then (' .. tostring(leftL) .. ')')
+    api.display_h = nil
+    setup(fakeGui({ avail = { 1064, 560 } }), 1, draft(3))
+    check(M.panel_height(500, 6) == 500 and M.panel_height(100, 6) == 240, 'M.panel_height: the window\'s room when the screen is unknown; never less than 240 px')
+    MATES[1].chosen, MATES[1].out, MATES[1].live = 0, false, nil
+    S.server.caps = nil
 end
 
 io.write(string.format('\npassed %d, failed %d\n', passed, failed))

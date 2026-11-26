@@ -1997,7 +1997,8 @@ class RatesTab(tk.Frame):
         self.spell_scrolls = tk.BooleanVar(value=rates.get("spell_scrolls", False))
         tk.Checkbutton(inner, text="Squad mates learn spells from scrolls: spells of level 18 and up must be bought and given "
                        "to your squad once (trade the scroll to a mate, or !squad give). Blue magic from 18 is learned "
-                       "from monsters you defeat with a squad Blue Mage out. Below 18 everything stays automatic.",
+                       "from monsters you defeat with a squad Blue Mage out. Below 18 everything stays automatic. "
+                       "Always on for Randomized characters.",
                        variable=self.spell_scrolls, bg=BG, fg=FG, selectcolor=PANEL, activebackground=BG, activeforeground=FG,
                        wraplength=520, justify="left").grid(row=R[19], column=0, columnspan=2, sticky="w", padx=6, pady=2)
         self.squad_keep_gear = tk.BooleanVar(value=rates.get("squad_keep_gear", False))
@@ -2923,7 +2924,8 @@ class UpdatesTab(tk.Frame):
         # without one it only said there was nothing to switch
         if app.ashita and os.path.isdir(app.ashita) and rv.detected(app.ashita):
             self.build_revamped()
-        self.build_clear_ah()
+        if not getattr(app, "new_ui", False):              # (2026-11-24, the user) the newer look has it on WORLD > Auction house
+            self.build_clear_ah()
         try:                                                # (2026-11-22, Sunie) the AI hood: only where its switch file is
             import launcher_hood
             if launcher_hood.is_on(HERE):
@@ -3246,7 +3248,7 @@ class UpdatesTab(tk.Frame):
         bar = tk.Frame(self, bg=BG)
         bar.pack(anchor="w", padx=14)
         for text, command in (("Check for updates", lambda: self.player_check(False)), ("Update now", self.player_update),
-                              ("Repair...", self.player_repair)):
+                              ("Repair...", self.player_repair), ("Start the world over...", self.player_erase)):
             button = tk.Button(bar, text=text, command=command, bg=PANEL, fg=FG, relief="flat", padx=14, pady=6)
             button.pack(side="left", padx=(0, 8))
             self.buttons.append(button)
@@ -3343,6 +3345,60 @@ class UpdatesTab(tk.Frame):
             self.lines.put(("line", "Repair: installing " + ", ".join(
                 f"{label} {info[key]['newest']}" for key, label in (("kit", "launcher"), ("server", "server")) if info[key]["newer"]) + " again..."))
             self.after(0, self.player_update)
+        threading.Thread(target=work, daemon=True).start()
+
+    def player_erase(self):
+        """(2026-11-25, the user: "a server erase button ... that will erase everything, characters etc.") starts the
+        world over: every character, squad, bot player and record goes; the game logins, launcher settings and add-ons
+        stay. A full copy of the database is saved first (launcher_world_keep.erase_world)."""
+        if self.app.running:
+            messagebox.showwarning("Close the game first", "The servers are running. Close the game (it stops the servers), then start over.")
+            return
+        if self.busy:
+            return
+        cfg = self.app.cfg
+        if not cfg.get("mariadb_dir") or not cfg.get("server_dir"):
+            messagebox.showinfo("Start the world over", "This only works for a world with the kit's own database (a normal install).", parent=self)
+            return
+        typed = simpledialog.askstring(
+            "Start the world over",
+            "This erases EVERYTHING in your world: all your characters, their items and gil, your squad mates, the bot "
+            "players, the auction house, linkshells, mail and Hardcore records. Characters away visiting another world "
+            "are erased too.\n\nKept: your game logins (you sign in as before), the launcher's settings, add-ons and "
+            "the character backup files.\n\nA full copy of the old world is saved first (backups\\world, "
+            "db-before-erase-...).\n\nType ERASE to start over:", parent=self)
+        if (typed or "").strip() != "ERASE":
+            if typed is not None:
+                messagebox.showinfo("Start the world over", "Nothing was erased (you need to type ERASE).", parent=self)
+            return
+        self.busy = True
+        for button in self.buttons:
+            button.configure(state="disabled")
+
+        def work():
+            started = None
+            try:
+                import launcher_setup
+                import launcher_world_keep as wk
+                started = launcher_setup.start_portable(cfg)
+                wk.erase_world(cfg, HERE, cfg["server_dir"], log=lambda text: self.lines.put(("line", text)))
+                done = "Your world was started over. Press PLAY and make a new character."
+            except Exception as e:
+                done = f"Your world was not started over: {e}"
+            finally:
+                if started is not None:
+                    try:
+                        launcher_setup.stop_portable(cfg)
+                    except Exception:
+                        pass
+            self.lines.put(("line", done))
+
+            def finish():
+                self.busy = False
+                for button in self.buttons:
+                    button.configure(state="normal")
+                messagebox.showinfo("Start the world over", done, parent=self)
+            self.after(0, finish)
         threading.Thread(target=work, daemon=True).start()
 
     def player_update(self):
@@ -3913,7 +3969,7 @@ class App(tk.Tk):
         # PLAY, STOP and DUALBOX, then UPDATE and LOGS (pictures in assets\\ui; plain text buttons if they are missing)
         main_row = tk.Frame(homebox, bg=BG)
         main_row.pack(pady=(8, 6))
-        self.play_btn = self.ui_button(main_row, "play", self.start, "PLAY")
+        self.play_btn = self.ui_button(main_row, "play", self.play_pressed, "PLAY")      # (2026-11-25) the character cards first
         self.play_btn.pack(side="left", padx=10)
         self.stop_btn = self.ui_button(main_row, "stop", self.stop, "STOP")
         self.stop_btn.pack(side="left", padx=10)
@@ -4614,6 +4670,7 @@ class App(tk.Tk):
             self.summary_dot.configure(fg=GREY)
         self.stinkshell_tick()
         self.companion_tick()
+        self.vanasync_tick()
         self.after(1000, self.lights)
 
     def companion_tick(self):
@@ -4646,6 +4703,19 @@ class App(tk.Tk):
         except Exception as e:
             print("companion:", e)
 
+    def vanasync_tick(self):
+        """(2026-11-25) VanaSync, JØ's battle music player (VanaSync by JØ × NOX): runs while the vanasync add-on is
+        switched on (OPTIONS > Addons; off by default) and the world is up. Checked every 5 seconds, like Stinkshell."""
+        if getattr(self, "_stink_count", 0) % 5 or not self.ashita:
+            return
+        try:
+            import launcher_vanasync as vanasync
+            vanasync.tick(self.__dict__.setdefault("vanasync_state", {}), HERE, self.ashita,
+                          self.cfg.get("ashita_boot", core.DEFAULT_BOOT), self.running,
+                          log=lambda text: self.q.put(("log", text)))
+        except Exception as e:
+            print("vanasync:", e)
+
     def stop_companions(self):
         for proc in list(getattr(self, "companions", {}).values()):
             try:
@@ -4675,6 +4745,17 @@ class App(tk.Tk):
             print("stinkshell:", e)
 
     # ----- buttons -----
+    def play_pressed(self):
+        """PLAY: (2026-11-25) the character cards (launcher_charcards_gui.py): pick a character and it logs straight in.
+        Off, or nothing to show: straight to start() as before."""
+        try:
+            import launcher_charcards_gui
+            launcher_charcards_gui.play_pressed(self)
+        except Exception as e:
+            self.say(f"The character cards could not be shown ({e}).")
+            self.autologin_slot = None
+            self.start()
+
     def start(self):
         if self.running:
             return
@@ -4724,6 +4805,11 @@ class App(tk.Tk):
                 gp.save(HERE, self.gamepad)
             except OSError:
                 pass
+        try:                                   # (2026-11-25) a character card picked: log it straight in, this launch only
+            import launcher_charcards_gui
+            launcher_charcards_gui.before_start(self, visit)
+        except Exception as e:
+            self.say(f"Character cards: {e}")
         try:                                   # (2026-11-23) small fixes to downloaded add-ons (thirdparty.json "fixups")
             for item in tp.load_manifest(HERE):
                 if item.get("fixups") and self.ashita:
@@ -4923,10 +5009,21 @@ class App(tk.Tk):
                 return
             self.coop_tab.shutdown()
         self.stop_companions()
+        try:
+            import launcher_vanasync
+            launcher_vanasync.stop(getattr(self, "vanasync_state", {}))
+        except Exception:
+            pass
         # (2026-11-21, Tasou: "Squad gets all gear" was unticked again after a restart) the Rules page is kept on quit too,
         # not only when PLAY is pressed
         try:
             core.save_rates(HERE, self.rates_tab.collect())
+        except Exception:
+            pass
+        # (2026-11-24, Dugahst: the draw distances were back at 0 after a restart) kept on quit too, not only at PLAY
+        try:
+            if getattr(self, "graphics_tab", None) is not None:
+                core.save_draw(HERE, self.graphics_tab.collect_draw())
         except Exception:
             pass
         self.stop_requested = True
@@ -5109,6 +5206,8 @@ class App(tk.Tk):
 
         self.conquest_ticked = self.run_conquest("tick")      # catch the world up on the time you were away (servers are not running yet)
         self.run_char_sync("sync-in")                         # (off by default) characters your other PC saved to the shared folder
+        self.run_armory("fish")                               # (when a phone is paired) what it caught: skill, delivery box, gil
+        self.start_ventures()                                 # (when an app is paired) squads for Ventures, and the relay while you play
         self.run_stack_mode()                                 # item stacks on the server: today's sizes (default) or the era's
 
         # broken "what a character wears" rows crash the login (2026-11-07): remove them while the servers are down
@@ -5422,6 +5521,11 @@ class App(tk.Tk):
         if core.count_running("xiloader") >= 2:
             messagebox.showinfo("Second character", "A second game window is already open.")
             return
+        try:                                    # (2026-11-25, Ricc) the add-ons ticked for the second window need Ashita's
+            import setup_dualbox                # addons plugin in its script first; an older script never had it
+            setup_dualbox.ensure_script(os.path.join(self.ashita, "scripts", "dualbox.txt"))
+        except Exception:
+            pass
         self.launch_extra(boot2, "ashita2.log")
         self.say("Starting the second character... (the first time it shows character creation)")
 
@@ -5535,6 +5639,43 @@ class App(tk.Tk):
                 self.say(line[:1].upper() + line[1:])
         except Exception as e:
             self.say(f"The character folder was not used: {e}")
+
+    def run_armory(self, mode):
+        # (2026-11-24) launcher_armory.py: "fish" takes in what the paired phone caught (before the servers start), "sync"
+        # updates the character pages on xiforever.com (after they stop, only when that switch is on). Never stops PLAY.
+        try:
+            script = os.path.join(HERE, "launcher_armory.py")
+            if not os.path.exists(script):
+                return
+            done = subprocess.run(core.py_cmd(script, mode), cwd=HERE, capture_output=True, text=True, errors="replace",
+                                  timeout=90, creationflags=core.NO_WINDOW)
+            for line in (done.stdout or "").strip().splitlines():
+                self.say(line[:1].upper() + line[1:])
+            if done.returncode != 0:
+                errors = (done.stderr or "").strip().splitlines()
+                self.say(("Phone fishing" if mode == "fish" else "Character pages") + " skipped: " + (errors[-1] if errors else "unknown"))
+        except Exception as e:
+            self.say(f"Character pages / phone fishing skipped: {e}")
+
+    def start_ventures(self):
+        # (2026-11-25) Ventures (launcher_ventures.py): squad mates sent off from the XIFO app to level at a real camp.
+        # Only when an app is paired. The squads go to the hub now; while the game runs, a relay keeps the game told who
+        # is away and takes in what came home (exp and gil in game, items in the delivery box). Never stops PLAY.
+        try:
+            import launcher_armory
+            import launcher_ventures
+            if not launcher_armory.load(HERE).get("paired"):
+                return
+            try:
+                n = launcher_ventures.send_roster(self.cfg, HERE)
+                self.say(f"Ventures: {n} squad mate(s) ready in the XIFO app.")
+            except Exception as e:
+                self.say(f"Ventures: the squads were not sent ({e}).")
+            self.venture_relay = launcher_ventures.Relay(self.cfg, HERE, log=lambda text: self.q.put(("log", text)))
+            self.venture_relay.roster_at = time.time()
+            self.venture_relay.start()
+        except Exception as e:
+            self.say(f"Ventures skipped: {e}")
 
     def run_conquest(self, mode):
         # The conquest simulator (conquest_sim.py) edits the conquest table. "tick" runs before the servers start, "stamp" after they stop.
@@ -5675,6 +5816,16 @@ class App(tk.Tk):
 
     def cleanup(self):
         had_servers = bool(self.procs)
+        if had_servers:                                              # (2026-11-25) the character cards learn new levels
+            try:                                                     # and places while the database is still up
+                import launcher_charcards_gui
+                launcher_charcards_gui.refresh_after_game(self)
+            except Exception:
+                pass
+        relay = getattr(self, "venture_relay", None)                # (2026-11-25) Ventures: the relay stops with the game
+        if relay is not None:
+            relay.stop()
+            self.venture_relay = None
         ollama = getattr(self, "ollama_proc", None)
         if ollama is not None:  # only the Ollama this launcher started (one you started yourself keeps running)
             # (2026-11-23, Sunie: Ollama kept running on Linux after the launcher closed) "ollama serve" starts a runner
@@ -5723,6 +5874,7 @@ class App(tk.Tk):
             self.run_conquest("stamp")                         # the session is over: note the time so the tally is not repeated
             self.conquest_ticked = False
         self.run_char_sync("sync-out")                         # (off by default) your characters go to the shared folder
+        self.run_armory("sync")                                # (off by default) your character pages on xiforever.com
         for f in self.logfiles:
             try:
                 f.close()

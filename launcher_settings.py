@@ -232,6 +232,12 @@ S("main.LAND_KINGS_TIMED", "rules", "Comforts", FLAG, "Land kings on a timer",
       "(Honey Wine, Blue Pondweed, Beastly Shank). On = the era: the ??? is gone, a king appears by itself 21 to 24 "
       "hours after the last one fell, and from the fourth kill in a row Nidhogg, Aspidochelone or King Behemoth "
       "can come in its place. The hours count while the servers are off too. (sparkiie)")
+S("main.NM_TIMER_MODE", "rules", "Comforts", NUMBER, "Timed NMs between sessions", step=1,
+  tip="What happens to timed NMs (Argus, Leech King and the like) while your servers are off. "
+      "0 = the game's own: every start rolls fresh timers, so short sessions can miss them. 1 = paused (default): a "
+      "timer stops while the servers are off and goes on where it was. 2 = real time: timers keep running while "
+      "they're off, so one that came due while you were away is up soon after you start. Lottery NMs follow the "
+      "lottery settings instead, and the land kings their own switch. (Trinity, Akiraheaven, VRTRA)")
 S("main.EPHEMERAL_MOOGLES", "rules", "Comforts", FLAG, "Ephemeral Moogles",
   tip="The crafting guilds' Ephemeral Moogles (from Seekers of Adoulin) are there and keep your crystals for you. "
       "On by default. (Gilder, stanky kong)")
@@ -262,7 +268,7 @@ S("squad_call_cooldown", "rules", "Squad", COUNT, "Call timer (min)", lo=0, hi=3
 S("spell_scrolls", "rules", "Squad", SWITCH, "Spells from scrolls",
   tip="Spells of level 18 and up must be bought and given to your squad once (trade the scroll to a mate, or "
       "!squad give). Blue magic from 18 is learned from monsters you defeat with a squad Blue Mage out. "
-      "Below 18 everything stays automatic.")
+      "Below 18 everything stays automatic. Always on for Randomized characters.")
 S("squad_keep_gear", "rules", "Squad", SWITCH, "Keep gear you give",
   tip="Trading a piece to a mate (or !squad give) unlocks it for the whole squad and you keep yours. "
       "Off = the squad takes the piece (one-of-a-kind gear is always kept).")

@@ -42,7 +42,7 @@ DEFAULTS = {"backup_hour": 4, "backup_keep_days": 7, "auto_update": True, "updat
 LIMITS = {"backup_hour": (0, 23), "backup_keep_days": (1, 365), "update_notice_minutes": (0, 120),
           "update_check_minutes": (5, 1440)}
 BACKUP_DIR = ("backups", "world")
-BACKUP_NAME = re.compile(r"^db-(nightly|before-update|by-hand)-(\d{8}-\d{6})\.sql\.gz$")
+BACKUP_NAME = re.compile(r"^db-(nightly|before-update|by-hand|before-erase)-(\d{8}-\d{6})\.sql\.gz$")
 KEEP_AT_LEAST = 3                               # nightly copies that stay however old they are
 KEEP_BEFORE_UPDATE = 2                          # copies made before an update that stay
 SPARE_BYTES = 512 * 1024 * 1024                 # free disk space that must be left over after a copy or an update
@@ -302,6 +302,65 @@ def restore(cfg, kit, path, log=print, run=subprocess.run):
     finally:
         _remove(plain)
     log(f"Database put back from {os.path.basename(path)}.")
+
+
+# ----- starting the world over (2026-11-25, the user: "a server erase button in options that will erase everything") -----
+BOT_ACCOUNT_BASE = 21000000                     # bot players' accounts start here (launcher_armory, bots.cpp)
+
+
+def erase_world(cfg, kit, server_dir, log=print, run=subprocess.run, backup=None):
+    """Starts the world over: every character (yours, your squads, bot players, visitors' copies), the auction house,
+    linkshells, mail, server records... everything in the database goes, and the server's own tables are loaded fresh.
+    Kept: your game logins (the accounts, so you sign in as before), the launcher's settings, add-ons and the character
+    backup files in the kit. A full copy of the database is saved first (backups/world/db-before-erase-*.sql.gz;
+    "put back" restores it). The game servers must be stopped and the kit's database running. Returns the copy's path."""
+    import launcher_setup as setup
+    if not cfg.get("mariadb_dir"):
+        raise KeepError("Only a world with the kit's own database can be started over here.")
+    mdb, port, name = cfg["mariadb_dir"], int(cfg.get("db_port", 3306)), cfg["db_name"]
+    if not re.fullmatch(r"\w+", name):
+        raise KeepError("The database's name is not one this can start over.")
+    files = setup.import_order(server_dir)
+    if not files:
+        raise KeepError("The server's SQL files were not found, so the world was not started over.")
+    copy = (backup or backup_now)(cfg, kit, kind="before-erase", log=log, run=run)
+    folder = backup_folder(kit)
+    os.makedirs(folder, exist_ok=True)
+    accounts = os.path.join(folder, f"erase-accounts-{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}.sql")
+    try:
+        # 1. the players' logins (not the bot players'), as REPLACE lines that go back in after the fresh tables
+        tool, env = dump_command(cfg, accounts)
+        tool = [t for t in tool if t != name and t != "--single-transaction"]
+        tool += ["--no-create-info", "--replace", "--skip-triggers", f"--where=id < {BOT_ACCOUNT_BASE}", name, "accounts"]
+        result = run(tool, capture_output=True, text=True, errors="replace", creationflags=NO_WINDOW, timeout=600,
+                     **({"env": env} if env else {}))
+        if result.returncode != 0 or not _complete(accounts):
+            said = (getattr(result, "stderr", "") or "").strip()[-300:]
+            raise KeepError("Your logins could not be saved, so nothing was erased" + (f": {said}" if said else "."))
+        # 2. an empty database, then the server's own tables, as the first setup made them
+        charset = "" if setup.IS_WINDOWS else " CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci"
+        try:
+            setup.sql(mdb, port, "root", setup.portable_keys(cfg)["root"],
+                      f"DROP DATABASE IF EXISTS `{name}`; CREATE DATABASE `{name}`{charset};", run=run)
+            log("The world is empty. Loading the server's tables (a few minutes)...")
+            for index, path in enumerate(files, 1):        # (setup.import_sql, but into this install's own database)
+                if index % 20 == 1 or index == len(files):
+                    log(f"Database: loading {index}/{len(files)} ({os.path.basename(path)})...")
+                setup.sql(mdb, port, cfg["db_user"], cfg["db_pass"],
+                          "SET SESSION lock_wait_timeout=120; SET autocommit=0; SET unique_checks=0; SET foreign_key_checks=0; "
+                          f"SOURCE {path.replace(os.sep, '/')}; SET unique_checks=1; SET foreign_key_checks=1; COMMIT;",
+                          database=name, run=run)
+            # 3. the logins back
+            setup.sql(mdb, port, cfg["db_user"], cfg["db_pass"],
+                      f"SET foreign_key_checks=0; SOURCE {accounts.replace(os.sep, '/')}; SET foreign_key_checks=1;",
+                      database=name, run=run)
+        except (RuntimeError, OSError, ValueError, KeyError) as e:
+            raise KeepError(f"Starting over stopped part way ({e}). Put the world back from {os.path.basename(copy)} "
+                            "(SYSTEM > the world's copies), or run the first-time setup's database step again.")
+    finally:
+        _remove(accounts)
+    log(f"The world was started over. Your logins are kept; the old world is saved as {os.path.basename(copy)}.")
+    return copy
 
 
 # ----- the files of an update: copied aside before, put back when it has to be taken back -----

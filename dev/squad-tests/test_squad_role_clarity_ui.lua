@@ -65,6 +65,13 @@ local function boot(path, missing)
     function chat:IsInputOpen() return false end
     local dir = os.tmpname(); os.remove(dir)
     if package.config:sub(1, 1) == '\\' then os.execute('mkdir "' .. dir .. '" 2>nul') else os.execute('mkdir -p "' .. dir .. '"') end
+-- (servermenu 1.27) an installation from before themes: its settings file has no theme line, so the menu keeps the
+-- Squad look these checks were written for (a folder without a settings file is a new installation: Crimson)
+do
+    local cfgDir = dir .. '/config/addons/servermenu'
+    if package.config:sub(1, 1) == '\\' then os.execute('mkdir "' .. cfgDir:gsub('/', '\\') .. '" 2>nul') else os.execute('mkdir -p "' .. cfgDir .. '"') end
+    local f = assert(io.open(cfgDir .. '/settings.cfg', 'w')); f:write('scale=1\n'); f:close()
+end
     addon = {}
     ashita = { events = { register = function(name, _, fn) W.handlers[name] = fn end }, time = { get_tick64 = function() return W.clock * 1000 end },
                fs = { create_directory = function() end } }
@@ -319,7 +326,8 @@ check(has(M.DEFAULT_RULES_HELP, 'filtered by the Squad Role and Mode') and has(M
       and has(M.DEFAULT_RULES_HELP, 'replaces them and is not filtered') and #M.DEFAULT_RULES_HELP <= 200,
       'the "uses: default job rules" tooltip (' .. #M.DEFAULT_RULES_HELP .. ' characters)')
 local ED = slurp(ADDON_DIR .. '/squad_editor.lua')
-check(ED:find("or 'default job rules'%)%)\r?\n%s+tooltip%(M%.DEFAULT_RULES_HELP%)") ~= nil, 'it is shown on the "X uses: ..." line of the set panel')
+-- (0.3.5) the "X uses: ..." line of the set panel became the "<mate> runs" line of the status area (what the server reports)
+check(ED:find("if i == 2 then\r?\n%s+tooltip%(M%.DEFAULT_RULES_HELP%)") ~= nil, 'it is shown on the "<mate> runs" line of the status area')
 check(has(ED, 'The Squad Role and Mode (Squad menu) filter those job rules again.'), '"Restore default job rules" says the Role filters them again')
 check(M.TARGET_LABELS.CASTER == 'Mage' and M.TARGET_LABELS.TANK == 'Tank' and M.ROLE_NAMES[3] == 'Mage', 'labels and party role names unchanged')
 

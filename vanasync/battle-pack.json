@@ -1,0 +1,14 @@
+{
+  "solo": {
+    "file": "Against the Odds (Solo Battle Theme) (1).mp3",
+    "sha256": "78d5829eb5edc85aaea418f897e9e4bc751ad1df2026c8584122df5d53d35c43"
+  },
+  "party": {
+    "file": "Beyond the Veil (Party Battle Theme).mp3",
+    "sha256": "371d6059e3fd4ac4601d02feede4d9c2755beed6bbc1d9fde717cddbe7639bfa"
+  },
+  "alliance": {
+    "file": "The March of Many (Alliance Battle Theme).mp3",
+    "sha256": "2b914a51e1d9fdf0cc804fe65ac950c7bfdff01b7207418cc2b298d5a72fcab6"
+  }
+}

@@ -1,5 +1,5 @@
 --[[
-Tetra Master 0.2 (XI: Forever Offline)
+Tetra Master 0.3 (XI: Forever Offline)
 The Tetra Master card game inside FFXI. The server runs the match (!tm); this addon draws the board and sends your
 moves. Art, sounds and the original Tetra Master addon: Nalfey (github.com/Nalfey/TetraMaster). See CREDITS.md.
 
@@ -9,6 +9,7 @@ moves. Art, sounds and the original Tetra Master addon: Nalfey (github.com/Nalfe
   /tm scale <1-4>        board size (default 2)
   /tm music              music on or off
   /tm sound              sound effects on or off
+  /tm volume <0-100>     how loud the sounds and music are (default 40)
 
 Talk to a card trader in a tavern to buy starter cards (and sell cards back). Cards also drop from monsters of their
 family, notorious monsters and treasure caskets.
@@ -19,7 +20,7 @@ card you want to fight. Lines from the server starting with "tetramaster:" are h
 
 addon.name    = 'tetramaster'
 addon.author  = 'XI: Forever Offline (art: Nalfey)'
-addon.version = '0.2'
+addon.version = '0.3'
 addon.desc    = 'Tetra Master inside FFXI.'
 addon.link    = ''
 
@@ -48,7 +49,7 @@ local function configDir()
     return base .. 'config\\addons\\tetramaster\\'
 end
 
-local S = { scale = 2, music = false, sound = true, level = 'normal' }
+local S = { scale = 2, music = false, sound = true, level = 'normal', volume = 40 }
 
 local function loadSettings()
     local dir = configDir()
@@ -59,6 +60,7 @@ local function loadSettings()
         if k == 'scale' then S.scale = math.max(1, math.min(4, tonumber(v) or 2))
         elseif k == 'music' then S.music = (v == 'on')
         elseif k == 'sound' then S.sound = (v ~= 'off')
+        elseif k == 'volume' then S.volume = math.max(0, math.min(100, tonumber(v) or 40))
         elseif k == 'level' and (v == 'easy' or v == 'normal' or v == 'hard') then S.level = v end
     end
     f:close()
@@ -70,8 +72,8 @@ local function saveSettings()
     pcall(ashita.fs.create_directory, dir)
     local f = io.open(dir .. 'settings.txt', 'w')
     if not f then return end
-    f:write(string.format('scale = %d\nmusic = %s\nsound = %s\nlevel = %s\n', S.scale, S.music and 'on' or 'off',
-        S.sound and 'on' or 'off', S.level))
+    f:write(string.format('scale = %d\nmusic = %s\nsound = %s\nlevel = %s\nvolume = %d\n', S.scale, S.music and 'on' or 'off',
+        S.sound and 'on' or 'off', S.level, S.volume))
     f:close()
 end
 
@@ -261,9 +263,52 @@ end
 local function key(x, y) return x * 10 + y end
 
 -- sound and music
+-- (2026-11-25, Jaymz: the card chime from a casket was far louder than the game) Windows plays a .wav at full volume,
+-- whatever the game's own sound settings are. So each sound is played from a copy at S.volume percent, made once and
+-- kept in config\addons\tetramaster\sound\<volume>\ (16-bit PCM samples scaled down).
+local function scaledWav(src, name)
+    if S.volume >= 100 then return src end
+    local dir = configDir()
+    if not dir then return src end
+    dir = dir .. 'sound\\' .. tostring(S.volume) .. '\\'
+    local out = dir .. name
+    local f = io.open(out, 'rb')
+    if f then f:close(); return out end
+    local inf = io.open(src, 'rb')
+    if not inf then return src end
+    local data = inf:read('*a')
+    inf:close()
+    if #data < 44 or data:sub(1, 4) ~= 'RIFF' or data:sub(9, 12) ~= 'WAVE' then return src end
+    local buf = ffi.new('uint8_t[?]', #data)
+    ffi.copy(buf, data, #data)
+    local pos, bits = 12, 16
+    while pos + 8 <= #data do
+        local id = data:sub(pos + 1, pos + 4)
+        local size = buf[pos + 4] + buf[pos + 5] * 256 + buf[pos + 6] * 65536 + buf[pos + 7] * 16777216
+        if id == 'fmt ' then
+            bits = buf[pos + 22] + buf[pos + 23] * 256
+        elseif id == 'data' then
+            if bits ~= 16 then return src end
+            local n = math.floor(math.min(size, #data - pos - 8) / 2)
+            local s = ffi.cast('int16_t*', buf + pos + 8)
+            local k = S.volume / 100
+            for i = 0, n - 1 do s[i] = math.floor(s[i] * k) end
+            pcall(ashita.fs.create_directory, dir)
+            local w = io.open(out, 'wb')
+            if not w then return src end
+            w:write(ffi.string(buf, #data))
+            w:close()
+            return out
+        end
+        pos = pos + 8 + size + (size % 2)
+    end
+    return src
+end
+
 local function playSound(name)
-    if not S.sound or not okWinmm then return end
-    local path = ASSETS .. 'sound\\wav\\snd_' .. name .. '.wav'
+    if not S.sound or S.volume <= 0 or not okWinmm then return end
+    local file = 'snd_' .. name .. '.wav'
+    local path = scaledWav(ASSETS .. 'sound\\wav\\' .. file, file)
     pcall(function() winmm.PlaySoundA(path, nil, 0x00020003) end) -- SND_ASYNC | SND_NODEFAULT | SND_FILENAME
 end
 
@@ -274,6 +319,7 @@ local function music(on)
         local path = ASSETS .. 'sound\\mus_quadmist.mp3'
         pcall(function()
             winmm.mciSendStringA('open "' .. path .. '" type mpegvideo alias tm_music', nil, 0, nil)
+            winmm.mciSendStringA('setaudio tm_music volume to ' .. tostring(S.volume * 10), nil, 0, nil)
             winmm.mciSendStringA('play tm_music repeat', nil, 0, nil)
         end)
         musicOpen = true
@@ -822,8 +868,18 @@ ashita.events.register('command', 'tm_command', function(e)
         S.sound = not S.sound
         saveSettings()
         say('sound ' .. (S.sound and 'on' or 'off'))
+    elseif sub == 'volume' then
+        local v = tonumber(args[3])
+        if v then
+            S.volume = math.max(0, math.min(100, math.floor(v)))
+            saveSettings()
+            if musicOpen and okWinmm then
+                pcall(function() winmm.mciSendStringA('setaudio tm_music volume to ' .. tostring(S.volume * 10), nil, 0, nil) end)
+            end
+        end
+        say('volume ' .. tostring(S.volume) .. ' (/tm volume 0-100)')
     else
-        say('/tm, /tm play [easy|normal|hard], /tm quit, /tm scale <1-4>, /tm music, /tm sound')
+        say('/tm, /tm play [easy|normal|hard], /tm quit, /tm scale <1-4>, /tm music, /tm sound, /tm volume <0-100>')
     end
 end)
 

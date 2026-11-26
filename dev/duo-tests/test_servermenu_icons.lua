@@ -97,13 +97,18 @@ print = function () end
 
 assert(loadfile(PATH))()
 handlers.load()
-handlers.command({ command = { args = function () return { '/sq', 'sheet', '1' } end } })
+-- (servermenu 1.27) what a mate wears is on the profile's Gear view (/sq gear); a worn piece is a button "Slot:  Name"
+handlers.command({ command = { args = function () return { '/sq', 'gear', '1' } end } })
 
 local function feed(line)
     handlers.text_in({ message = 'squadsheet:' .. line })
 end
 
 TICK = TICK + 100
+-- (1.27) the squad list is not fed here, so the menu cannot tell from the name whose sheet this is: the answer says
+-- its slot, as the milestone's server does (an answer without it is held back until the squad list names the slot;
+-- that case is in dev/squad-tests/test_squad_menu_ui.lua, section 9). An older menu skips the line.
+feed('slot|1')
 feed('hdr|Kasumi|WAR|22|MNK|11|tank|balanced|Mithra|15')
 feed('eq|0|Main|onion_dagger|1234')
 feed('eq|1|Sub|Empty|0')
@@ -114,7 +119,7 @@ check(#images == 1, 'the item with a real id gets one icon: ' .. tostring(#image
 check(images[1] and images[1].ptr == 4242, 'the texture pointer is handed to ImGui')
 check(images[1] and images[1].size == 26, 'the icon is drawn at 26x26')
 check(iconCreations == 1, 'the item bitmap is loaded once: ' .. tostring(iconCreations))
-local joined = table.concat(texts, '\n')
+local joined = table.concat(texts, '\n') .. '\n' .. table.concat(buttons, '\n')
 check(joined:find('Onion Dagger', 1, true) ~= nil, 'the underscored item name is shown as readable words')
 check(joined:find('onion_dagger', 1, true) == nil, 'the underscore form is not shown')
 check(joined:find('Onion Dagger|1234', 1, true) == nil, 'the raw id is not shown next to the name')

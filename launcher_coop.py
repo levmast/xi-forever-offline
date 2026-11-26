@@ -32,6 +32,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import launcher_passport as pp
 
+
+def _own_rates(kit):
+    """This world's rates (rates.json), which travel with a visitor so the hub can play them at their own rates (2026-11-25).
+    None when they can't be read: the visit goes ahead at the host's rates."""
+    try:
+        import launcher_core
+        return launcher_core.load_rates(kit)
+    except Exception:
+        return None
+
 PORT = 54100
 MAX_GUESTS = 6
 # open worlds (anyone may come in, 2026-11-22)
@@ -960,6 +970,7 @@ def world_rules(kit):
     try:                                        # (2026-11-23) HARDCORE menu: this world takes hardcore visitors only
         import launcher_hardcore
         out["hardcore_only"] = bool(launcher_hardcore.settings(kit).get("hardcore_only"))
+        out["visitor_rates"] = bool(launcher_hardcore.settings(kit).get("visitor_rates"))   # (The Hub, 2026-11-25)
     except Exception:
         pass
     try:                                        # bot chat through Google (crowds/ai_cloud.py, the hub): visitors are told
@@ -979,6 +990,8 @@ def describe_rules(rules):
     def times(value):
         return ("%g" % float(value)) + "x"
     parts = [f"experience {times(rules.get('exp', 1))}", f"drops {times(rules.get('drops', 1))}", f"skill-ups {times(rules.get('skill', 1))}"]
+    if rules.get("visitor_rates"):            # (2026-11-25) The Hub: you keep your own rates there
+        parts = ["your own rates (exp, drops, skill-ups and the rest come with you from home)"]
     parts.append("bot players on" if rules.get("bots") else "no bot players")
     if rules.get("hardcore_only"):
         parts.insert(0, "HARDCORE: Iron, Steel, Silver and Randomized characters only")
@@ -1156,7 +1169,7 @@ def start_visit(cfg, kit, invite, charid, log=print, post=None, connect=None, pa
             host = {"address": invite["address"], "port": invite["port"], "guest_id": guest_id,
                     "gkey": guest_key(invite["secret"], guest_id), "secret": invite["secret"], "world": greeting["world"],
                     "arrived": False, "started": int(time.time())}
-        data, _nonce = pp.depart(conn, charid, host, versions=mine)
+        data, _nonce = pp.depart(conn, charid, host, versions=mine, travel_rates=_own_rates(kit))
     finally:
         conn.close()
     _write(_outgoing(kit, charid), data)

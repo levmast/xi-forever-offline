@@ -48,9 +48,55 @@ server are generic, but other jobs and rule combinations are not yet gameplay-te
 |---|---|
 | `/gv2` | show or hide the window |
 | `/gv2 ping [n] [gap]` | n round trips to the server (default 10); also reports lines the game refused |
-| `/gv2 theme classic\|squad\|crimson` | window colours (FFXIPort 1.2.0 palettes); Classic is the default |
+| `/gv2 show [slot]` | show the window, on that squad mate (the Squads menu's Gambits button uses it) |
+| `/gv2 theme classic\|squad\|crimson` | window colours (FFXIPort 1.2.0 palettes). Crimson on a new installation; an installation that already has settings keeps its theme. The theme you pick is this character's, here and in the Squads menu |
 | `/gv2 interval <seconds>` | time between two chat lines (default 1.0, 0.6–5.0) |
-| `/gv2 scale <70-200>` | text and control size in percent (also the Size − / % / + buttons) |
+| `/gv2 scale <70-200>` | text and control size in percent (also the Size − / % / + buttons, behind Options) |
+
+**0.3.4: one bar for Save, Assign and Apply.** Below the rules, the bar shows what fits the open Rule Set and the
+selected mate, and what the mate really runs (the server's report, when the server gives it):
+
+| The bar says | Buttons | What happens |
+|---|---|---|
+| Unsaved changes, the mate runs this set | Save · Save & Apply | Save stores only. Save & Apply stores, then calls the mate again. A rename alone applies nothing |
+| Unsaved changes, another set is the mate's | Save · Save, Assign & Apply | (Save & Assign while the mate is away) |
+| Saved, not used by the mate | Assign & Apply | (Assign while the mate is away) |
+| Apply needed | Apply | the mate still runs the rules of its last call |
+| Active on the mate | none | the server says this set runs |
+
+With a server that has it, Apply calls only that mate again and the others stay out. An older server can only call the
+whole squad again; the button's tooltip and the message say so. Rule Sets and choices of a mate that were loaded once
+are kept until Refresh; Top and Bottom move the selected rule to either end. The theme, size and window size you set
+are saved per character (until 0.3.3 they were lost when the add-on was loaded before logging in).
+
+**0.3.5: one look with the Squads menu and the Profile.** The first row is the squad mate (a list to pick another one
+from) and its jobs. The Rule Set column is narrower and the line between it and the editor can be dragged. Above the
+Save buttons two lines say it all: **Editing** (the open set and its state) and **<mate> runs** (what the server
+reports the mate runs, which can be another set than the open one). In the list a set is *active* only on the server's
+word; *Apply needed*, *next call* and *chosen* say the rest. Next to the rule list: Add rule, Up, Down, Remove, and More
+(Move to top / to bottom). A rule is switched on and off with the tick box of its row.
+
+**0.3.6.** A row of the Rule Set list is the set's name; only *(active)*, the server's word, is added to it. What is
+chosen for the next call and whether Apply is needed stand in the status area. When the window reaches below the
+bottom of the game's screen, the panels end at the screen so the Save buttons stay reachable, and the window is never
+larger than the screen.
+
+**0.3.9.** The number fields of a condition (HP below, Enemies, Party members, the effect count) are wide enough for their
+value at any Size, and a field wraps to the next line together with its label, unit and step buttons. The status
+line's label column fits its longest label, so "runs" no longer covers the mate's name, and a long Rule Set name wraps
+instead of running off the window. Scrollbars take the theme's colours. The Squads launcher's Gambits half now shows
+whether this window is open and closes it again.
+
+**0.3.8.** Three new conditions, offered when the server has them (gambits_squad.lua version 11 and its map server):
+**Enemy family** (the enemy is a Goblin, an Orc, a Bat ...; it looks at the enemy whatever the rule's target is, so
+"Enemy family is Goblin -> Barfira" works on Self or Party), **Party members** (how many members within 20 yalms match:
+all, asleep, or with a status; e.g. at least 2 asleep -> Curaga, otherwise Cure) and **Enemies** (how many monsters fighting
+the party are near the enemy, above an HP %; e.g. at least 3 above 30% -> Stonega, otherwise Stone). Monsters only standing
+nearby are not counted. Rules that fix a status (Sleep -> Cure, Petrification -> Stona) now also run after a fight, while
+you are not engaged.
+
+**0.3.7.** A theme picked here is in the Squads menu at its next frame, and one picked there is here at the next frame:
+the add-on that saves the choice tells the other to read it. A window that opens reads it before its first frame.
 
 Settings live in `config/addons/GambitsV2/` (per character). An unsaved draft is kept in
 `config/addons/GambitsV2/squad_draft.lua`.

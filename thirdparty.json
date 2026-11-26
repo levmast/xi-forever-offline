@@ -153,12 +153,12 @@
       "name": "XIUIplus (alpha)",
       "author": "Team-XIUI",
       "license": "not stated (download only)",
-      "homepage": "https://github.com/Team-XIUI/xiuiplus-releases",
+      "homepage": "https://github.com/Team-XIUI/XIUIplus",
       "interface": "xiuiplus",
       "into": "ashita",
       "source": {
         "type": "github_release",
-        "repo": "Team-XIUI/xiuiplus-releases",
+        "repo": "Team-XIUI/XIUIplus",
         "tag": "latest",
         "asset": "^XIUIplus\\.dll$",
         "sha256sums": "SHA256SUMS.txt"
@@ -515,15 +515,22 @@
       "name": "Journal",
       "author": "Kxteel",
       "license": "MIT",
-      "homepage": "https://www.nexusmods.com/finalfantasy11/mods/44",
+      "homepage": "https://github.com/Kxteel/ffxi-journal",
       "into": "ashita",
-      "note": "Nexus Mods needs a sign-in, so this one opens the download page: unpack it into Ashita's addons folder, then press Apply era edits.",
       "source": {
-        "type": "page",
-        "url": "https://www.nexusmods.com/finalfantasy11/mods/44"
+        "type": "github_release",
+        "repo": "Kxteel/ffxi-journal",
+        "tag": "latest",
+        "asset": "^Journal[._ -].*\\.zip$"
       },
       "check": "addons/journal/journal.lua",
-      "patch": "journal-era"
+      "patch": "journal-era",
+      "files": [
+        [
+          "",
+          "addons/journal/"
+        ]
+      ]
     },
     {
       "id": "xiloader",

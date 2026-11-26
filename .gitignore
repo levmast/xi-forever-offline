@@ -32,6 +32,12 @@
 # Hardcore modes (Iron / Steel / Silver): the menu, and the three rate profiles (hardcore.json / hardcore_state.json stay yours)
 !/launcher_hardcore.py
 !/launcher_hardcore_gui.py
+# Character pages on xiforever.com and the XIFO phone app (armory.json stays yours)
+!/launcher_armory.py
+!/launcher_armory_gui.py
+!/launcher_ventures.py
+!/launcher_charcards.py
+!/launcher_charcards_gui.py
 !/hardcore_profiles.json
 !/launcher_revamped.py
 !/launcher_thirdparty.py
@@ -67,6 +73,10 @@
 !/PATCH-NOTES.md
 # (2026-11-21) Forever Beta Shirt: builds its look and item entry from the player's own game files (launcher_client step 5)
 !/forever_beta_shirt.py
+# (2026-11-25) Forever Patch: the same for the eyepatch (launcher_client step 5b)
+!/forever_patch.py
+# (2026-11-25) certificate checks without Windows' stale intermediate store (launcher_core installs it)
+!/launcher_tls.py
 # Linux / Steam Deck: Proton, the game's own prefix, the menu entry; the Linux build and its GitHub workflow
 !/launcher_linux.py
 !/build_release.sh
@@ -148,6 +158,8 @@
 !/addons-src/stinkshell/
 !/addons-src/autora/
 !/addons-src/hcicons/
+!/addons-src/vanasync/
+!/addons-src/autologin/
 
 # ---- server modules (copies kept with the kit) ----
 !/squad-behavior/
@@ -234,3 +246,9 @@ Thumbs.db
 /dev/incoming/
 drawdistance.json
 /crowds/bots/modules/
+
+# ---- (2026-11-25) VanaSync, JØ's battle music player (VanaSync by JØ × NOX) ----
+!/vanasync/
+!/launcher_vanasync.py
+/vanasync/**/__pycache__/
+/vanasync/.pytest_cache/

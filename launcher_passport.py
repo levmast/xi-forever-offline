@@ -46,6 +46,52 @@ AWAY_LOGIN = "coopaway"              # the locked account that holds characters 
 LS_ITEMS = (513, 514, 515)           # linkshell, pearlsack, linkpearl: they point at a linkshell of one world
 LINK_SLOTS = (16, 17)                # char_equip slots of the two worn linkshells
 WORLD_VAR_PREFIXES = ("[Bots]", "[Bot]", "COOP_", "[YELL]")     # character variables that belong to one world
+# (2026-11-25, the user) On the hub a visitor plays at the rates of its home world. The visitor's own rates travel as
+# character variables "[HR]<key>" = rate x 1000 + 1 (0 = not sent), refreshed on every trip. Only the hub reads them
+# (server: src/map/utils/hardcoreutils.h rate, modules/custom/late/hardcore.lua H.HUB_KEYS, keep the lists in step);
+# nothing about combat or the world itself travels.
+HUB_RATE_PREFIX = "[HR]"
+HUB_RATE_KEYS = ("map.EXP_RATE", "map.DROP_RATE_MULTIPLIER", "map.MOB_GIL_MULTIPLIER", "map.ALL_MOBS_GIL_BONUS",
+                  "map.SKILLUP_CHANCE_MULTIPLIER", "map.BLUE_LEARN_MULTIPLIER", "map.CRAFT_CHANCE_MULTIPLIER",
+                  "map.CRAFT_HQ_CHANCE_MULTIPLIER", "map.FISHING_SKILL_MULTIPLIER",
+                  "main.GIL_RATE", "main.TABS_RATE", "main.BOOK_EXP_RATE", "main.CASKET_DROP_RATE", "main.DIG_SKILL_RATE",
+                  "main.TM_CARD_DROP_RATE", "main.TM_CASKET_CARD_RATE", "main.TM_GIL_RATE", "main.TM_PRICE_RATE")
+HUB_RATE_MAX = 1_000_000                # 1,000,000x: no cap on purpose (the user), only a bound that fits the column
+
+
+def hub_rate_vars(rates):
+    """{varname: stored value} for the rates a visitor takes to the hub. A missing or unreadable key is left out."""
+    out = {}
+    for key in HUB_RATE_KEYS:
+        try:
+            value = float((rates or {}).get(key))
+        except (TypeError, ValueError):
+            continue
+        if value != value or value < 0:     # NaN or negative: not a rate
+            continue
+        out[HUB_RATE_PREFIX + key] = int(round(min(value, HUB_RATE_MAX) * 1000)) + 1
+    return out
+
+
+def _with_hub_rates(tables, charid, rates):
+    """The char_vars block with the old [HR] rows replaced by this trip's. Unchanged when rates is None."""
+    block = tables.get("char_vars")
+    if rates is None or not block or "varname" not in block["cols"]:
+        return tables
+    cols = block["cols"]
+    name_at = cols.index("varname")
+    def _name(cell):
+        value = _dec(cell)
+        return value.decode("utf-8", "replace") if isinstance(value, (bytes, bytearray)) else str(value)
+    rows = [r for r in block["rows"] if not _name(r[name_at]).startswith(HUB_RATE_PREFIX)]
+    for name, value in sorted(hub_rate_vars(rates).items()):
+        row = []
+        for col in cols:
+            row.append(_enc(charid if col == "charid" else name if col == "varname" else value if col == "value" else 0))
+        rows.append(row)
+    block["rows"] = rows
+    return tables
+
 GAOL = 131                           # Mordion Gaol: without GM rights a character there can do nothing (jail)
 MAX_MATES = 12                # squad mates one character may bring (the game keeps six)
 SQUAD_TABLES = ("squad_mate", "squad_job", "squad_equip", "squad_unlock")
@@ -623,7 +669,7 @@ def away_list(conn):
         conn.rollback()
 
 
-def depart(conn, charid, host, versions=None):
+def depart(conn, charid, host, versions=None, travel_rates=None):
     """Locks a character at home and returns (passport bytes, nonce). `host` is whatever the caller wants remembered about
     where it went (address, world name...). Nothing changes if anything fails."""
     ensure_tables(conn)
@@ -643,7 +689,7 @@ def depart(conn, charid, host, versions=None):
         if is_online(cur, charid):
             raise PassportError(f"{name} is in the game right now. Log out first.")
         layout, squad = local_layout(cur), squad_layout(cur)
-        tables = _read(cur, layout, charid)
+        tables = _with_hub_rates(_read(cur, layout, charid), charid, travel_rates)   # (the hub plays you at these)
         nonce = secrets.token_hex(16)
         passport = _make("visit", tables, name, world, {"world": world["id"], "charid": charid}, nonce, 1,
                          layout_signature(layout, squad), versions, squad=_read_squad(cur, squad, charid))

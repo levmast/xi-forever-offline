@@ -216,7 +216,7 @@ GetSquad = function() return squad end
 local function run(line) srv.printed = {}; G.handle(srv, line); return srv.printed end
 local function F(line) return G.splitPlain(line, '|') end
 local o = run('hello 1')
-check(o[1] == 'GSQ|1|hello|9|32|120|64', 'hello: version 9 (Bard role targeting) - ' .. tostring(o[1]))
+check(o[1] == 'GSQ|1|hello|11|32|120|64|live', 'hello: version 11 (capability words since 10) - ' .. tostring(o[1]))
 o = run('wsg 2 1')
 local f = F(o[1])
 check(#o == 2 and f[3] == 'ws' and f[4] == '1' and f[5] == 'WAR' and f[6] == 'l' and f[13] == '0' and f[14] == '-' and f[15] == '-' and f[16] == '1'
@@ -578,8 +578,10 @@ local buttons = {}
 g.Button = function(label) buttons[#buttons + 1] = label return false end
 g.BeginChild = function() return true end; g.EndChild = function() end; g.PushID = function() end; g.PopID = function() end
 g.Checkbox = function() return false end; g.InputText = function() return false end; g.InputInt = function() return false end
-S.mates, S.mateSlot = { { slot = 1, name = 'Rook', job = 'WAR', level = 75, out = true, chosen = 3 } }, 1
-S.sets, S.selectedSet, S.draft, S.cat = { { num = 3, job = 'WAR', name = 'Basic Warrior', flags = 'o', rules = 3, rev = '1' } }, 3, nil, { targets = {}, conds = {} }
+-- (0.3.4) Assign & Apply is in the bar below the rules now (for the set that is open and not yet used by the mate)
+S.mates, S.mateSlot = { { slot = 1, name = 'Rook', job = 'WAR', level = 75, out = true, chosen = 0 } }, 1
+S.sets, S.selectedSet, S.cat = { { num = 3, job = 'WAR', name = 'Basic Warrior', flags = 'o', rules = 3, rev = '1' } }, 3, { targets = {}, conds = {}, condNames = {}, families = {}, jas = {}, spells = {}, unconfirmed = {} }
+S.draft = { num = 3, job = 'WAR', name = 'Basic Warrior', flags = 'o', rev = '1', rules = {}, dirty = false }
 S.wsOpen = false -- (0.3.1: Weapon Skills is a collapsible section of the same editor, not a second tab)
 local okWin, errWin = pcall(M.draw)
 local seen = table.concat(buttons, '|')

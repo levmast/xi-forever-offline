@@ -35,7 +35,31 @@ KNOWN = (
      "url": NEXUS + "/12", "match": r"next\s*(hd|lore)",
      "note": "Zone and character textures. NextHD is the sharper one, NextLore stays closer to the original look. "
              "About 3.6 GB to download and 7 GB unpacked."},
+    # (2026-11-25, the user) character textures in HD, off until you install it
+    {"id": "jasmint", "nexus": 13, "name": "Jasmint's HD Textures", "by": "Jasmint", "url": NEXUS + "/13", "match": r"jasmint",
+     "note": "Player characters redone at four times the size (Elvaan, Hume and Mithra so far; Tarutaru and Galka next), closer "
+             "to how they look at character creation. Made to sit on top of NextGames HD. Colours and some faces differ from "
+             "the original look."},
+    # (2026-11-25, the user) a new look for the interface: status and menu icons, lettering, cursor, menu colours
+    {"id": "moonicon", "nexus": 46, "name": "MoonIcon-Tactics", "by": "Gdragoon91", "url": NEXUS + "/46", "match": r"moon\s*icon",
+     "note": "Final Fantasy Tactics style icons for status effects and menus, new lettering and numbers, a gold cursor and "
+             "three menu palettes. Put it above any texture pack in the list below. The few files that hold the Hardcore "
+             "and Randomized marks are left out, so those marks stay."},
 )
+# (2026-11-25) Visual extras that are not texture packs and can't be installed here: the window shows their page and
+# what they need, nothing more.
+GUIDES = (
+    {"id": "reshade-ultra", "nexus": 18, "name": "Yourmothers Ultra HD Reshade", "by": "yourmom", "url": NEXUS + "/18",
+     "note": "A ReShade look (HDR, bloom, depth of field, ambient occlusion, anti-aliasing). Installed by hand: it needs "
+             "dgVoodoo2, ReShade (with add-on support) and the iMMERSE Pro or Ultimate shaders; its page has the steps. "
+             "Heavy on the graphics card."},
+)
+
+# (2026-11-25, the user: "I don't want it to affect my hardcore or randomized icons") the game files that hold the
+# Hardcore and Randomized marks beside a name (launcher_client.py MARKS_FILES and MARKS_HD_FILES): a pack's copy of one
+# of these is left out like an era file, or XIPivot would show the pack's sheet without the marks.
+OUR_MARKS = {"ROM/0/1.DAT", "ROM/0/13.DAT", "ROM/118/111.DAT", "ROM/280/15.DAT",
+             "ROM/119/51.DAT", "ROM/91/15.DAT", "ROM/176/75.DAT", "ROM/178/14.DAT"}
 # (2026-11-23, datadecay) Packs whose authors publish them openly on GitHub: the launcher downloads these itself (pinned
 # to one commit, straight from the author's page, never rehosted), installs them switched OFF, and the player turns them
 # on in the packs window.
@@ -478,7 +502,7 @@ def install(source, ashita, kit=None, log=print, run=None, tools=None, free=None
         raise RuntimeError(problem)
     dats = dats_dir(ashita)
     os.makedirs(dats, exist_ok=True)
-    era = era_paths(kit)
+    era = era_paths(kit) | OUR_MARKS           # (era files, and the files with the Hardcore / Randomized marks)
     done = []
     if os.path.isdir(source):
         listing = []

@@ -104,8 +104,10 @@ class ThirdPartyTests(unittest.TestCase):
             tp.plan({"name": "bad", "files": [["a/", "../../evil/"]]}, ["a/x.lua"])
 
     def test_page_items_are_not_downloaded(self):
+        # (2026-11-25) the Journal is a GitHub release now (Kxteel's 0.4.6); a stand-in page item keeps this checked
         with self.assertRaises(ValueError):
-            tp.resolve(self.items["journal"])
+            tp.resolve({"name": "Page item", "homepage": "https://example.com", "source": {"type": "page", "url": "https://example.com"}})
+        self.assertEqual(self.items["journal"]["source"]["type"], "github_release")
 
     # ----- channels: a "beta" item is for players who switched on "Get test builds" -----
     BETA = {"id": "betaaddon", "name": "Beta addon", "author": "a", "license": "l", "homepage": "h", "channel": "beta",

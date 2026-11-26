@@ -43,6 +43,7 @@ RATE = (5, 10)             # at most 5 lines in 10 seconds
 NAME_RE = re.compile(r"^[A-Za-z]{2,15}$")
 HC_KINDS = ("milestone", "delevel", "death", "start", "grant")
 WEB_PREFIX = "website: "
+APP_PREFIX = "mobile: "    # (2026-11-24) the XIFO phone app: header X-Stink-App: 1
 WEB_NAME_RE = re.compile(r"^[A-Za-z0-9_]{2,15}$")
 SITE_ORIGINS = {"https://xiforever.com", "https://www.xiforever.com"}
 
@@ -67,6 +68,10 @@ def web_target(args):
         return [WEB_PREFIX + args[1]] + args[2:]
     if args and args[0].lower().startswith("website:") and len(args[0]) > 8:
         return [WEB_PREFIX + args[0][8:]] + args[1:]
+    if args and args[0].lower() in ("mobile:", "app:") and len(args) > 1:
+        return [APP_PREFIX + args[1]] + args[2:]
+    if args and args[0].lower().startswith("mobile:") and len(args[0]) > 7:
+        return [APP_PREFIX + args[0][7:]] + args[1:]
     return args
 
 
@@ -103,11 +108,11 @@ class Room:
     # ---------------------------------------------------------------- who is who
     def screen_for(self, kh, name, web=False):
         """The name shown for this launcher: the character's name if no other launcher has it, else Name2, Name3...
-        A website visitor: "website: Nick" (Nick2, Nick3... the same way)."""
+        A website visitor: "website: Nick" (Nick2, Nick3... the same way); the phone app (web = APP_PREFIX): "mobile: Nick"."""
         base = clean(name, MAX_NAME)
         if not (WEB_NAME_RE if web else NAME_RE).match(base):
             base = "Guest" if web else "Adventurer"
-        prefix = WEB_PREFIX if web else ""
+        prefix = web if isinstance(web, str) and web else (WEB_PREFIX if web else "")
         names = self.state["names"]
         n, screen = 1, prefix + base
         while names.get(screen.lower(), kh) != kh:
@@ -351,9 +356,13 @@ def make_handler(room):
             self.send_header("Content-Length", "0")
             self.end_headers()
 
+        def app(self):
+            """The XIFO phone app (2026-11-24): its names show as "mobile: Nick". Returns the prefix, or ""."""
+            return APP_PREFIX if self.headers.get("X-Stink-App", "") == "1" else ""
+
         def web_ip(self, kh):
-            """Website visitors only: note their address (Caddy passes it on in X-Forwarded-For)."""
-            if self.site():
+            """Website visitors and the phone app: note their address (Caddy passes it on in X-Forwarded-For)."""
+            if self.site() or self.app():
                 ip = (self.headers.get("X-Forwarded-For") or self.client_address[0]).split(",")[0].strip()
                 with room.lock:
                     room.note_ip(kh, iphash(ip))
@@ -378,7 +387,7 @@ def make_handler(room):
                 return self.reply(403, {"error": "no key"})
             body = self.body()
             path = urlparse(self.path).path.rstrip("/")
-            web = self.site()          # (a browser on the website is always a website visitor)
+            web = self.app() or self.site()   # (a browser on the website is always a website visitor; the phone app: "mobile: ")
             self.web_ip(kh)
             if path == "/hello":
                 with room.lock:

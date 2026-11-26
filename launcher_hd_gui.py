@@ -79,6 +79,14 @@ def open_window(parent, kit, ashita, boot_ini, look, say=None, running=None, cor
         label(text, pack["name"], bg=PANEL, font=(FONT, 10, "bold")).pack(fill="x")
         label(text, "by " + pack["by"] + ".  " + pack["note"], bg=PANEL, fg=DIM, font=(FONT, 9), wraplength=520).pack(fill="x")
         button(row, "Open its page", lambda url=pack["url"]: webbrowser.open(url), strong=True).pack(side="right", padx=8)
+    for pack in getattr(hd, "GUIDES", ()):      # (2026-11-25) extras installed by hand: their page and what they need
+        row = tk.Frame(win, bg=PANEL)
+        row.pack(fill="x", padx=14, pady=2)
+        text = tk.Frame(row, bg=PANEL)
+        text.pack(side="left", fill="x", expand=True, padx=8, pady=5)
+        label(text, pack["name"] + "  (by hand)", bg=PANEL, font=(FONT, 10, "bold")).pack(fill="x")
+        label(text, "by " + pack["by"] + ".  " + pack["note"], bg=PANEL, fg=DIM, font=(FONT, 9), wraplength=520).pack(fill="x")
+        button(row, "Open its page", lambda url=pack["url"]: webbrowser.open(url)).pack(side="right", padx=8)
     have = {p["name"].lower() for p in hd.installed(ashita)} if ashita else set()
     for pack in hd.DIRECT:
         row = tk.Frame(win, bg=PANEL)

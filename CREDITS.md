@@ -30,7 +30,7 @@ Each comes from its official release page and keeps its own license.
 |---|---|---|
 | [Ashita v4](https://github.com/AshitaXI/Ashita-v4beta) and its bundled addons and plugins | atom0s and the Ashita team and contributors | GPL v3 |
 | [XIUI](https://github.com/tirem/XIUI) | Team XIUI | GPL v3 |
-| [XIUIplus](https://github.com/Team-XIUI/xiuiplus-releases) | Team XIUI+ | see its release page |
+| [XIUIplus](https://github.com/Team-XIUI/XIUIplus) | Team XIUI+ | see its release page |
 | [AutoBot](https://github.com/Buckfutt/AutoBot-Ashita) | K0D3R | MIT |
 | [mobdb](https://github.com/ThornyFFXI/mobdb) | Thorny | MIT |
 | Journal ([Nexus Mods, FFXI mod 44](https://www.nexusmods.com/finalfantasy11/mods/44)) | Kxteel | MIT |
@@ -62,9 +62,14 @@ All of the launcher's music was made for XI: Forever Offline by **JØ (jnull)**,
 - "A Place to Return": the launcher's opening theme (`assets/press/default.mp3`).
 - "Beyond the Veil": the 8-Bit theme's song (`assets/press/beyond_the_veil.mp3`).
 - "TOMORROW.EXE": the Aero theme's song (`assets/press/tomorrow_exe.mp3`), by JØ with **Nox** (her voice, with JØ's).
+- "Roots": the Chronicle theme's song (`assets/press/chronicle_roots.mp3`).
+- The Windurst theme's song (`assets/press/windurst_theme.mp3`).
 - "No Signal, All Vibes": the Vaporwave theme's song.
 - The Vaporwave theme's opener: a short piece that plays the first time the launcher opens, before "No Signal, All Vibes"
   takes over.
+
+- **VanaSync** (`vanasync/`, the add-on `vanasync`): JØ's battle music player, **VanaSync by JØ × NOX**, with his
+  battle themes "Against the Odds" (Solo), "Beyond the Veil" (Party) and "The March of Many" (Alliance).
 
 The songs were made with Suno. `assets/press/music.json` holds the same list for the launcher: OPTIONS > Theme names the
 song that plays and who made it.
@@ -97,6 +102,21 @@ song that plays and who made it.
   `art-src/scripts/aero_buttons.py` and `aero_banners.py` around official FINAL FANTASY XI art from the art pack (the 2002
   character designs, the Behemoth concept drawing, and in-game screenshots of Trion, Excenmille and two beaches),
   © SQUARE ENIX. The window frames, taskbar and orb are original drawings in the style of the time, not Microsoft's.
+- Cinzel and Cinzel Decorative fonts (the lettering on the Chronicle theme's buttons and banners; `art-src/fonts`, with the
+  licences): Natanael Gama (SIL Open Font License). IM FELL English (the italic lines on the Chronicle banners): Igino
+  Marini (SIL Open Font License).
+- **Chronicle theme** pictures (`assets/press/chronicle-ui`, `assets/press/chronicle_*__theme-chronicle.jpg`): drawn in code
+  by `art-src/scripts/chron_buttons.py` and `chron_banners.py` around official FINAL FANTASY XI concept art (the job
+  pencil sketches, and the concept paintings of Bahamut, the avatars, Behemoth, Khimaira, the five races, the chocobo
+  and a dragon), © SQUARE ENIX. The leather, gold, vellum and lettering are original; the captions are our own words.
+- Cherry Swash font (the lettering on the Windurst theme's buttons and banners): Natalia Kasatkina (SIL Open Font
+  License). Fondamento (the handwritten lines on the Windurst banners): Astigmatic (SIL Open Font License). Both in
+  `art-src/fonts`, with the licences.
+- **Windurst theme** pictures (`assets/press/windurst-ui`, `assets/press/windurst_*__theme-windurst.jpg`): drawn in code by
+  `art-src/scripts/wind_buttons.py` and `wind_banners.py` around official FINAL FANTASY XI art (the colour concept art of
+  Shantotto, Ajido-Marujido, Apururu, the Tarutaru and Mithra, the mages, a Cardian, Mandragora, Dhalmel and Yagudo, and
+  the pictures of Kupipi, the Star Onion Brigade, the Starlight Celebration and a Windurst street), © SQUARE ENIX. The
+  wood, lacquer, stars and lettering are original; the captions are our own words.
 
 ## Crystal Boy mini games
 

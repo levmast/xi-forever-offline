@@ -178,6 +178,23 @@ try:
           "prune: a seen Iron character that was deleted leaves, and an old entry doesn't pass to a new character of the same name")
     check("Ironhide" not in hc.pending_lua(pk) and "Futura" in hc.pending_lua(pk), "prune: the server's pending file follows")
     check(hc.prune_pending(pk, db) == [], "prune: nothing more to do the second time")
+    # (2026-11-25) Randomized with permadeath and a random squad, asked when it is made
+    hc.add_pending(pk, None, "Fated", 4, 50, perma=True, rsquad=True)
+    hc.add_pending(pk, None, "Ironfist", 1, perma=True, rsquad=True)  # only Randomized takes the two
+    lua = hc.pending_lua(pk)
+    check("name = 'Fated', mode = 4, perma = 1, rsquad = 1 }" in lua and "name = 'Ironfist', mode = 1 }" in lua,
+          "pending: permadeath and random squad go to the server for a Randomized character only")
+    db.execute("CREATE TABLE char_vars(charid INTEGER, varname TEXT, value INTEGER)")
+    db.execute("CREATE TABLE accounts_sessions(charid INTEGER)")
+    db.executemany("INSERT INTO chars VALUES(?, ?, ?)", [(60, 1000, "Silv"), (61, 1000, "Perma"), (62, 1000, "Plain"), (63, 1000, "Fresh")])
+    old = int(__import__("time").time()) - 8 * 86400
+    db.executemany("INSERT INTO char_vars VALUES(?, ?, ?)", [(60, "[HC]Mode", 3), (60, "[HC]Dead", old),
+                   (61, "[HC]Mode", 4), (61, "[HC]Perma", 1), (61, "[HC]Dead", old),
+                   (62, "[HC]Mode", 4), (62, "[HC]Dead", old),
+                   (63, "[HC]Mode", 4), (63, "[HC]Perma", 1), (63, "[HC]Dead", old + 7 * 86400)])
+    db.commit()
+    gone = hc.expire_fallen(db)
+    check(sorted(gone) == ["Perma", "Silv"], "fallen: Silver and permadeath Randomized go after 7 days, not a normal Randomized or a recent fall")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 print(f"{passed} checks passed")

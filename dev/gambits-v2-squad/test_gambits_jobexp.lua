@@ -187,7 +187,7 @@ end
 section('catalog v6: Check Self -> Act on Enemy, catm "jm", content switched off')
 do
     local o = run('hello 1')
-    check(o[1] == 'GSQ|1|hello|9|32|120|64', 'hello: version 9 (Bard role targeting) - ' .. tostring(o[1]))
+    check(o[1] == 'GSQ|1|hello|11|32|120|64|live', 'hello: version 11 (capability words since 10) - ' .. tostring(o[1]))
     local t = catEntries(run('catm 2 9 jm'), 't')
     check(has(t, 'TRIGGER_SELF_ACTION_TARGET') and t[#t] == 'TRIGGER_SELF_ACTION_TARGET', 'the target TRIGGER_SELF_ACTION_TARGET is offered (last)')
     local cJM = catEntries(run('catm 3 9 jm'), 'c')

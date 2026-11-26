@@ -1,0 +1,27 @@
+{
+  "name": "Windurst",
+  "standard": true,
+  "about": "A theme that is always there to pick on the Theme page (see launcher_theme.py and README.txt in this folder): the launcher as a storybook of the Federation of Windurst: rounded frames of honey Star Tree wood, a band of green lacquer (the green of the Windurstian flag), gold stars, a sunny page, and Windurst's people from the official colour concept art laid on it like picture-book cut-outs: Shantotto, Ajido-Marujido, Apururu, Kupipi, the Star Onion Brigade, Tarutaru and Mithra, the mages of the ministries, Cardians and the beasts of Sarutabaruta. Its buttons are the pictures in the windurst-ui folder and its banners the windurst_*__theme-windurst pictures (art-src\\scripts\\wind_buttons.py and wind_banners.py draw them, from art-src\\newart and art-src\\FFXI_Art_Collection_Part2). Lettering in the pictures is Cherry Swash and Fondamento (art-src\\fonts, SIL Open Font License); the launcher's own text stays in the usual font (Segoe UI on Windows). Its song is windurst_theme.mp3. \"standard\": true makes it what players wear when nothing is picked on the Theme page (the user, 2026-11-25; Chronicle before that).",
+  "colours": {
+    "BG": "#142319",
+    "PANEL": "#1d3123",
+    "PANEL2": "#27402d",
+    "FG": "#f6eed6",
+    "DIM": "#bcc8a6",
+    "BORDER": "#7a8f4e",
+    "LINE": "#3d5a3a",
+    "OFF": "#66705c",
+    "GOLD": "#e6bd52",
+    "GOLD_LIT": "#ffe08c",
+    "GOLD_DIM": "#86733a",
+    "PARCH": "#f4e8c4",
+    "ACCENT": "#5fae4f",
+    "GREEN": "#62b856",
+    "RED": "#d4573f",
+    "GREY": "#8c947e"
+  },
+  "art": {
+    "folder": "windurst-ui"
+  },
+  "sound": "windurst_theme.mp3"
+}
