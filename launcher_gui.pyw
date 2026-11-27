@@ -520,8 +520,11 @@ class ItemPicker(tk.Toplevel):
         self.preview_name = tk.Label(preview, text="Select an item to see its icon.", bg=BG, fg=DIM, anchor="w")
         self.preview_name.pack(side="left", padx=8)
 
-        self.stats = tk.Label(self, text="", bg=BG, fg=FG, wraplength=400, justify="left")
-        self.stats.pack(anchor="w", padx=10)
+        # (2026-11-26, Ricc: a click on Chatoyant Staff picked the piece above it) these lines sit above the list and the
+        # label grew or shrank with every pick, so the list moved under the mouse while the button was still down and
+        # then took the row that had slid under the pointer. A fixed height keeps the list where it is.
+        self.stats = tk.Label(self, text="", bg=BG, fg=FG, wraplength=400, justify="left", anchor="nw", height=5)
+        self.stats.pack(fill="x", padx=10)
         self.server_dir = getattr(parent, "cfg", {}).get("server_dir", "")
         self.info = tk.Label(self, text="", bg=BG, fg=DIM, wraplength=400, justify="left")
         self.info.pack(anchor="w", padx=10, pady=4)
@@ -3907,6 +3910,8 @@ class App(tk.Tk):
         self.heroes = load_press()
         self._images.extend(self.heroes)
         self.hero_index, self.hero_ticks = (random.randrange(len(self.heroes)) if self.heroes else 0), 0
+        if globals().get("launcher_theme") and launcher_theme.worn() == "playoffline":
+            self.hero_index = 0
         self.banner_label = tk.Label(self.stage, bg=PANEL, bd=0)
         if self.heroes:
             self.banner_label.configure(image=self.heroes[self.hero_index])
@@ -4097,6 +4102,12 @@ class App(tk.Tk):
                     pass
                 tabs.add(self.rates_tab, text="  Rates  ")
         self.build_nav()
+        if self.new_ui and globals().get("launcher_theme") and launcher_theme.worn() == "playoffline":
+            try:
+                import launcher_playoffline
+                launcher_playoffline.decorate(self, HERE)
+            except Exception:
+                launcher_theme.note("PlayOffline navigation: " + traceback.format_exc())
 
     def ui_button(self, parent, name, command, text):
         images = load_ui_images(name)
@@ -5120,6 +5131,10 @@ class App(tk.Tk):
                                                  log=self.say)
             except Exception as e:
                 self.say(f"Could not turn Tetra Master on ({e}) - starting anyway.")
+            try:                              # (2026-11-26) Ventures in the game: not started with the game (the Squads menu's Ventures button loads it)
+                launcher_setup.venture_off_by_default(cfg["ashita_dir"], cfg.get("ashita_boot", "phoenixsolo.ini"), log=self.say)
+            except Exception as e:
+                self.say(f"Could not take Ventures out of the game's start script ({e}) - starting anyway.")
             try:                              # (2026-11-23) the hardcore icons: on at every PLAY
                 launcher_setup.enable_hcicons(cfg["ashita_dir"], cfg.get("ashita_boot", "phoenixsolo.ini"), log=self.say)
             except Exception as e:
@@ -5207,7 +5222,7 @@ class App(tk.Tk):
         self.conquest_ticked = self.run_conquest("tick")      # catch the world up on the time you were away (servers are not running yet)
         self.run_char_sync("sync-in")                         # (off by default) characters your other PC saved to the shared folder
         self.run_armory("fish")                               # (when a phone is paired) what it caught: skill, delivery box, gil
-        self.start_ventures()                                 # (when an app is paired) squads for Ventures, and the relay while you play
+        self.start_ventures()                                 # Ventures: the relay while you play (and the squads to the hub when an app is paired)
         self.run_stack_mode()                                 # item stacks on the server: today's sizes (default) or the era's
 
         # broken "what a character wears" rows crash the login (2026-11-07): remove them while the servers are down
@@ -5564,6 +5579,17 @@ class App(tk.Tk):
         except Exception:
             pass
 
+    def gm_graphics(self, boot):
+        """(2026-11-26, JØ: "match the player's intended window resolution") The GM boot file gets the Graphics page's
+        values too (window size and mode, quality), like the main boot file at PLAY. It used to keep whatever it had on the
+        day 'Set up GM account' made it, so a later change on the Graphics page never reached the GM game."""
+        try:
+            if self.graphics_tab is not None and self.ashita and boot:
+                core.apply_graphics(os.path.join(self.ashita, "config", "boot", boot), self.graphics_tab.collect(),
+                                    self.cfg.get("ffxi_client_dir"))
+        except Exception:
+            pass
+
     def start_gm(self):
         """Opens the game as the GM account (set up on the Settings page). With the servers off it starts them too, like PLAY."""
         if not self.cfg.get("ashita_boot_gm"):
@@ -5581,6 +5607,12 @@ class App(tk.Tk):
         if not path or not os.path.exists(path):
             messagebox.showinfo("GM game", "The GM account is not set up yet.\n\nOn SYSTEM > GM and testing press 'Set up GM account' first.")
             return
+        try:                                   # (2026-11-26, Animelaine) a character card's log in is not for the GM account
+            import launcher_charcards_gui
+            launcher_charcards_gui.before_gm(self)
+        except Exception:
+            pass
+        self.gm_graphics(boot)             # (2026-11-26, JØ) the same window size and quality as the main game
         if self.running and core.is_running("xiloader"):
             self.launch_extra(boot, "ashita-gm.log")
             self.say("Starting the GM game next to your other window...")
@@ -5658,22 +5690,24 @@ class App(tk.Tk):
             self.say(f"Character pages / phone fishing skipped: {e}")
 
     def start_ventures(self):
-        # (2026-11-25) Ventures (launcher_ventures.py): squad mates sent off from the XIFO app to level at a real camp.
-        # Only when an app is paired. The squads go to the hub now; while the game runs, a relay keeps the game told who
-        # is away and takes in what came home (exp and gil in game, items in the delivery box). Never stops PLAY.
+        # (2026-11-25) Ventures (launcher_ventures.py): squad mates sent off to level at a real camp, from the XIFO app
+        # or (2026-11-26) from the game's own Ventures window. While the game runs, a relay keeps the game told who is
+        # away, takes in what came home (exp and gil in game, items in the delivery box) and answers the window: for
+        # everyone now, since the launcher plans the ventures sent in game itself (no app, no internet needed). With an
+        # app paired the squads also go to the hub. Never stops PLAY.
         try:
             import launcher_armory
             import launcher_ventures
-            if not launcher_armory.load(HERE).get("paired"):
-                return
-            try:
-                n = launcher_ventures.send_roster(self.cfg, HERE)
-                self.say(f"Ventures: {n} squad mate(s) ready in the XIFO app.")
-            except Exception as e:
-                self.say(f"Ventures: the squads were not sent ({e}).")
-            self.venture_relay = launcher_ventures.Relay(self.cfg, HERE, log=lambda text: self.q.put(("log", text)))
-            self.venture_relay.roster_at = time.time()
-            self.venture_relay.start()
+            relay = launcher_ventures.Relay(self.cfg, HERE, log=lambda text: self.q.put(("log", text)))
+            if launcher_armory.load(HERE).get("paired"):
+                try:
+                    n = launcher_ventures.send_roster(self.cfg, HERE)
+                    self.say(f"Ventures: {n} squad mate(s) ready in the XIFO app.")
+                    relay.roster_at = time.time()
+                except Exception as e:
+                    self.say(f"Ventures: the squads were not sent ({e}).")
+            self.venture_relay = relay
+            relay.start()
         except Exception as e:
             self.say(f"Ventures skipped: {e}")
 
@@ -6447,6 +6481,13 @@ def main():
                 os.makedirs(LOGS, exist_ok=True)
                 with open(os.path.join(LOGS, "setup-again-error.log"), "w") as f:
                     f.write(traceback.format_exc())
+        theme = globals().get("launcher_theme")
+        if theme and theme.worn() == "playoffline":
+            try:
+                import launcher_playoffline
+                launcher_playoffline.splash(HERE)
+            except Exception:
+                theme.note("PlayOffline splash: " + traceback.format_exc())
         app = App()
         bring_to_front(app)
         try:                                      # the opening theme of a limited-time look, while one is in date

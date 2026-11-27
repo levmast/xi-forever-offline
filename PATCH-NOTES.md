@@ -2,6 +2,15 @@
 
 Newest first. The launcher shows this file on SYSTEM > Patch notes; the same notes go to #patch-notes on Discord.
 
+## Unreleased
+
+### PlayOffline Viewer
+
+- Choose PlayOffline Viewer in Options > Theme.
+- The opening animation leads into a left-hand Viewer menu with direct access to the launcher pages.
+- Character cards, Hardcore choices and co-op controls share the new theme.
+- Opening music: PlayOffline Viewer (Instrumental) by JO (jnull).
+
 ## v0.3.12 · 26 November 2026
 
 ### New
@@ -22,6 +31,7 @@ Newest first. The launcher shows this file on SYSTEM > Patch notes; the same not
 • Squad mates wait outside towns: walk into a town and the mates who were out stay outside, then rejoin you by themselves in the next area that isn't a town, with no call timer (like your Mog House). You can still call them in town by hand. !squad town off brings them into towns with you again. Thanks Neet.
 • Squad teleports by party chat: say "d2" (or "warp ii") and your Black Mage casts Warp II on you, next to the six Teleports ("tele holla", "dem", "mea"...) and Escape. Thanks JØ.
 • Squad Summoners that play like a player, by wildcabbagepatch (experimental): summons cost MP, avatars drain it the way yours do, Blood Pacts follow your rules and costs (the recast only starts when a pact goes off) and wait for the avatar to be ready and in reach, party pacts can be aimed at you, and each mate has its own settings and pact order (Gambits: a Summoner section and a Basic Summoner starter). Also a weapon skill gear set per mate: armor and accessories it wears from the start of a weapon skill until the damage lands.
+• A third gift: the Forever Track Pants, track pants and sneakers in the Forever Beta colours. Fishing skill +2 (they take your feet slot too), and use them to Warp to your home point, just like the Warp Ring (wear them 8 seconds, then once every 10 minutes, never runs out). In your delivery box at your next login, once per character; new characters start with them. The Forever Beta Shirt now gives Fishing skill +1 too, so the shirt, patch and track pants together are +4.
 • A second gift: the Forever Patch, an eyepatch in the Forever Beta Shirt's colours, with a big crystal and FOREVER BETA on the patch. Fishing skill +1 while you wear it, and use it for the shirt's experience bonus (+75%, up to 4000 exp, 12 hours; 5 charges, 15 hours apart); using it doesn't take away the fishing bonus. It's in your delivery box at your next login, once per character; new characters start with it.
 • A gift for everyone: a Chocobo Egg in your delivery box at your next login, once per character (Hardcore and Randomized characters too). Keep it warm.
 • Timed NMs keep their timers between play sessions. RULES > Comforts, "Timed NMs between sessions": 1 = paused while your servers are off (the default: a timer goes on where it stopped), 2 = real time (timers keep running while you're away), 0 = fresh timers at every start, as before. Argus and Leech King keep whose turn it is. Lottery NMs follow the lottery settings, the land kings their own switch. Thanks Trinity, Akiraheaven and VRTRA.

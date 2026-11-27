@@ -18,7 +18,7 @@ Rules that keep it safe:
   * A return is only accepted for the visit it belongs to (the nonce made at departure), and only once.
   * Linkshell items and bot settings belong to a world: they stay home and never travel.
   * Squad mates travel with their character (levels, jobs, outfits, the shared gear collection and their settings).
-    Each world numbers mates its own way, so they are matched by their slot (1-6) and the settings that carry a
+    Each world numbers mates its own way, so they are matched by their slot (1-7) and the settings that carry a
     mate's number (SQUAD_AI_<n> and the like) are renumbered on the way in.
 
 Works with the `mariadb` Python package ('?' placeholders). Every function takes an open connection with autocommit OFF
@@ -93,7 +93,7 @@ def _with_hub_rates(tables, charid, rates):
     return tables
 
 GAOL = 131                           # Mordion Gaol: without GM rights a character there can do nothing (jail)
-MAX_MATES = 12                # squad mates one character may bring (the game keeps six)
+MAX_MATES = 12                # squad mates one character may bring (the game keeps seven)
 SQUAD_TABLES = ("squad_mate", "squad_job", "squad_equip", "squad_unlock")
 MATE_VAR = re.compile(r"^(SQUAD_[A-Z_]*_)(\d+)((?:_\d+)?)$")                # a mate's own setting: SQUAD_AI_<mate id>, SQUAD_LOOK_<mate id>...
 GUEST_VAR = "COOP_GUEST"

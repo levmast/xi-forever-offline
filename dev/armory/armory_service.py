@@ -825,12 +825,19 @@ def make_handler(arm, static):
                 if not owner:
                     return self.reply(403, {"error": "This phone is not paired. Pair it from the launcher's Characters page."})
                 return self.reply(200, arm.me(owner))
-            if path in ("/armory/api/ventures", "/armory/api/ventures/launcher"):
+            if path in ("/armory/api/ventures", "/armory/api/ventures/launcher", "/armory/api/ventures/game"):
                 if not arm.ventures:
                     return self.reply(503, {"error": "Ventures are not running on this server yet."})
                 if path == "/armory/api/ventures/launcher":
                     owner = self.owner()
                     return self.reply(200, arm.ventures.launcher(owner)) if owner else self.reply(403, {"error": "no key"})
+                if path == "/armory/api/ventures/game":
+                    # (2026-11-26) the in-game window (the kit's venture add-on, through the launcher): the same list
+                    # the paired phone sees, asked for with the launcher's own key
+                    owner = self.owner()
+                    if not owner:
+                        return self.reply(403, {"error": "no key"})
+                    return self.reply(200, arm.ventures.phone(owner, qs.get("camps", ["0"])[0] == "1"))
                 phone = self.phone()
                 owner = phone and arm.owner_of_phone(phone)
                 if not owner:
@@ -878,11 +885,17 @@ def make_handler(arm, static):
                         return self.reply(403, {"error": "no key"})
                     return self.reply(200, arm.ventures.roster(owner, body) if what == "roster"
                                       else arm.ventures.applied(owner, body.get("ids")))
-                if what in ("start", "recall", "seen"):
-                    phone = self.phone()
-                    owner = phone and arm.owner_of_phone(phone)
-                    if not owner:
-                        return self.reply(403, {"error": "This phone is not paired."})
+                if what in ("start", "recall", "seen", "game/start", "game/recall", "game/seen"):
+                    if what.startswith("game/"):                      # (2026-11-26) sent in game: the launcher's key
+                        what = what[5:]
+                        owner = self.owner()
+                        if not owner:
+                            return self.reply(403, {"error": "no key"})
+                    else:
+                        phone = self.phone()
+                        owner = phone and arm.owner_of_phone(phone)
+                        if not owner:
+                            return self.reply(403, {"error": "This phone is not paired."})
                     if what == "start":
                         return self.reply(200, arm.ventures.start(owner, body))
                     return self.reply(200, getattr(arm.ventures, what)(owner, body.get("id")))

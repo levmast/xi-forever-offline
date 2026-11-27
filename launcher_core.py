@@ -807,6 +807,8 @@ RATE_FIELDS = [
     ("map.MOB_GIL_MULTIPLIER",          "map.lua",  "MOB_GIL_MULTIPLIER",          "Gil dropped by monsters",               1.0, 0.0, 100.0, "float"),
     ("main.GIL_RATE",                   "main.lua", "GIL_RATE",                    "Gil from quests",                       1.0, 0.0, 100.0, "float"),
     ("main.AH_PRICE_RATE",              "main.lua", "AH_PRICE_RATE",               "Auction house prices (1 = as they are)", 1.0, 0.1, 10.0, "float"),
+    # (2026-11-26, Ziegh) off = the AH simulator stocks only the era's items (ah_sim.py reads it from rates.json)
+    ("main.AH_OUT_OF_ERA",              "main.lua", "AH_OUT_OF_ERA",               "Out of era items on the auction house (1 = on)", 0, 0, 1, "int"),
     ("main.FAME_RATE",                  "main.lua", "FAME_RATE",                   "Fame from quests (1 = retail)",         1.0, 0.1, 20.0, "float"),
     # (2026-11-20) lottery NMs (Leaping Lizzy, Valkurm Emperor...): the server reads these since v0.1.49 (spawn_slot.cpp).
     # Chance: a multiplier on each NM's own chance; any negative value = the NM always comes next. 0 counts as 1%.
@@ -857,7 +859,7 @@ RATE_FIELDS = [
     # merit.cpp)
     ("main.CASKET_SHOW_CODE",           "main.lua", "CASKET_SHOW_CODE",            "Caskets tell you their combination (1 = on)", 0, 0, 1, "int"),
     ("main.GUILD_SHOPS_ALWAYS_STOCKED", "main.lua", "GUILD_SHOPS_ALWAYS_STOCKED",  "Guild shops never run out (1 = on)",  1,   0,   1,     "int"),
-    ("map.FULL_MERITS",                 "map.lua",  "FULL_MERITS",                 "Every merit to its maximum (1 = on)", 0,   0,   1,     "int"),
+    ("map.FULL_MERITS",                 "map.lua",  "FULL_MERITS",                 "Every merit starts at its maximum (1 = on)", 0,   0,   1,     "int"),
     ("map.MAX_MERIT_POINTS",            "map.lua",  "MAX_MERIT_POINTS",            "Merit points you can hold",          30,  10,  99,    "int"),
     # (2026-11-22, Velderen; the user: yes, off by default) the auction house answers in every area, for the ahgo add-on
     ("map.AH_ANYWHERE",                 "map.lua",  "AH_ANYWHERE",                 "Auction house from anywhere (1 = on)", 1,  0,   1,     "int"),

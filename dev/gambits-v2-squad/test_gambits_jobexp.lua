@@ -187,7 +187,7 @@ end
 section('catalog v6: Check Self -> Act on Enemy, catm "jm", content switched off')
 do
     local o = run('hello 1')
-    check(o[1] == 'GSQ|1|hello|11|32|120|64|live', 'hello: version 11 (capability words since 10) - ' .. tostring(o[1]))
+    check(o[1] == 'GSQ|1|hello|12|32|120|64|live', 'hello: version 12 (capability words since 10) - ' .. tostring(o[1]))
     local t = catEntries(run('catm 2 9 jm'), 't')
     check(has(t, 'TRIGGER_SELF_ACTION_TARGET') and t[#t] == 'TRIGGER_SELF_ACTION_TARGET', 'the target TRIGGER_SELF_ACTION_TARGET is offered (last)')
     local cJM = catEntries(run('catm 3 9 jm'), 'c')
@@ -803,7 +803,7 @@ do
     check(M.target_label('TRIGGER_SELF_ACTION_TARGET') == 'Check Self -> Act on Enemy' and M.TARGET_SHORT.TRIGGER_SELF_ACTION_TARGET == 'Self->Enemy'
           and M.TARGET_HELP.TRIGGER_SELF_ACTION_TARGET:find('checked on the squad mate itself', 1, true), 'the new target\'s label, short name and help')
     local kinds = table.concat(M.NEW_KINDS, ',')
-    check(kinds == 'family,spell,ja,ranged,nuke,burst' and M.KIND_HELP.burst and M.KIND_HELP.nuke and M.KIND_HELP.ranged,
+    check(kinds == 'family,spell,ja,ranged,nuke,burst,burstcap' and M.LATE_KINDS.burstcap and M.KIND_HELP.burstcap and M.KIND_HELP.burst and M.KIND_HELP.nuke and M.KIND_HELP.ranged,
           'new rules may use ranged, nuke and burst, each with its explanation')
     check(M.check_draft({ name = 'X', job = 'RNG', rules = { { on = true, target = 'TARGET', cond = 'ALWAYS', kind = 'ranged' } } }, cat) == nil,
           'a ranged rule passes the checks')
@@ -978,7 +978,7 @@ do
     local scBlock = gc:match('case G_CONDITION::SC_AVAILABLE(.-)case G_CONDITION::NOT_SC_AVAILABLE') or ''
     check(scBlock:find('3s', 1, true) ~= nil and scBlock:find('MagicBurstReaction', 1, true) == nil, 'the weapon skill chaining window keeps 3 s')
     check(count(gc, 'resonanceProperties = resonanceOf(PSCEffect)') == 3, 'all three weapon skill closers decode with resonanceOf (native, Custom, close-only)')
-    check(gc:find('BestBurstSpell(resolvedTarget)', 1, true) and gc:find('auto CGambitsContainer::BestBurstSpell', 1, true),
+    check(gc:find('BestBurstSpell(resolvedTarget, action.select_arg)', 1, true) and gc:find('auto CGambitsContainer::BestBurstSpell', 1, true),
           'the magic burst spell is chosen by BestBurstSpell (one decider, in C++)')
     check(gc:find('SQUAD_SATA_MANAGED', 1, true) and gc:find('SQUAD_SATA_READY', 1, true) and gc:find('if (HoldWeaponSkill(target))', 1, true),
           'SA/TA wait for the squad\'s position; TryTrustSkill asks HoldWeaponSkill first')

@@ -24,13 +24,19 @@ VOCABULARY (format 1) must never be reordered or shortened: new words go to a ne
 
 local C = {}
 C.PREFIX = 'GS'
-C.VERSION = 1
+C.VERSION = 2       -- the newest format this file writes and reads (it reads 1 too)
 C.MAX_CODE = 6000   -- characters of one code (32 of the longest rules are far below this)
 C.MAX_RULES = 32
 
+-- (format 2, 2026-11-27: F22 / F10 / F18) each rule also carries one bit "more": when set, conditions 3 and 4 with their
+-- values (tokens), the subject of each of the four conditions (2 bits: 0 the rule's target, 1 self, 2 its enemy) and Wake to
+-- act (1 bit). The action kind may be burstcap (index 7). A Rule Set that uses none of these is written as format 1, exactly
+-- as before, so an older Gambits still reads it; a format 2 code is refused by an older Gambits with "update Gambits".
+C.SUBJECTS = { 'SELF', 'ENEMY' } -- 1, 2 (0 = the rule's target)
+
 C.JOBS = { 'WAR', 'MNK', 'WHM', 'BLM', 'RDM', 'THF', 'PLD', 'DRK', 'BST', 'BRD', 'RNG', 'SAM', 'NIN', 'DRG', 'SMN', 'BLU',
            'COR', 'PUP', 'DNC', 'SCH', 'GEO', 'RUN' }
-C.KINDS = { 'family', 'spell', 'ja', 'ranged', 'nuke', 'burst' }
+C.KINDS = { 'family', 'spell', 'ja', 'ranged', 'nuke', 'burst', 'burstcap' } -- (burstcap: format 2 only)
 C.ROLES = { 'TANK', 'MELEE', 'CASTER', 'RANGED' }
 C.VOCABULARY = {
     -- targets
@@ -249,6 +255,25 @@ end
 
 -- ---------------------------------------------------------------- the Rule Set
 local FIELDS = { 'cond', 'arg', 'cond2', 'arg2' }
+local MORE_FIELDS = { 'cond3', 'arg3', 'cond4', 'arg4' } -- (format 2)
+local SUBJECT_KEYS = { 'of1', 'of2', 'of3', 'of4' }
+local SUBJECT_IX = indexOf(C.SUBJECTS)
+
+-- (format 2) does this row use anything format 1 cannot carry?
+local function needsMore(r)
+    if r.cond3 ~= nil or r.cond4 ~= nil or r.wake == true then
+        return true
+    end
+
+    for _, key in ipairs(SUBJECT_KEYS) do
+        if r[key] ~= nil then
+            return true
+        end
+    end
+
+    return false
+end
+C.needsMore = needsMore
 
 local function isNumberText(s)
     return type(s) == 'string' and string.match(s, '^[1-9]%d*$') ~= nil and #s <= 9 or s == '0'
@@ -272,12 +297,26 @@ function C.encode(d)
         end
     end
 
+    -- (format 2) only when a rule needs it: otherwise the code is format 1, byte for byte as before
+    local version = 1
+    for _, r in ipairs(d.rules) do
+        if needsMore(r) or r.kind == 'burstcap' then
+            version = 2
+        end
+    end
+
     for i, r in ipairs(d.rules) do
         if r.opaque or KIND_IX[r.kind or ''] == nil then
             return nil, 'rule ' .. i .. ' cannot be shared exactly'
         end
 
-        for _, key in ipairs({ 'target', 'cond', 'arg', 'cond2', 'arg2', 'name', 'retry', 'level', 'id' }) do
+        for _, key in ipairs(SUBJECT_KEYS) do
+            if r[key] ~= nil and SUBJECT_IX[r[key]] == nil then
+                return nil, 'rule ' .. i .. ': unknown condition subject ' .. tostring(r[key])
+            end
+        end
+
+        for _, key in ipairs({ 'target', 'cond', 'arg', 'cond2', 'arg2', 'cond3', 'arg3', 'cond4', 'arg4', 'name', 'retry', 'level', 'id' }) do
             local v = r[key]
             if v ~= nil and type(v) ~= 'string' then
                 return nil, 'rule ' .. i .. ': ' .. key .. ' is not text'
@@ -348,6 +387,21 @@ function C.encode(d)
         token(r.retry)
         token(r.level)
         token(r.id)
+        if version >= 2 then
+            local more = needsMore(r)
+            w.bits(1, more and 1 or 0)
+            if more then
+                for _, key in ipairs(MORE_FIELDS) do
+                    token(r[key])
+                end
+
+                for _, key in ipairs(SUBJECT_KEYS) do
+                    w.bits(2, r[key] and SUBJECT_IX[r[key]] or 0)
+                end
+
+                w.bits(1, r.wake == true and 1 or 0)
+            end
+        end
     end
 
     local bytes = w.finish()
@@ -356,7 +410,7 @@ function C.encode(d)
         bytes[#bytes + 1] = math.floor(h / 256 ^ i) % 256
     end
 
-    local code = C.PREFIX .. C.VERSION .. C.base58(bytes)
+    local code = C.PREFIX .. version .. C.base58(bytes)
     if #code > C.MAX_CODE then
         return nil, 'the Rule Set is too large for one code'
     end
@@ -385,8 +439,9 @@ function C.decode(text)
         return nil, 'this is not a Gambits share code (it starts with ' .. C.PREFIX .. C.VERSION .. ')'
     end
 
-    if tonumber(version) ~= C.VERSION then
-        return nil, string.format('this code was made by a newer Gambits (format %s); this one reads format %d: update Gambits',
+    local format = tonumber(version)
+    if format < 1 or format > C.VERSION then
+        return nil, string.format('this code was made by a newer Gambits (format %s); this one reads formats 1-%d: update Gambits',
             version, C.VERSION)
     end
 
@@ -478,11 +533,28 @@ function C.decode(text)
             end
 
             row.kind = C.KINDS[r.bits(3) + 1]
-            if row.kind == nil then
+            if row.kind == nil or (row.kind == 'burstcap' and format < 2) then
                 error('unknown action kind in rule ' .. i, 0)
             end
 
             row.name, row.retry, row.level, row.id = token(), token(), token(), token()
+            if format >= 2 and r.bits(1) == 1 then
+                for _, key in ipairs(MORE_FIELDS) do
+                    row[key] = token()
+                end
+
+                for _, key in ipairs(SUBJECT_KEYS) do
+                    local ix = r.bits(2)
+                    if ix > #C.SUBJECTS then
+                        error('unknown condition subject in rule ' .. i, 0)
+                    end
+
+                    row[key] = ix > 0 and C.SUBJECTS[ix] or nil
+                end
+
+                row.wake = r.bits(1) == 1 or nil
+            end
+
             rules[i] = row
         end
 

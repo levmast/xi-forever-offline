@@ -69,6 +69,13 @@ DIRECT = (
      "by": "Spaceroast (the remixes), converted for XIPivot by CatsAndBoats",
      "note": "Lo-fi remixes of the game's music: towns, areas, battles, the Mog House. About 430 MB. Installed switched off; "
              "turn it on below. Support Spaceroast: open.spotify.com/artist/1EPZJb9PkAT60jX4vWvg8u"},
+    # (2026-11-26, the user and Zohonde: "better detailed maps") Remapster's hand-drawn maps, CC BY-SA 4.0. The repository
+    # holds each map at 1024 and at 2048 pixels; only the 1024 set is taken (the 2048 one is heavy on the game's memory).
+    {"id": "remapster", "name": "Remapster maps", "folder": "Remapster", "repo": "AkadenTK/remapster_maps",
+     "ref": "831bf3f2a27cc8581cb098af554f07bf70707420", "url": "https://remapster.com", "only": "dats/1024",
+     "by": "The Remapster project (Akaden and the map artists), CC BY-SA 4.0",
+     "note": "Hand-drawn, much clearer in-game maps (/map) for the cities, the open world, the strongholds and many "
+             "dungeons; zones it has not redrawn keep the game's own map. Installed switched off; turn it on below."},
 )
 ARCHIVES = (".zip", ".rar", ".7z")
 PACK_DIR = re.compile(r"^(rom\d?|sound\d?)$", re.I)        # the game-data folders XIPivot overlays
@@ -489,10 +496,12 @@ def _take(items, target, era, move_files):
     return total, files, left
 
 
-def install(source, ashita, kit=None, log=print, run=None, tools=None, free=None, tick=None, switch_on=True, name=None):
+def install(source, ashita, kit=None, log=print, run=None, tools=None, free=None, tick=None, switch_on=True, name=None,
+            only=None):
     """Installs the pack(s) in an archive (.zip, .rar, .7z) or a folder into polplugins/DATs and lists them in
     pivot.ini. Returns [{name, files, bytes, left_out}]. XIPivot itself is switched on by the caller (the boot file).
-    tick: called every couple of seconds while a .rar / .7z unpacks (for a "still working" line)."""
+    tick: called every couple of seconds while a .rar / .7z unpacks (for a "still working" line).
+    only: (a .zip) take just the pack whose folder ends with this path (Remapster: "dats/1024", not "dats/2048")."""
     if not ashita or not os.path.isdir(ashita):
         raise RuntimeError("Ashita's folder was not found. Run the first-time setup before adding a texture pack.")
     if not os.path.exists(source):
@@ -520,6 +529,8 @@ def install(source, ashita, kit=None, log=print, run=None, tools=None, free=None
         with zipfile.ZipFile(source) as archive:
             infos = {info.filename: info for info in archive.infolist() if not info.is_dir()}
             roots = pack_roots(list(infos))
+            if only:
+                roots = {r: v for r, v in roots.items() if (r + "/").lower().endswith(only.strip("/").lower() + "/")}
             names = root_names(roots, source)
             if name and len(roots) == 1:
                 names = {root: folder_name(name) for root in roots}
@@ -581,7 +592,7 @@ def download_direct(pack, kit, ashita, log=print, fetch=None):
     log(f"{pack['name']}: downloading from {pack['url']}...")
     tp.download_file(url, path, log=log, fetch=fetch)
     try:
-        done = install(path, ashita, kit, log=log, switch_on=False, name=pack["folder"])
+        done = install(path, ashita, kit, log=log, switch_on=False, name=pack["folder"], only=pack.get("only"))
     finally:
         try:
             os.remove(path)

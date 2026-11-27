@@ -25,7 +25,7 @@ KIT = os.path.dirname(os.path.abspath(__file__))
 GAME_GUESSES = [r"C:\Program Files (x86)\PlayOnline\SquareEnix\FINAL FANTASY XI",
                 r"C:\Program Files\PlayOnline\SquareEnix\FINAL FANTASY XI",
                 os.path.expanduser("~/mnt/FINAL FANTASY XI")]
-VERSION = 3                       # bump when the design or encoder changes, so installs rebuild (2: own DXT3 encoder, 3: no ring, side text)
+VERSION = 4                       # bump when the design or encoder changes, so installs rebuild (2: own DXT3 encoder, 3: no ring, side text, 4: Fishing skill +1 in the description)
 ITEM_ID, TEMPLATE_ID = 25725, 25738
 SRC_MODEL, NEW_MODEL = 428, 399   # Maat Unity Shirt's body model -> our model number
 ITEM_FILE, ITEM_FIRST, RS = "ROM/286/73.DAT", 23040, 0x1400
@@ -35,7 +35,7 @@ STATE = os.path.join(BACKUP, "state.json")
 
 ITEM = {
     "name": "Forever Beta Shirt", "log": "Forever Beta shirt", "plural": "Forever Beta shirts",
-    "desc": "DEF:1\nExperience point bonus: +75%\nMax. duration: 720 min.\nMaximum bonus: 4000",
+    "desc": "DEF:1 Fishing skill +1\nExperience point bonus: +75%\nMax. duration: 720 min.\nMaximum bonus: 4000",
     "flags": 0xFC40,              # as the Chariot Band: CanUse + CanEquip, NoAuction, NoSale, NoDelivery, Ex, Rare
     "targets": 1, "charges": 5, "cast": 4, "delay": 15, "recast": 54000,
 }

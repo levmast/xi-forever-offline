@@ -6,6 +6,7 @@ the launcher runs JØ's VanaSync host (<kit>/vanasync/server.py, loaded from dis
 alliance, zone, cutscene) to the host over loopback UDP 8766; the player picks the Solo, Party or Alliance mix.
 While the player really is playing one of its own tracks the add-on fades the game's music out (client packet 0x060,
 sound effects untouched) and fades it back in when it stops, fails or the window is closed.
+/vanasync open in game brings a closed player window back (the add-on asks the host, tick() opens it).
 
 Nothing goes online. Imported tracks and settings live in %LOCALAPPDATA%\\VanaSync (JØ's default).
 No tkinter here. Tests: dev/launcher-tests/test_vanasync.py.
@@ -83,6 +84,28 @@ class Player:
             webbrowser.open(URL)
             self.log("VanaSync: player opened in your browser; click Enable audio once.")
 
+    PAGE_FRESH = 75   # seconds: a browser tab that asked for the game's state this recently counts as still open
+
+    def reopen(self):
+        """/vanasync open in game (2026-11-26, Hexblood: "I could not find a way to open it back up while in game if I
+        accidently closed the window"). Ends with one player window, in front: our own app window is closed first when
+        it is still there (behind the game, minimised), so two players never play at once. In the plain-browser
+        fallback a tab cannot be closed from here, so it is only opened again once it has stopped asking."""
+        if self.window is not None:
+            if self.window.poll() is None:
+                try:
+                    self.window.terminate()
+                    self.window.wait(timeout=3)
+                except Exception:
+                    pass
+            self.window = None
+        elif find_edge() is None:
+            age = self.server.game.page_age()
+            if age is not None and age < self.PAGE_FRESH:
+                self.log("VanaSync: the player is already open in your browser.")
+                return
+        self.open_window()
+
     def close(self):
         try:
             self.server.shutdown()
@@ -116,6 +139,12 @@ def tick(app_state, kit, ashita, boot_name, running, log=print):
     elif not want and player is not None:
         player.close()
         app_state.pop("player", None)
+    elif player is not None:
+        try:
+            if player.server.game.take_open():      # /vanasync open in game
+                player.reopen()
+        except Exception as e:
+            log(f"VanaSync: could not open the player again ({e}).")
     if not running:
         app_state.pop("failed", None)
 

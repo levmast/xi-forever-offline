@@ -84,6 +84,20 @@ test("settings round trip sanitizes invalid values and names retain Unicode", ()
   assert.equal(trackTitle("戦闘・Party (Mix).Final.WAV"), "戦闘・Party (Mix).Final");
 });
 
+test("copy numbers at the end of a file name are not shown", () => {
+  for (const [file, title] of [
+    ["Choose to Fight (Special Battle Theme XIFO Exclusive).mp3", "Choose to Fight (Special Battle Theme XIFO Exclusive)"],
+    ["Choose to Fight (Special Battle Theme XIFO Exclusive) (1).mp3", "Choose to Fight (Special Battle Theme XIFO Exclusive)"],
+    ["Against the Odds (Solo Battle Theme) (1).mp3", "Against the Odds (Solo Battle Theme)"],
+    ["Track (2) (1).mp3", "Track"],
+    ["Beyond the Veil (Party Battle Theme).mp3", "Beyond the Veil (Party Battle Theme)"],
+    ["Night Song (Remix).ogg", "Night Song (Remix)"], ["Encore (Live) (3).wav", "Encore (Live)"],
+    ["Symphony No. 5.mp3", "Symphony No. 5"], ["Level 99 Blues.mp3", "Level 99 Blues"],
+    ["Opus (1999).mp3", "Opus (1999)"], ["07 (2) Road.mp3", "07 (2) Road"], ["Take(1).mp3", "Take(1)"],
+    ["(1).mp3", "(1)"], ["noextension", "noextension"]])
+    assert.equal(trackTitle(file), title);
+});
+
 test("100,000 simulator updates fit a 2 second regression budget", () => {
   const state = new CombatState();
   const prefs = settings({ mode: "Resonance" });

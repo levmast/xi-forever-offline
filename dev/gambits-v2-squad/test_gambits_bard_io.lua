@@ -236,7 +236,7 @@ end
 section('C: the rule codec carries EFFECT.tier; every older form is unchanged')
 do
     local hello = F(run('hello 1')[1])
-    check(hello[3] == 'hello' and hello[4] == '11', 'hello: protocol version 11 (10: capability words; 11: enemy family and counts)')
+    check(hello[3] == 'hello' and hello[4] == '12', 'hello: protocol version 12 (10: capability words; 11: enemy family and counts; 12: the long rule form)')
     local r = assert(G.decodeRule('1,SELF,NOT_STATUS,MARCH.2,,,s,VICTORY_MARCH,', 1))
     check(deq(r.cond, { 'NOT_STATUS', { effect = 'MARCH', tier = 2 } }), '"MARCH.2" -> { effect = MARCH, tier = 2 }')
     check(G.encodeRule(r, 1) == '1,SELF,NOT_STATUS,MARCH.2,,,s,VICTORY_MARCH,', 'and back, byte for byte')
@@ -724,7 +724,7 @@ do
     refused(code:sub(1, #code - 5), 'check number', 'cut at the end')
     refused(code:sub(1, 10), 'check number', 'only the start')
     refused('GS1', 'too short', 'the prefix alone')
-    refused(code:gsub('^GS1', 'GS2'), 'newer Gambits', 'an unknown format version (GS2)')
+    refused(code:gsub('^GS1', 'GS3'), 'newer Gambits', 'an unknown format version (GS3; GS2 is the F22 format since 0.4.0)')
     refused(code:sub(1, 30) .. '0' .. code:sub(31), 'never has', 'a character outside Base58 (0)')
     refused('GS1' .. string.rep('z', SC.MAX_CODE), 'longer than any Rule Set code', 'oversized')
     refused('hello there', 'not a Gambits share code', 'random text')

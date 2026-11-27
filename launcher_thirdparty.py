@@ -147,17 +147,51 @@ def find_ollama(kit=None):
     return found
 
 
-def ollama_models(run=None):
-    """The model names Ollama has pulled ([] when Ollama is missing or not running)."""
+def ollama_list(exe, timeout=20):
+    """`ollama list` without a pipe: (its exit code, or None when it did not finish or start; what it printed).
+
+    (2026-11-26; Meli, Lunali, Teutonic84, Rennie: "the launcher does not open the first time" unless Ollama is already
+    running) When Ollama is not running, `ollama list` starts it, and the Ollama it started keeps hold of the pipe this
+    launcher was reading the answer from. Reading a pipe waits for everyone who holds it, so the launcher sat there,
+    before its window was drawn, for as long as Ollama lived: close Ollama, or start the launcher a second time, and
+    it opened. A file has no such wait: only `ollama list` itself is waited for, and only for `timeout` seconds."""
     import subprocess
+    import tempfile
+    with tempfile.TemporaryFile() as out:
+        try:
+            proc = subprocess.Popen([exe, "list"], stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.DEVNULL,
+                                    creationflags=NO_WINDOW)
+        except OSError:
+            return None, ""
+        try:
+            code = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                proc.kill()
+            except OSError:
+                pass
+            code = None
+        try:
+            out.seek(0)
+            text = out.read().decode("utf-8", errors="replace")
+        except OSError:
+            text = ""
+    return code, text
+
+
+def ollama_models(run=None):
+    """The model names Ollama has pulled ([] when Ollama is missing or not running). `run` is a stand-in for tests."""
     exe = find_ollama()
     if not exe:
         return []
-    try:
-        out = (run or subprocess.run)([exe, "list"], capture_output=True, text=True, errors="replace", timeout=20, creationflags=NO_WINDOW)
-    except Exception:
-        return []
-    return [line.split()[0] for line in (out.stdout or "").splitlines()[1:] if line.strip()]
+    if run is None:
+        _code, text = ollama_list(exe)
+    else:
+        try:
+            text = run([exe, "list"], capture_output=True, text=True, errors="replace", timeout=20, creationflags=NO_WINDOW).stdout or ""
+        except Exception:
+            return []
+    return [line.split()[0] for line in text.splitlines()[1:] if line.strip()]
 
 
 def status(item, kit, ashita, state=None, server=None):
@@ -170,6 +204,10 @@ def status(item, kit, ashita, state=None, server=None):
         present, version, _why = system_file_status(item)
         return present, version if present else ""
     state = load_state(kit) if state is None else state
+    # (2026-11-26, Hasuko: Ollama put in by hand still read "not installed") Ollama comes from its own installer and
+    # this launcher only knew about the installs it had run itself. The program being there is what counts.
+    if item["id"] == "ollama" and item["source"]["type"] == "installer" and find_ollama(kit):
+        return True, (state.get("ollama") or {}).get("version", "") or "installed"
     record = state.get(item["id"])
     root = target_root(item, kit, ashita, server)
     present = bool(item.get("check")) and bool(root) and os.path.exists(os.path.join(root, item["check"]))
@@ -250,8 +288,12 @@ def remove_model(model, run=None, start=None, wait=5):
     exe = find_ollama()
     if not exe:
         raise RuntimeError("Ollama is not installed, so there is no model to remove.")
+    if run is None:                          # the real thing: never through a pipe (see ollama_list)
+        answers = ollama_list(exe)[0] == 0
+    else:
+        answers = run([exe, "list"], capture_output=True, text=True, errors="replace", timeout=20, creationflags=NO_WINDOW).returncode == 0
     run = run or subprocess.run
-    if run([exe, "list"], capture_output=True, text=True, errors="replace", timeout=20, creationflags=NO_WINDOW).returncode != 0:
+    if not answers:
         if start is None:
             subprocess.Popen([exe, "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=NO_WINDOW,
                              **({} if os.name == "nt" else {"start_new_session": True}))
@@ -704,7 +746,7 @@ def pull_model(model, log=print, popen=None):
     exe = find_ollama()
     if not exe:
         raise RuntimeError("Ollama is not installed yet (install it first).")
-    if not ollama_models() and subprocess.run([exe, "list"], capture_output=True, creationflags=NO_WINDOW).returncode != 0:
+    if not ollama_models() and ollama_list(exe)[0] != 0:
         subprocess.Popen([exe, "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=NO_WINDOW,
                          **({} if os.name == "nt" else {"start_new_session": True}))
         time.sleep(5)
@@ -1079,7 +1121,11 @@ def _install(item, kit, ashita, fetch, log, server, run, started, remove_old=Tru
             import subprocess
             result = (run or subprocess.run)([path] + list(item["source"].get("args", [])))
             if result.returncode not in (0, 1638, 3010):    # 1638 = a newer one is installed, 3010 = done, restart later
-                raise RuntimeError(f"{item['name']}: the installer stopped with code {result.returncode}.")
+                # (2026-11-26, Hasuko) Ollama's quiet installer stops with a code when Ollama is already there and
+                # running; with the program in place that is not a failure
+                if not (item["id"] == "ollama" and find_ollama(kit)):
+                    raise RuntimeError(f"{item['name']}: the installer stopped with code {result.returncode}.")
+                log(f"{item['name']}: its installer stopped with code {result.returncode}, but Ollama is on this PC already - using it.")
         elif os.name == "nt":
             os.startfile(path)                     # Windows: the installer asks the player itself
             started.append(path)                   # (it is still running: its file stays until the next tidy)
@@ -1366,4 +1412,13 @@ def apply_patch(kit, ashita, folder, dry_run=False):
         if not os.path.exists(target):
             shutil.copy2(os.path.join(base, src), target)
             messages.append(f"Added {dest}.")
+        else:
+            # (2026-11-26, seraphinaspears: a quest that needs Wings of the Goddess still showed) this file is ours and
+            # it changes with the kit, so a copy that differs is brought up to date; yours is kept as <file>.before-era
+            with open(os.path.join(base, src), "rb") as ours, open(target, "rb") as theirs:
+                same = ours.read().replace(b"\r\n", b"\n") == theirs.read().replace(b"\r\n", b"\n")
+            if not same:
+                shutil.copy2(target, target + ".before-era")
+                shutil.copy2(os.path.join(base, src), target)
+                messages.append(f"Updated {dest}.")
     return messages or ["The edits were already there."]

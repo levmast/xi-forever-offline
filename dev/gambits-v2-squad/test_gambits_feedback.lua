@@ -148,7 +148,7 @@ end
 -- ================================================================= wire
 section('!gsq v11: the catalog and the codec')
 do
-    check(F(run('hello 1')[1])[4] == '11', 'hello: version 11')
+    check(F(run('hello 1')[1])[4] == '12', 'hello: version 12')
     local function cEntries(lines)
         local out = {}
         for _, l in ipairs(lines) do local ff = F(l); if ff[3] == 'cat' and ff[5] == 'c' then for e in (ff[6] .. ','):gmatch('([^,]+),') do out[e] = true end end end

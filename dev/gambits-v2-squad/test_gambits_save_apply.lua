@@ -91,7 +91,7 @@ local function refresh_mates() local done = false; Ed.read_mates(function() done
 section('1. the server says what it can do; the mates answer carries what each mate runs')
 check(cmd('/gv2') == true, 'the window opens')
 hello(true)
-check(S.server and S.server.version == 11 and Ed.cap('live') and Ed.cap('reapply1'), 'hello: version 11, capabilities live and reapply1')
+check(S.server and S.server.version == 12 and Ed.cap('live') and Ed.cap('reapply1'), 'hello: version 12, capabilities live and reapply1')
 hello(false)
 check(Ed.cap('live') and not Ed.cap('reapply1'), 'a squad.lua without the one-mate Apply: live only (reapply1 is not claimed)')
 hello(true)

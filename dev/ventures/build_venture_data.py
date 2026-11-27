@@ -217,6 +217,33 @@ def item_names(server):
     return names
 
 
+def one_only_items(server):
+    """Rare and Ex items (keys, quest drops): a venture never brings these home. The delivery box would hand out at most
+    one, the rest stuck there for good (bug report "Ventures Loot", Frost and Bigbadbill, 2026-11-26)."""
+    out = set()
+    for row in B.sql_rows(os.path.join(server, "sql", "item_basic.sql"), "item_basic"):
+        try:
+            if "@FLAG_EX" in row[7].split() or "@FLAG_RARE" in row[7].split():
+                out.add(int(row[0]))
+        except (ValueError, IndexError, AttributeError):
+            pass
+    return out
+
+
+def without(drops, skip):
+    """The drop list with the skipped items taken out (a group keeps its other items, or goes when none is left)."""
+    out = []
+    for d in drops:
+        if isinstance(d, list):
+            if d[0] not in skip:
+                out.append(d)
+        else:
+            rest = [x for x in d["of"] if x[0] not in skip]
+            if rest:
+                out.append({"g": d["g"], "of": rest})
+    return out
+
+
 def pretty(name):
     small = {"of", "the", "a", "and"}
     return " ".join(w if (i and w in small) else w[:1].upper() + w[1:] for i, w in enumerate(name.replace("_", " ").split()))
@@ -241,6 +268,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     fams = family_table(a.server)
     raw_items = item_names(a.server)
+    skip = one_only_items(a.server)
     by_name = {}
     for iid, n in raw_items.items():
         by_name.setdefault(n, iid)
@@ -265,7 +293,7 @@ def main(argv=None):
                 continue
             species = tpl.get("species") or ""
             eco, fam, el = fams.get(species, ("", "", "dark"))
-            drops = loot_of(tpl.get("loot"), by_name)
+            drops = without(loot_of(tpl.get("loot"), by_name), skip)
             for d in drops:
                 used.update([d[0]] if isinstance(d, list) else [x[0] for x in d["of"]])
             out_mobs.append({"name": display(str(tpl.get("display_name") or tn)), "t": tn, "lo": lv[tn][0], "hi": lv[tn][1],

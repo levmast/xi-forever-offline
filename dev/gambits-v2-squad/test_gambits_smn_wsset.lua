@@ -325,6 +325,113 @@ check(used and used.id == xi.jobAbility.HASTEGA and used.aim == master, 'Hastega
 S.deleteRule(master, 101, 1)
 master.cv, master.lv, master.effects = {}, {}, {}
 
+-- ---------------------------------------------------------------- (B8, 2026-11-27) the avatar choice
+section('B8: a fixed avatar stays fixed; a rule may borrow another and it comes back; no silent random pick; Auto')
+do
+    local IX = {}
+    for i, n in ipairs(S.AVATARS) do IX[n] = i end
+    local function choose(idx) master.cv[S.choiceVar(101)] = idx end
+    local function petName(m) return m.pet and S.nameOfPet(m.pet.petId) or nil end
+    local defaultGaruda = function() return xi.petId.GARUDA end -- (what the random default pick may say)
+
+    -- fixed Shiva, no rules: Shiva, never the default pick
+    reset(mira)
+    master.cv, master.printed = {}, {}
+    choose(IX.SHIVA)
+    clock = clock + 100
+    S.combatTick(mira, master, enemy, clock, nil, defaultGaruda)
+    check(petName(mira) == 'SHIVA', 'fixed Shiva: Shiva is summoned (the default pick would have been Garuda)')
+
+    -- Rules may switch OFF: a Garuda rule never moves it
+    reset(mira)
+    master.cv = {}
+    choose(IX.SHIVA)
+    S.setSettings(master, 101, { ruleSwitch = false })
+    S.setRule(master, 101, 1, { pact = 'CLAW', target = 'ENEMY', cond = 'ALWAYS', when = 'COMBAT' })
+    mira.mp = 600
+    for t = 1, 3 do S.combatTick(mira, master, enemy, clock + t, nil, defaultGaruda) end
+    check(petName(mira) == 'SHIVA' and (mira.released or 0) == 0, 'rules may not switch: Shiva stays, the Claw rule waits')
+
+    -- Rules may switch ON: the rule borrows Garuda, it stays while the rule still fits, then Shiva comes back
+    reset(mira)
+    master.cv = {}
+    choose(IX.SHIVA)
+    S.setSettings(master, 101, { ruleSwitch = true })
+    S.setRule(master, 101, 1, { pact = 'CLAW', target = 'ENEMY', cond = 'MY_MPP_GTE', arg = '50', when = 'COMBAT' })
+    mira.mp = 600
+    clock = clock + 100
+    S.combatTick(mira, master, enemy, clock, nil, defaultGaruda) -- (no avatar: the Claw intent calls Garuda itself)
+    check(petName(mira) == 'GARUDA', 'the Claw rule calls Garuda for its pact')
+    S.combatTick(mira, master, enemy, clock + 1, nil, nil)
+    local used = mira.pet.used[#mira.pet.used]
+    check(used and used.id == xi.jobAbility.CLAW, 'Claw is sent')
+    pactGoesOff(mira)
+    S.combatTick(mira, master, enemy, clock + S.SWAP_SECONDS + 2, nil, nil)
+    check(petName(mira) == 'GARUDA', 'MP still above 50%: the Claw rule still fits, Garuda stays (no switching back and forth)')
+    mira.mp = 200 -- (33%: the rule no longer fits)
+    S.combatTick(mira, master, enemy, clock + S.SWAP_SECONDS + 3, nil, nil)
+    check(petName(mira) == 'SHIVA', 'the rule is done and no longer fits: back to Shiva (paid)')
+    local swapAt = mira:getLocalVar('SMN_SWAP_NEXT')
+    check(swapAt > clock, 'the switch back starts the switch hold too')
+
+    -- the switch hold: no switch back inside it
+    reset(mira)
+    choose(IX.SHIVA)
+    S.summon(mira, 'GARUDA', clock, nil, 0)
+    mira.lv.SMN_SWAP_NEXT = clock + 30
+    S.combatTick(mira, master, enemy, clock + 1, nil, nil)
+    check(petName(mira) == 'GARUDA', 'inside the switch hold: no switch back yet')
+
+    -- a manual order wins: while it holds, nothing switches back
+    reset(mira)
+    choose(IX.SHIVA)
+    S.summon(mira, 'GARUDA', clock, nil, 0)
+    mira.lv.SMN_MANUAL_UNTIL = clock + 300
+    S.combatTick(mira, master, enemy, clock + 1, nil, nil)
+    check(petName(mira) == 'GARUDA', 'a manual order holds: no switch back')
+
+    -- not enough MP for the switch back: it waits
+    reset(mira)
+    S.deleteRule(master, 101, 1)
+    choose(IX.SHIVA)
+    S.summon(mira, 'GARUDA', clock, nil, 0)
+    mira.mp = 5
+    S.combatTick(mira, master, enemy, clock + 1, nil, nil)
+    check(petName(mira) == 'GARUDA', 'MP for Shiva missing: Garuda is not released for nothing')
+
+    -- a fixed choice it cannot call: no random substitute, said once (not every tick)
+    reset(mira)
+    master.cv, master.printed = {}, {}
+    choose(IX.FENRIR)
+    mira.lvl = 50
+    for t = 1, 3 do S.combatTick(mira, master, enemy, clock + 10 * t, nil, defaultGaruda) end
+    local said = 0
+    for _, line in ipairs(master.printed) do if line:find('cannot call Fenrir', 1, true) then said = said + 1 end end
+    check(mira.pet == nil, 'Fenrir at level 50: no avatar (not the default pick, Garuda)')
+    check(said == 1 and master.printed[1]:find('level 60', 1, true), 'said once, with the reason: ' .. tostring(master.printed[1]))
+    mira.lvl = 75
+    S.combatTick(mira, master, enemy, clock + 100, nil, defaultGaruda)
+    check(petName(mira) == 'FENRIR', 'once it can: Fenrir')
+
+    -- Auto (weakness): the first summon of a fight is the weakest element's avatar; neutral: the default pick
+    local savedCombat, savedElement = xi.combat, xi.element
+    xi.element = { FIRE = 1, ICE = 2, WIND = 3, EARTH = 4, THUNDER = 5, WATER = 6, LIGHT = 7, DARK = 8 }
+    xi.combat = { damage = { magicalElementSDT = function(t, el) return (t.sdt or {})[el] or 1 end } }
+    reset(mira)
+    master.cv = {}
+    choose(0)
+    enemy.sdt = { [xi.element.WIND] = 1.5 }
+    S.combatTick(mira, master, enemy, clock + 200, nil, function() return xi.petId.IFRIT end)
+    check(petName(mira) == 'GARUDA' and mira.summons == 1, 'Auto, a wind-weak enemy: Garuda is the first summon (one summon, no switch after)')
+    reset(mira)
+    choose(0)
+    enemy.sdt = nil
+    S.combatTick(mira, master, enemy, clock + 300, nil, function() return xi.petId.IFRIT end)
+    check(petName(mira) == 'IFRIT', 'Auto, nothing stands out: the default pick (here Ifrit), as before')
+    enemy.sdt, xi.combat, xi.element = nil, savedCombat, savedElement
+    master.cv, master.lv, master.effects, master.printed = {}, {}, {}, {}
+end
+
 -- ---------------------------------------------------------------- normal attacks
 section('F13 normal attacks: on by default, off when set, never gated by MP or Rage')
 reset(mira)
@@ -713,15 +820,16 @@ section('F13 the Basic Summoner starter: loads, can be edited and saved, rule or
 local starter = Ed.SMN_STARTERS[1]
 check(starter and starter.name == 'Basic Summoner', 'the SMN starter exists')
 check(#Ed.templates_for('SMN') == 0, 'the Rule Set templates are unchanged (a Rule Set has no pet actions)')
-check(starter.settings.engage == true and starter.settings.avatar == 9 and starter.settings.rage == 2 and starter.settings.ward == 2
+check(starter.settings.engage == true and starter.settings.avatar == nil and starter.settings.rage == 2 and starter.settings.ward == 2
     and starter.settings.between == 0 and starter.settings.idle == false and starter.settings.ruleSwitch == true,
-    'its settings: normal attacks on, Keep current, Rage and Ward rules only, keep out between pulls, no idle support, rules may switch')
+    'its settings: normal attacks on, the mate\'s own avatar choice (B8: kept), Rage and Ward rules only, keep out between pulls, no idle support, rules may switch')
 check(#starter.rules == 2 and starter.rules[1].pact == 'HASTEGA' and starter.rules[1].target == 'MASTER' and starter.rules[1].cond == 'NOT_STATUS'
     and starter.rules[1].arg == 'HASTE' and starter.rules[1].protect and starter.rules[2].pact == 'CLAW' and starter.rules[2].target == 'ENEMY'
     and starter.rules[2].cond == 'MY_MPP_GTE' and starter.rules[2].arg == '60', 'its rules: 1 Hastega on you when you lack Haste (protected), 2 Claw while MP >= 60%')
 check(starter.about:find('48') and starter.about:find('Garuda') and starter.about:find('rest'), 'its text names the level / pact needs and rest')
 -- open it (the template flow): an unsaved starter in the Summoner section, drawn beside the mate's own data
-ES.server = { version = 10, caps = { smn = true, wsset = true } }
+-- (B8) smn2: the server keeps the mate's avatar for "-"
+ES.server = { version = 10, caps = { smn = true, wsset = true, smn1 = true, smn2 = true } }
 gp.cv['SQUAD_RS_301_15'] = 4 -- (a Rule Set assignment that must stay)
 ES.smn = { slot = 1, data = Ed.parse_smn((items(run('smg 20 1')))), pacts = cat }
 ES.smn.edit = {}
@@ -779,8 +887,19 @@ for _, words in ipairs(reqs) do
 end
 check(lastOk, 'the server accepts every request of the starter (' .. #reqs .. ' requests)')
 d = Ed.parse_smn((items(run('smg 31 1'))))
-check(d and d.avatar == 9 and d.engage and d.rage == 2 and d.ward == 2 and d.between == 0 and not d.idle and d.ruleSwitch,
-    'saved: the settings read back as the starter')
+check(d and d.avatar == 2 and d.engage and d.rage == 2 and d.ward == 2 and d.between == 0 and not d.idle and d.ruleSwitch,
+    'saved: the settings read back as the starter, and (B8) the mate keeps its own avatar choice (Ifrit), not Keep current')
+check(reqs[2] and reqs[2][1] == 'smbs' and reqs[2][3] == '-', '(B8) the starter sends the avatar as "-" (keep the mate\'s) unless one was picked')
+-- (B8) an avatar picked in the draft is sent and saved
+local picked = { name = 'p', settings = { avatar = 5, engage = true, rage = 2, ward = 2, between = 0, idle = false, ruleSwitch = true },
+                 rules = ES.smn.starter and ES.smn.starter.rules or reqs, avatarPicked = true }
+check(Ed.smn_starter_requests(1, picked)[2][3] == '5', '(B8) an avatar picked in the draft is sent as itself')
+ES.server.caps.smn2 = nil
+check(Ed.smn_starter_requests(1, { settings = { avatar = nil }, rules = {} }, 2)[2][3] == '2',
+    '(B8) an older server (no smn2) gets the mate\'s loaded avatar instead of "-"')
+ES.server.caps.smn2 = true
+-- (the planner checks below are about Keep current: set it, as a player would)
+gp.cv[S.choiceVar(301)] = 9
 check(d and #d.rules == 2 and d.rules[1].pact == 'HASTEGA' and d.rules[1].protect and d.rules[2].pact == 'CLAW'
     and d.rules[2].cond == 'MY_MPP_GTE' and d.rules[2].arg == '70', 'saved: the rules in order, with the edit (Claw from 70% MP)')
 check(gp.cv['SQUAD_RS_301_15'] == 4, 'the mate\'s Rule Set assignment is untouched')

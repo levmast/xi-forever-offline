@@ -567,6 +567,19 @@ def apply_reports(conn, reports, log=print):
                 for item, count in stacks.items():
                     if item not in sizes:
                         continue                          # not an item of this server
+                    # (2026-11-26, Frost: 200 catches came as 200 deliveries) the phone reports a few catches at a time,
+                    # and each report used to start its own stacks. The stacks of this item that still wait in the box
+                    # are filled up first; only what is left over starts a new one.
+                    if sizes[item] > 1:
+                        for waiting, held in _all(cur, "SELECT slot, quantity FROM delivery_box WHERE charid = ? AND box = 1 AND itemid = ? "
+                                                       "AND itemsubid = 0 AND sender = ? AND quantity < ? ORDER BY slot",
+                                                  (charid, item, SENDER, sizes[item])):
+                            if count <= 0:
+                                break
+                            add = min(count, sizes[item] - int(held))
+                            cur.execute("UPDATE delivery_box SET quantity = quantity + ? WHERE charid = ? AND box = 1 AND slot = ?",
+                                        (add, charid, int(waiting)))
+                            count -= add
                     while count > 0:
                         q = min(count, sizes[item])
                         cur.execute("INSERT INTO delivery_box (charid, charname, box, slot, itemid, itemsubid, quantity, senderid, sender) "

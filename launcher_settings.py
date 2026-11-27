@@ -170,6 +170,10 @@ S("main.SEAL_DROP_MINUTES", "rules", "Loot and gil", NUMBER, "Wait between seals
 S("main.AH_PRICE_RATE", "rules", "Loot and gil", RATE, "Auction house prices",
   tip="What things cost on the auction house: the simulator's listings and the bot players' own sales. 1x = the "
       "prices as they are, lower is cheaper, higher is dearer. A change restocks the auction house at your next PLAY.")
+S("main.AH_OUT_OF_ERA", "rules", "Loot and gil", FLAG, "Out of era items",
+  tip="Off = the auction house simulator stocks only items of the era (through Treasures of Aht Urhgan), so newer food "
+      "like Altana's Repast and newer gear never show up for sale. On = every item the auction house menus can show. "
+      "A change restocks the auction house at your next PLAY.")
 S("main.CASKET_DROP_RATE", "rules", "Loot and gil", PERCENT, "Treasure casket chance", step=0.05)
 S("main.TABS_RATE", "rules", "Loot and gil", RATE, "Tabs from Fields of Valor")
 S("fast_travel", "rules", "Travel", SWITCH, "Fast travel", keys=("main.HOMEPOINT_TELEPORT", "main.ENABLE_SURVIVAL_GUIDE"),
@@ -221,8 +225,9 @@ S("main.GUILD_SHOPS_ALWAYS_STOCKED", "rules", "Comforts", FLAG, "Guild shops nev
   tip="Everything a guild shop stocks is back to its usual amount whenever you shop there, even right after you bought "
       "it out. Prices stay the game's own. Off = the era: stock refills a little each day.")
 S("map.FULL_MERITS", "rules", "Comforts", FLAG, "Full merits",
-  tip="Every merit can be raised to its own maximum. Off = the era's group limits (for example only one attribute "
-      "to 5/5, and only a few combat skills to 8/8).")
+  tip="Every merit starts at its own maximum, with nothing to spend (switch it off again and you have the merits "
+      "you bought). Off = you earn and raise them yourself, within the era's group limits (for example only one "
+      "attribute to 5/5, and only a few combat skills to 8/8).")
 S("map.AH_ANYWHERE", "rules", "Comforts", FLAG, "Auction house from anywhere",
   tip="For the ahgo add-on (OPTIONS > Addons): its /ah command opens the auction house wherever you stand, and with "
       "this on you can bid and sell there from any area. Off = the era: the auction house only answers in areas "

@@ -240,6 +240,14 @@ HC_KEYS = {1: "iron", 2: "steel", 3: "silver", 4: "random"}
 KIND_LABEL = {"regular": "", "iron": "IRON", "steel": "STEEL", "silver": "SILVER", "random": "RANDOMIZED", "dualbox": "2ND WINDOW"}
 # each look's border colours per kind: (light, dark, accent for the name and the sparks)
 METALS = {
+    "playoffline": {
+        "regular": ((213, 244, 255), (53, 92, 123), (133, 204, 233)),
+        "iron": ((224, 225, 227), (68, 79, 88), (162, 180, 192)),
+        "steel": ((201, 227, 245), (46, 70, 102), (139, 184, 216)),
+        "silver": ((246, 249, 255), (91, 106, 133), (203, 215, 235)),
+        "random": ((232, 208, 255), (79, 62, 113), (199, 165, 225)),
+        "dualbox": ((185, 248, 236), (44, 91, 94), (129, 219, 207)),
+    },
     "classic": {"regular": ((250, 226, 150), (176, 128, 46), (255, 226, 160)), "iron": ((206, 210, 220), (92, 96, 108), (214, 218, 228)),
                 "steel": ((176, 210, 250), (52, 90, 150), (180, 214, 255)), "silver": ((250, 250, 255), (170, 172, 186), (255, 120, 100)),
                 "random": ((226, 196, 255), (120, 70, 190), (230, 200, 255)), "dualbox": ((150, 240, 226), (30, 140, 136), (160, 250, 236))},
@@ -261,6 +269,7 @@ METALS = {
 }
 # each look's colours round the picture: card top, card bottom, the panel under the name, the small text
 LOOK_PANELS = {
+    "playoffline": ((75, 113, 145), (31, 56, 78), (28, 51, 72, 242), (212, 232, 246)),
     "classic": ((40, 36, 46), (10, 8, 12), (8, 6, 10, 210), (230, 216, 180)),
     "chronicle": ((60, 38, 22), (30, 18, 10), (236, 222, 186, 240), (80, 56, 34)),
     "aero": ((210, 236, 250), (150, 200, 236), (240, 250, 255, 225), (30, 70, 110)),
@@ -297,7 +306,8 @@ def kind_of(c):
 def _font(size, look="8bit"):
     from PIL import ImageFont
     windows = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts")
-    wanted = {"classic": ["georgiab.ttf", "Caladea-Bold.ttf", "DejaVuSerif-Bold.ttf"],
+    wanted = {"playoffline": ["tahomabd.ttf", "DejaVuSans-Bold.ttf"],
+              "classic": ["georgiab.ttf", "Caladea-Bold.ttf", "DejaVuSerif-Bold.ttf"],
               "chronicle": ["georgiab.ttf", "Caladea-Bold.ttf", "DejaVuSerif-Bold.ttf"],
               "aero": ["segoeuib.ttf", "DejaVuSans-Bold.ttf"],
               "vaporwave": ["ariblk.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf"]}.get(look, [])
@@ -397,7 +407,7 @@ def _border(card, look, kind, lit):
         for inset in lines:
             d.rounded_rectangle([inset, inset, w - 1 - inset, h - 1 - inset], radius=10, outline=light, width=2)
         return card
-    if look == "aero":                                           # glass: rounded, glossy top, soft blue rim
+    if look in ("aero", "playoffline"):                          # glass: rounded, glossy top, soft blue rim
         for i in range(4):
             t = i / 3
             d.rounded_rectangle([i, i, w - 1 - i, h - 1 - i], radius=14 - i, outline=_mix(light, dark, t), width=1)

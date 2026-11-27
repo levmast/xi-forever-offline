@@ -7,6 +7,11 @@
   POST /armory/api/ventures/start    (phone key)    {"id", "char", "slots": [..], "camp", "hours"}
   POST /armory/api/ventures/recall   (phone key)    {"id"}
   POST /armory/api/ventures/seen     (phone key)    {"id"}
+  GET  /armory/api/ventures/game     (launcher key) -> the same as the phone's GET     } (2026-11-26) for the in-game
+  POST /armory/api/ventures/game/start | recall | seen   (launcher key), as the phone's } window, through the launcher
+
+The kit's launcher runs this same class as its own planner when no app is paired or the hub can't be reached
+(launcher_ventures.py: owner "local", files in <kit>/ventures), so Ventures also work with no internet.
 
 A mate is "out" from the moment it leaves until its venture ends (or is recalled): the launcher tells the game, which
 will not call it meanwhile. The rewards are worked out from the plan (ventures.py) and handed to the launcher once the

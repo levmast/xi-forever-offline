@@ -1,0 +1,12 @@
+{
+  "name": "PlayOffline Viewer",
+  "about": "A Windows Viewer-inspired theme for XI: Forever Offline. Orbital title art, compact blue menu pills, an animated Chocobo pointer and native startup. Vana’diel archive banners use project artwork. Opening music by JO (jnull).",
+  "art": {"folder": "playoffline-ui"},
+  "sound": "playoffline_viewer.mp3",
+  "colours": {
+    "BG": "#233e59", "PANEL": "#304f69", "PANEL2": "#3c607c", "FG": "#f1f7fb",
+    "DIM": "#cfdee8", "BORDER": "#7391a7", "LINE": "#507189", "OFF": "#98abb8",
+    "GOLD": "#b1e6fc", "GOLD_LIT": "#e3f6ff", "GOLD_DIM": "#78accc", "PARCH": "#edf7fc",
+    "ACCENT": "#a5d9f2", "GREEN": "#8ee3ab", "RED": "#ffacac", "GREY": "#aabac8"
+  }
+}

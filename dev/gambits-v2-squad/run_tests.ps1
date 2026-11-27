@@ -68,7 +68,8 @@ try {
     @{ n = 'Save / Apply, live state, caches 0.3.4 (test_gambits_save_apply.lua)'; a = @('test_gambits_save_apply.lua', $lua, $gl, $ja, $add, $Work) },
     @{ n = 'settings follow the character, theme default 0.3.4 (test_gambits_settings_theme.lua)'; a = @('test_gambits_settings_theme.lua', $add) },
     @{ n = 'enemy family and counts, v11 (test_gambits_feedback.lua)'; a = @('test_gambits_feedback.lua', $lua, $gl, $ja, $add, $Work, $Server) },
-    @{ n = 'F12 WS gear set + F13 Summoner (test_gambits_smn_wsset.lua)'; a = @('test_gambits_smn_wsset.lua', $lua, $gl, $ja, $add, $Work, $Server) }
+    @{ n = 'F12 WS gear set + F13 Summoner (test_gambits_smn_wsset.lua)'; a = @('test_gambits_smn_wsset.lua', $lua, $gl, $ja, $add, $Work, $Server) },
+    @{ n = 'feedback B7-F24, v12 (test_gambits_feedback_b7.lua)'; a = @('test_gambits_feedback_b7.lua', $lua, $gl, $ja, $add, $Work, $Server) }
         )
         foreach ($s in $suites) {
             $out = & $run.exe @pre @($s.a) 2>&1 | ForEach-Object { "$_" }

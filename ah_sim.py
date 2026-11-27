@@ -38,7 +38,8 @@ DEFAULTS = {
         "spell_max_level": 75,
         "spell_max_job": 18,         # job ids 1-18: WAR MNK WHM BLM RDM THF PLD DRK BST BRD RNG SAM NIN DRG SMN BLU COR PUP
         "deny_ids": [],              # never stock these item ids
-        "stock_all_visible": True,    # stock every item the auction house menus can show, not just the era ranges above
+        "stock_all_visible": False,   # stock every item the auction house menus can show, not just the era ranges above
+                                      # (set from the launcher's "Out of era items" switch, rates.json main.AH_OUT_OF_ERA)
     },
     "prices": {
         "default_multiplier": 4.0,           # fair price = vendor sell price x this
@@ -100,14 +101,28 @@ def merge(base, extra):
     return out
 
 
-def load_settings(path=None):
+def out_of_era_wanted(here=HERE):
+    """(2026-11-26, Ziegh: Altana's Repast on the auction house) the launcher's "Out of era items" switch (rates.json
+    main.AH_OUT_OF_ERA, off by default). Off: only the era's own items are stocked (the id ceilings in ah_sim.json's
+    "era" block). On: every item the auction house menus can show, as before. None when the launcher never set it."""
+    try:
+        with open(os.path.join(here, "rates.json"), "r", encoding="utf-8-sig") as f:
+            value = json.load(f).get("main.AH_OUT_OF_ERA")
+        return None if value is None else bool(int(value))
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def load_settings(path=None, here=HERE):
     path = path or os.path.join(HERE, "ah_sim.json")
     if not os.path.exists(path):
         with open(path, "w", encoding="utf-8") as f:
             json.dump(DEFAULTS, f, indent=2)
     with open(path, "r", encoding="utf-8-sig") as f:
         settings = merge(DEFAULTS, json.load(f))
-    apply_wotg(settings)
+    wanted = out_of_era_wanted(here)
+    settings["era"]["stock_all_visible"] = bool(wanted)      # (not set yet = off: the era)
+    apply_wotg(settings, here)
     return settings
 
 

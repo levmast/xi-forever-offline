@@ -21,7 +21,7 @@ share codes).
 
 addon.name    = 'Gambits'
 addon.author  = 'XI: Forever Offline'
-addon.version = '0.3.9'
+addon.version = '0.4.0'
 addon.desc    = 'Gambits: Rule Sets for your squad mates (Target -> Conditions -> Action).'
 addon.link    = ''
 

@@ -91,14 +91,67 @@ end
 M.say = say
 
 -- ---------------------------------------------------------------- rule codec (the same as gambits_squad.lua)
-local KIND_CODE = { family = 'f', ja = 'j', spell = 's', ranged = 'r', nuke = 'n', burst = 'b',
+-- (F10, server version 12) burstcap = a magic burst of at most tier <name> (1-6)
+local KIND_CODE = { family = 'f', ja = 'j', spell = 's', ranged = 'r', nuke = 'n', burst = 'b', burstcap = 'c',
                    waltz = 'w', samba = 'd', storm = 'e', helix = 'h' }
-local CODE_KIND = { f = 'family', j = 'ja', s = 'spell', r = 'ranged', n = 'nuke', b = 'burst',
+local CODE_KIND = { f = 'family', j = 'ja', s = 'spell', r = 'ranged', n = 'nuke', b = 'burst', c = 'burstcap',
                    w = 'waltz', d = 'samba', e = 'storm', h = 'helix' }
 -- (WotG, 2026-11-22) the DNC/SCH actions, which need a version 8 server (gambits_squad.lua)
 M.WOTG_KINDS    = { waltz = true, samba = true, storm = true, helix = true }
-M.NAMED_KINDS   = { family = true, ja = true, spell = true }   -- kinds with a name (ranged, nuke, burst have none)
+M.NAMED_KINDS   = { family = true, ja = true, spell = true, burstcap = true } -- kinds with a name (ranged, nuke, burst have none)
 M.MIN_SERVER    = 3                                             -- the wire format this editor writes (gambits_squad.lua)
+
+-- (F22, server version 12) up to four conditions, all of them must hold; each about a subject: the rule's target (nil),
+-- 'SELF' (the squad mate itself) or 'ENEMY' (the mate's combat target). The row keys of each slot:
+M.COND_SLOTS  = { { 'cond', 'arg', 'of1' }, { 'cond2', 'arg2', 'of2' }, { 'cond3', 'arg3', 'of3' }, { 'cond4', 'arg4', 'of4' } }
+M.MAX_CONDS   = 4
+M.F22_SERVER  = 12
+M.SUBJECT_SUFFIX = { SELF = 'S', ENEMY = 'E' }
+M.SUFFIX_SUBJECT = { S = 'SELF', E = 'ENEMY' }
+-- conditions that do not read a subject (the same list as squad_rulesets.lua R.SUBJECTLESS)
+M.SUBJECTLESS = { ALWAYS = true, RANDOM = true, TIMER = true, PARTY_COUNT = true, ENEMY_COUNT = true, ENEMY_FAMILY = true,
+                  PT_HAS_TANK = true, NOT_PT_HAS_TANK = true, JA_ON_COOLDOWN = true }
+
+-- the conditions of a row in order: { { cond, arg, of }, ... } (slots after an empty one are not read)
+function M.cond_pairs(r)
+    local out = {}
+    for _, keys in ipairs(M.COND_SLOTS) do
+        if r[keys[1]] == nil then
+            break
+        end
+
+        out[#out + 1] = { r[keys[1]], r[keys[2]], r[keys[3]] }
+    end
+
+    return out
+end
+
+-- (F22) what the subject picker says: the rule's target (nil), the mate itself, the mate's enemy
+M.SUBJECT_NAMES = { TARGET = 'Target', SELF = 'Self (this mate)', ENEMY = 'Its enemy' }
+M.SUBJECT_ORDER = { 'TARGET', 'SELF', 'ENEMY' }
+M.SUBJECT_PICK_HELP = {
+    TARGET = 'The condition is about the rule\'s target (the member a Cure is for, the enemy of a nuke), as always.',
+    SELF   = 'The condition is about this squad mate itself, whatever the rule\'s target is: "Self: MP at least 30%".',
+    ENEMY  = 'The condition is about the enemy this squad mate is fighting, whatever the rule\'s target is: "Its enemy: HP below 50%".',
+}
+function M.subject_label(of)
+    return M.SUBJECT_NAMES[of or 'TARGET'] or tostring(of)
+end
+
+-- true when a row needs the long wire form (server version 12): a third or fourth condition, a subject, Wake to act
+function M.needs_long(r)
+    if r.cond3 ~= nil or r.cond4 ~= nil or r.wake == true then
+        return true
+    end
+
+    for _, keys in ipairs(M.COND_SLOTS) do
+        if r[keys[3]] ~= nil then
+            return true
+        end
+    end
+
+    return false
+end
 
 local function split(text, sep)
     local out, start = {}, 1
@@ -314,8 +367,27 @@ function M.encode_rule(r)
         return v == nil and '' or tostring(v)
     end
 
-    local fields = { r.on == false and '0' or '1', M.target_token(r), s(r.cond), s(r.arg), s(r.cond2), s(r.arg2),
+    -- (F22) a condition name with its subject: "MPP_GTE.S" (the mate itself), "HPP_LT.E" (its combat target)
+    local function c(key, ofKey)
+        if r[key] == nil then
+            return ''
+        end
+
+        local suffix = r[ofKey] and M.SUBJECT_SUFFIX[r[ofKey]]
+        return tostring(r[key]) .. (suffix and ('.' .. suffix) or '')
+    end
+
+    local fields = { r.on == false and '0' or '1', M.target_token(r), c('cond', 'of1'), s(r.arg), c('cond2', 'of2'), s(r.arg2),
         KIND_CODE[r.kind] or s(r.kind), s(r.name), s(r.retry) }
+    if M.needs_long(r) then
+        -- (server version 12) the long form: always 16 fields (an older server refuses it, an older editor shows "?")
+        fields[10], fields[11] = s(r.level), s(r.id)
+        fields[12], fields[13] = c('cond3', 'of3'), s(r.arg3)
+        fields[14], fields[15] = c('cond4', 'of4'), s(r.arg4)
+        fields[16] = r.wake == true and 'w' or ''
+        return table.concat(fields, ',')
+    end
+
     if r.level ~= nil or r.id ~= nil then
         fields[#fields + 1] = s(r.level)
     end
@@ -330,7 +402,7 @@ end
 -- nil for "?" (a rule the server could not send exactly) or anything malformed
 function M.decode_rule(text)
     local f = split(text or '', ',')
-    if #f < 8 or #f > 11 then
+    if #f < 8 or (#f > 11 and #f ~= 16) then
         return nil
     end
 
@@ -358,8 +430,36 @@ function M.decode_rule(text)
         return nil
     end
 
-    return { on = f[1] ~= '0', target = target, rolesIn = rolesIn, rolesOut = rolesOut, cond = v(f[3]), arg = v(f[4]),
-             cond2 = v(f[5]), arg2 = v(f[6]), kind = kind, name = v(f[8]), retry = v(f[9]), level = v(f[10]), id = v(f[11]) }
+    -- (F22) "MPP_GTE.S" -> cond MPP_GTE, of SELF
+    local function c(x)
+        local base, suffix = string.match(x or '', '^([A-Z][A-Z0-9_]*)%.([SE])$')
+        if base then
+            return base, M.SUFFIX_SUBJECT[suffix]
+        end
+
+        return v(x), nil
+    end
+
+    local r = { on = f[1] ~= '0', target = target, rolesIn = rolesIn, rolesOut = rolesOut, arg = v(f[4]), arg2 = v(f[6]),
+                kind = kind, name = v(f[8]), retry = v(f[9]), level = v(f[10]), id = v(f[11]) }
+    r.cond, r.of1 = c(f[3])
+    r.cond2, r.of2 = c(f[5])
+    if #f == 16 then
+        r.cond3, r.of3 = c(f[12])
+        r.arg3 = v(f[13])
+        r.cond4, r.of4 = c(f[14])
+        r.arg4 = v(f[15])
+        if f[16] ~= '' and f[16] ~= 'w' then
+            return nil
+        end
+
+        r.wake = f[16] == 'w' or nil
+        if (r.cond3 == nil and r.cond4 ~= nil) or (r.cond2 == nil and r.cond3 ~= nil) then
+            return nil -- (conditions in order)
+        end
+    end
+
+    return r
 end
 
 function M.name_code(name)
@@ -584,16 +684,19 @@ function M.protected(r, cat)
     end
 
     if cat and cat.conds then
-        if r.cond and cat.conds[r.cond] == nil then
-            return 'the server did not describe the condition ' .. r.cond
-        end
-
-        if r.cond2 and cat.conds[r.cond2] == nil then
-            return 'the server did not describe the condition ' .. r.cond2
+        for _, p in ipairs(M.cond_pairs(r)) do -- (F22: every condition slot)
+            if cat.conds[p[1]] == nil then
+                return 'the server did not describe the condition ' .. p[1]
+            end
         end
     end
 
     return nil
+end
+
+-- (F22) the server can read conditions 3-4, subjects and Wake to act (version 12 and its map server: capability "subj")
+function M.f22_ready()
+    return S.server ~= nil and (S.server.version or 0) >= M.F22_SERVER and M.cap('subj')
 end
 
 -- Local checks before a save (the server checks again and decides): nil, or why
@@ -646,7 +749,31 @@ function M.check_draft(d, cat)
             return 'rule ' .. i .. ': ' .. r.kind .. ' takes no name'
         end
 
-        for _, pair in ipairs({ { r.cond, r.arg }, { r.cond2, r.arg2 } }) do
+        -- (F22 / F10 / F18) what needs the server version 12 with its map server
+        if (M.needs_long(r) or r.kind == 'burstcap') and not M.f22_ready() then
+            return 'rule ' .. i .. ': more than two conditions, a condition about yourself or the enemy, a burst tier cap and '
+                .. 'Wake to act need the server update (gambits_squad.lua version ' .. M.F22_SERVER .. ' and its map server)'
+        end
+
+        if r.kind == 'burstcap' then
+            local n = tonumber(r.name or '')
+            if n == nil or n < 1 or n > 6 or n ~= math.floor(n) then
+                return 'rule ' .. i .. ': choose the highest tier for the burst (I-VI)'
+            end
+        end
+
+        for slot, keys in ipairs(M.COND_SLOTS) do
+            local of = r[keys[3]]
+            if of ~= nil and (M.SUFFIX_SUBJECT[M.SUBJECT_SUFFIX[of] or ''] == nil or (r[keys[1]] and M.SUBJECTLESS[r[keys[1]]])) then
+                return string.format('rule %d: condition %d cannot be about %s', i, slot, M.subject_label(of))
+            end
+
+            if slot > 1 and r[keys[1]] ~= nil and r[M.COND_SLOTS[slot - 1][1]] == nil then
+                return string.format('rule %d: condition %d comes after an empty one', i, slot)
+            end
+        end
+
+        for _, pair in ipairs(M.cond_pairs(r)) do
             local c = pair[1] and cat and cat.conds[pair[1]]
             if pair[1] and cat and c == nil then
                 return 'rule ' .. i .. ': unknown condition ' .. pair[1]
@@ -1262,8 +1389,11 @@ function M.load_catalog_for(m)
     -- (version 5) "j": this editor reads conditions with a job ability argument (JA_ON_COOLDOWN)
     -- (version 6, job expansion) "jm": modifier arguments too (MOD_LT)
     -- (version 11, community feedback) "jmf": enemy family and count arguments too (ENEMY_FAMILY, PARTY_COUNT, ENEMY_COUNT)
+    -- (version 12, F20/F21) "jmfs": the long rule form too (ERASABLE, the target ENEMY_ADD)
     local words = { 'catm', tostring(m.slot) }
-    if (S.server.version or 0) >= M.COUNT_SERVER then
+    if (S.server.version or 0) >= M.F22_SERVER then
+        words[3] = 'jmfs'
+    elseif (S.server.version or 0) >= M.COUNT_SERVER then
         words[3] = 'jmf'
     elseif (S.server.version or 0) >= 6 then
         words[3] = 'jm'
@@ -1785,8 +1915,8 @@ function M.new_from_template(job, index, cat)
             copy.target = 'PARTY'
         end
 
-        for _, c in ipairs({ copy.cond, copy.cond2 }) do
-            if cat and cat.conds and cat.conds[c] == nil then
+        for _, p in ipairs(M.cond_pairs(copy)) do -- (F22: every condition)
+            if cat and cat.conds and cat.conds[p[1]] == nil then
                 return false
             end
         end
@@ -2055,7 +2185,7 @@ function M.parse_import(text, cat, catJob)
             end
 
             -- (Bard song tiers) "MARCH.2" is checked here too: without a catalog check_draft cannot tell its kind
-            for _, pair in ipairs({ { r.cond, r.arg }, { r.cond2, r.arg2 } }) do
+            for _, pair in ipairs(M.cond_pairs(r)) do -- (F22: every condition)
                 local tierWhy = (pair[1] == 'STATUS' or pair[1] == 'NOT_STATUS') and M.tier_problem(pair[2]) or nil
                 if tierWhy then
                     problems[#problems + 1] = string.format('rule %d: %s: %s', i, M.cond_label(pair[1]), tierWhy)
@@ -3135,7 +3265,7 @@ end
 M.TARGET_LABELS = { SELF = 'Self', PARTY = 'Party member', PARTY_LOWEST_HPP = 'Party member, lowest HP', TANK = 'Tank',
                     CASTER = 'Mage', MELEE = 'Melee', RANGED = 'Ranged', TOP_ENMITY = 'Ally with aggro',
                     TARGET = 'Enemy (current target)', MASTER = 'Master (you)',
-                    TRIGGER_SELF_ACTION_TARGET = 'Check Self -> Act on Enemy' }
+                    TRIGGER_SELF_ACTION_TARGET = 'Check Self -> Act on Enemy', ENEMY_ADD = 'Add (nearest awake)' }
 -- what each target really means in the engine (gambits_container.cpp), shown as a tooltip
 M.TARGET_HELP = {
     SELF = 'The squad mate itself.',
@@ -3153,6 +3283,9 @@ M.TARGET_HELP = {
     MASTER = 'You, the player.',
     TRIGGER_SELF_ACTION_TARGET = 'The conditions are checked on the squad mate itself, the action goes to the enemy. '
         .. 'E.g. "MP below 50 %" -> Aspir the enemy, or "HP below 50 %" -> Drain the enemy.',
+    ENEMY_ADD = 'The nearest add: a monster fighting the party that is not the party\'s current target, awake (no Sleep, Sleep II '
+        .. 'or Lullaby), within the spell\'s reach. One mate at a time takes an add; after 3 resists in a minute it is left '
+        .. 'alone for 30 s. For Sleep, Sleep II, Foe Lullaby and Foe Lullaby II.',
 }
 -- (role clarity) the four role targets are Gambits Party Roles, never the Squad menu's Role. Text only: who a target
 -- means is unchanged (the server's party roles decide).
@@ -3166,12 +3299,17 @@ end
 M.DEFAULT_RULES_HELP = 'Default job rules: the job\'s built-in rules, filtered by the Squad Role and Mode (Squad menu; '
     .. 'e.g. Damage cures only below 30% HP). An assigned Rule Set replaces them and is not filtered.'
 M.KIND_LABELS   = { family = 'Best of Family', spell = 'Specific Spell', ja = 'Job Ability', ranged = 'Ranged attack',
-                    nuke = 'Best nuke (weakness)', burst = 'Magic burst', waltz = 'Best Curing Waltz',
-                    samba = 'Best Samba', storm = 'Storm of the day', helix = 'Helix of the day' }
+                    nuke = 'Best nuke (weakness)', burst = 'Magic burst', burstcap = 'Magic burst (max tier)',
+                    waltz = 'Best Curing Waltz', samba = 'Best Samba', storm = 'Storm of the day', helix = 'Helix of the day' }
 -- (job expansion) offered for new rules: ranged (RNG/COR), nuke (the best nuke for the enemy's weakness) and burst (the
--- best spell for the open magic burst window) too
-M.NEW_KINDS     = { 'family', 'spell', 'ja', 'ranged', 'nuke', 'burst', 'waltz', 'samba', 'storm', 'helix' }
+-- best spell for the open magic burst window) too. (F10) burstcap only with the server update (M.f22_ready).
+M.NEW_KINDS     = { 'family', 'spell', 'ja', 'ranged', 'nuke', 'burst', 'burstcap', 'waltz', 'samba', 'storm', 'helix' }
+M.LATE_KINDS    = { burstcap = true } -- offered only when M.f22_ready()
+M.TIER_NAMES    = { 'I', 'II', 'III', 'IV', 'V', 'VI' }
 M.KIND_HELP     = {
+    burstcap = 'A magic burst like "Magic burst", but never above the tier you choose: with III it casts Fire III, or Fire II '
+        .. 'when Fire III is missing, short of MP, recasting or too slow for the window. Use two rules with "Self: MP" to burst '
+        .. 'harder while MP is high.',
     family = 'The best spell of a family the mate knows (e.g. Cure -> Cure IV).',
     spell  = 'One exact spell.',
     ja     = 'One job ability.',
@@ -3219,6 +3357,9 @@ M.SUBJECTS = {
     { key = 'FAMILY',  label = 'Enemy family',  ops = { { 'is', 'ENEMY_FAMILY' } }, default = 'GOBLIN' },
     { key = 'PCOUNT',  label = 'Party members', ops = { { 'count', 'PARTY_COUNT' } }, default = 'AT_LEAST.2.ASLEEP' },
     { key = 'ECOUNT',  label = 'Enemies',       ops = { { 'count', 'ENEMY_COUNT' } }, default = 'AT_LEAST.3.0.10' },
+    -- (F20, server version 12) an effect Erase can remove now (Erase's own check: the Erasable flag and a duration, so a
+    -- permanent effect never makes the rule repeat). Offered only when the catalog describes it (catm "jmfs").
+    { key = 'ERASE',   label = 'Erasable debuff', ops = { { 'has one (Erase can remove it)', 'ERASABLE' } } },
     -- (job expansion) the advanced conditions: offered only with "More conditions" ticked (a saved rule with one is
     -- always shown)
     { key = 'SKILLCHAIN', label = 'Skillchain', ops = { { 'a magic burst is possible', 'MB_AVAILABLE' },
@@ -3277,6 +3418,8 @@ M.SUBJECT_HELP = {
     LEVEL      = 'The target\'s level.',
     TIMER      = 'True the first time, then once every so many seconds.',
     RANDOM     = 'True with this chance (in percent) each time the rule is checked.',
+    ERASE      = 'True while the target has an effect Erase can remove now: an erasable debuff that wears off by itself. A '
+        .. 'permanent effect does not count, so an Erase rule never repeats on something it cannot remove.',
 }
 
 -- Status effects offered first in the picker (any other effect can be typed; the server checks the name)
@@ -3329,6 +3472,7 @@ M.COND_LABELS = {
     ENEMY_FAMILY       = { 'Enemy is', 'family' },   -- (F1/F2, server version 11)
     PARTY_COUNT        = { 'Party members', 'pcount' },
     ENEMY_COUNT        = { 'Enemies', 'ecount' },
+    ERASABLE           = { 'Has an erasable debuff' },   -- (F20, server version 12)
 }
 
 local ROMAN = { I = true, II = true, III = true, IV = true, V = true, VI = true }
@@ -3424,6 +3568,11 @@ function M.action_text(r)
         return M.kind_label(r.kind) .. ': ?'
     end
 
+    if r.kind == 'burstcap' then
+        -- (F10) "Magic burst, at most III"
+        return 'Magic burst, at most ' .. (M.TIER_NAMES[tonumber(r.name) or 0] or tostring(r.name))
+    end
+
     return r.kind == 'family' and ('Best of ' .. M.pretty(r.name)) or M.pretty(r.name)
 end
 
@@ -3431,8 +3580,9 @@ end
 -- (M.rule_summary) stays in the tooltip and under the selected rule.
 M.TARGET_SHORT = { SELF = 'Self', PARTY = 'Party', PARTY_LOWEST_HPP = 'Lowest HP', TANK = 'Tank', CASTER = 'Mage', MELEE = 'Melee',
                    RANGED = 'Ranged', TOP_ENMITY = 'Aggro ally', TARGET = 'Enemy', MASTER = 'You',
-                   TRIGGER_SELF_ACTION_TARGET = 'Self->Enemy' }
+                   TRIGGER_SELF_ACTION_TARGET = 'Self->Enemy', ENEMY_ADD = 'Add' }
 M.COND_SHORT = {
+    ERASABLE = 'Erasable debuff', -- (F20)
     ALWAYS = 'Always', HAS_TOP_ENMITY = 'Top enmity', NOT_HAS_TOP_ENMITY = 'Not top enmity', PT_HAS_TANK = 'Tank in party',
     NOT_PT_HAS_TANK = 'No tank', SC_AVAILABLE = 'Skillchain open', NOT_SC_AVAILABLE = 'No skillchain', MB_AVAILABLE = 'Burst window',
     CASTING_MA = 'Casting', CASTING_DEBUFF = 'Casting a debuff', READYING_WS = 'Readying WS', READYING_MS = 'Readying move',
@@ -3494,13 +3644,16 @@ function M.rule_short(r, cat)
         return '(kept unchanged, read-only)'
     end
 
-    local when = M.cond_short(r.cond, r.arg, cat)
-    if r.cond2 then
-        when = when .. ' + ' .. M.cond_short(r.cond2, r.arg2, cat)
+    -- (F22) every condition, each with its subject when that is not the target ("Self MP >= 30")
+    local parts = {}
+    for _, p in ipairs(M.cond_pairs(r)) do
+        local prefix = p[3] == 'SELF' and 'Self ' or (p[3] == 'ENEMY' and 'Enemy ' or '')
+        parts[#parts + 1] = prefix .. M.cond_short(p[1], p[2], cat)
     end
 
-    local text = string.format('%s: %s -> %s', M.roles_text(r) or M.TARGET_SHORT[r.target or ''] or M.target_label(r.target), when ~= '' and when or '?',
-        M.action_text(r))
+    local when = table.concat(parts, ' + ')
+    local text = string.format('%s: %s -> %s%s', M.roles_text(r) or M.TARGET_SHORT[r.target or ''] or M.target_label(r.target), when ~= '' and when or '?',
+        M.action_text(r), r.wake and ' (wakes)' or '')
     if r.retry and tonumber(r.retry) and tonumber(r.retry) > 0 then
         text = text .. string.format(' (wait %s s)', r.retry)
     end
@@ -3522,12 +3675,16 @@ function M.rule_summary(r, cat)
         return '(uses options this editor cannot show - kept unchanged, read-only)'
     end
 
-    local when = M.cond_text(r.cond, r.arg, cat)
-    if r.cond2 then
-        when = when .. ' and ' .. M.cond_text(r.cond2, r.arg2, cat)
+    -- (F22) every condition, each said about its subject ("this mate: MP at least 30%")
+    local parts = {}
+    for _, p in ipairs(M.cond_pairs(r)) do
+        local prefix = p[3] == 'SELF' and 'this mate: ' or (p[3] == 'ENEMY' and 'its enemy: ' or '')
+        parts[#parts + 1] = prefix .. M.cond_text(p[1], p[2], cat)
     end
 
-    local text = string.format('%s: %s -> %s', M.roles_text(r) or M.target_label(r.target), when ~= '' and when or '(no condition)', M.action_text(r))
+    local when = table.concat(parts, ' and ')
+    local text = string.format('%s: %s -> %s%s', M.roles_text(r) or M.target_label(r.target), when ~= '' and when or '(no condition)', M.action_text(r),
+        r.wake and ' (wakes the mate from resting in a fight)' or '')
     if r.retry and r.retry ~= '' and tonumber(r.retry) and tonumber(r.retry) > 0 then
         text = text .. string.format(' (then waits %s s)', r.retry)
     end
@@ -3556,6 +3713,81 @@ end
 -- ---------------------------------------------------------------- rule list operations (local, no server)
 function M.new_rule()
     return { on = true, target = 'PARTY', cond = 'HPP_LT', arg = '50', kind = 'family', name = 'CURE' }
+end
+
+-- (2026-11-27, F17 / F20 / F10 / F21 / F18) ready-made rules for the editor's Examples list: each is inserted after the
+-- selected rule like Add rule, and can be edited like any other. needs: 'subj' = the server update (M.f22_ready); a
+-- condition or target name = the catalog must describe it.
+M.RULE_EXAMPLES = {
+    { key = 'acid', label = 'Shoot until Defense Down (Acid Bolts)',
+      tip = 'Ranged attacks while the enemy lacks Defense Down: Acid Bolts add it. The rule stops once it is on (a shot already '
+          .. 'being aimed still goes) and starts again when it wears off. Needs a crossbow and Acid Bolts. Other ranged rules work as before.',
+      rules = { { on = true, target = 'TARGET', cond = 'NOT_STATUS', arg = 'DEFENSE_DOWN', kind = 'ranged', retry = '3' } } },
+    { key = 'erase', label = 'Erase an erasable debuff', needs = 'ERASABLE',
+      tip = 'Erase on a party member with an effect Erase can remove now. Permanent effects are skipped, so it never repeats on '
+          .. 'something it cannot remove.',
+      rules = { { on = true, target = 'PARTY', cond = 'ERASABLE', kind = 'spell', name = 'ERASE' } } },
+    { key = 'burst', label = 'Magic burst: strong at high MP, light at low MP', needs = 'subj',
+      tip = 'Two rules: while this mate has at least 50% MP it bursts with up to tier V, else with up to tier II. The element '
+          .. 'still comes from the skillchain; a lower tier is used when the higher one cannot be cast in time.',
+      rules = { { on = true, target = 'TARGET', cond = 'MB_AVAILABLE', cond2 = 'MPP_GTE', arg2 = '50', of2 = 'SELF', kind = 'burstcap', name = '5' },
+                { on = true, target = 'TARGET', cond = 'MB_AVAILABLE', kind = 'burstcap', name = '2' } } },
+    { key = 'sleep', label = 'Sleep an add', needs = 'ENEMY_ADD',
+      tip = 'Sleep (the best the mate has) on the nearest awake monster that joined the fight, not the one the party fights. '
+          .. 'One mate takes each add; after 3 resists in a minute the add is left for 30 s.',
+      rules = { { on = true, target = 'ENEMY_ADD', cond = 'ALWAYS', kind = 'family', name = 'SLEEP' } } },
+    { key = 'lullaby', label = 'Foe Lullaby an add (Bard)', needs = 'ENEMY_ADD',
+      tip = 'Foe Lullaby (the best the Bard has) on the nearest awake add, as "Sleep an add".',
+      rules = { { on = true, target = 'ENEMY_ADD', cond = 'ALWAYS', kind = 'family', name = 'FOE_LULLABY' } } },
+    { key = 'wake', label = 'Cure below 40% (wakes a resting mate)', needs = 'subj',
+      tip = 'With Rest in fights: this Cure may run while the mate rests; it stands up for the cast and then rests again.',
+      rules = { { on = true, target = 'PARTY_LOWEST_HPP', cond = 'HPP_LT', arg = '40', kind = 'family', name = 'CURE', wake = true } } },
+}
+
+-- the examples this server can take (cat = the open catalog)
+function M.examples_for(cat)
+    local out = {}
+    local targets = {}
+    for _, t in ipairs(cat and cat.targets or {}) do
+        targets[t] = true
+    end
+
+    for _, ex in ipairs(M.RULE_EXAMPLES) do
+        local ok = ex.needs == nil or (ex.needs == 'subj' and M.f22_ready())
+            or (cat and cat.conds and cat.conds[ex.needs] ~= nil) or targets[ex.needs] == true
+        if ok then
+            out[#out + 1] = ex
+        end
+    end
+
+    return out
+end
+
+-- inserts an example's rules after the selected one; returns the new selected index (the first inserted)
+function M.add_example(d, sel, key)
+    local ex
+    for _, e in ipairs(M.RULE_EXAMPLES) do
+        if e.key == key then
+            ex = e
+        end
+    end
+
+    if ex == nil or #d.rules + #ex.rules > M.MAX_RULES then
+        return sel
+    end
+
+    local at = math.min((sel or #d.rules) + 1, #d.rules + 1)
+    for i, r in ipairs(ex.rules) do
+        local copy = {}
+        for k, v in pairs(r) do
+            copy[k] = v
+        end
+
+        table.insert(d.rules, at + i - 1, copy)
+    end
+
+    d.dirty = true
+    return at
 end
 
 -- Each returns the new selected index
@@ -4061,20 +4293,22 @@ end
 
 -- ---------------------------------------------------------------- edits without ImGui (the window calls these; tests too)
 local function cond_keys(slot)
-    if slot == 2 then
-        return 'cond2', 'arg2'
-    end
-
-    return 'cond', 'arg'
+    local keys = M.COND_SLOTS[slot] or M.COND_SLOTS[1]
+    return keys[1], keys[2], keys[3]
 end
+M.cond_keys = cond_keys
 
--- Sets condition slot 1 or 2 (cond nil clears slot 2). Changing only the comparison (HP below -> HP at least) keeps the
--- value exactly; another subject starts from its default value (a status effect is left to choose).
+-- Sets condition slot 1-4 (cond nil clears a slot from 2 up; the ones after it move up, so there is never a gap).
+-- Changing only the comparison (HP below -> HP at least) keeps the value exactly; another subject starts from its default
+-- value (a status effect is left to choose).
 function M.set_condition(r, slot, cond, cat)
     local ck, ak = cond_keys(slot)
     if cond == nil then
-        if slot == 2 then
-            r.cond2, r.arg2 = nil, nil
+        if slot >= 2 then
+            for i = slot, M.MAX_CONDS do
+                local here, next = M.COND_SLOTS[i], M.COND_SLOTS[i + 1]
+                r[here[1]], r[here[2]], r[here[3]] = next and r[next[1]], next and r[next[2]], next and r[next[3]]
+            end
         end
 
         return
@@ -4120,15 +4354,19 @@ end
 
 -- the subjects the builder offers for a slot: only those whose engine conditions the server's catalog reports
 -- (job expansion) advanced = true also offers the advanced subjects (skillchain, level, timer, random)
-function M.subjects_for(slot, target, cat, advanced)
+-- (F22) of: the slot's subject ('SELF', 'ENEMY' or nil = the rule's target). An enemy-only subject fits the target Enemy or
+-- the subject Its enemy; a subject that does not read anyone (Always, counts, the party tank ...) only fits the target.
+function M.subjects_for(slot, target, cat, advanced, of)
     local out = {}
     for _, subj in ipairs(M.SUBJECTS) do
-        local reported = true
+        local reported, subjectless = true, false
         for _, op in ipairs(subj.ops) do
             reported = reported and cat and cat.conds and cat.conds[op[2]] ~= nil
+            subjectless = subjectless or M.SUBJECTLESS[op[2]] == true
         end
 
-        if reported and not (subj.key == 'ALWAYS' and slot == 2) and not (subj.enemyOnly and target ~= 'TARGET')
+        local enemyOk = not subj.enemyOnly or of == 'ENEMY' or (of == nil and target == 'TARGET')
+        if reported and not (subj.key == 'ALWAYS' and slot >= 2) and enemyOk and not (of ~= nil and subjectless)
             and (advanced or not subj.advanced) then
             out[#out + 1] = subj
         end
@@ -4319,12 +4557,29 @@ end
 -- one condition slot: subject, comparison, value
 local function condition_editor(r, slot, cat, labelW)
     local g = imgui()
-    local ck, ak = cond_keys(slot)
+    local ck, ak, ok = cond_keys(slot)
     local cond = r[ck]
     local info = cond and M.SUBJECT_OF[cond]
-    local subjects = M.subjects_for(slot, r.target, cat, S.moreConds == true)
+
+    -- (F22, server version 12) whom this condition is about: the rule's target, this mate, or its enemy
+    if M.f22_ready() and cond ~= nil then
+        width(s(130))
+        local who = combo('##gsq-who' .. slot, r[ok] or 'TARGET', M.SUBJECT_ORDER, M.subject_label,
+            function(v) return M.SUBJECT_PICK_HELP[v or 'TARGET'] end)
+        tooltip(M.SUBJECT_PICK_HELP[r[ok] or 'TARGET'])
+        local of = who ~= 'TARGET' and who or nil
+        if of ~= r[ok] then
+            r[ok] = of
+            if of ~= nil and M.SUBJECTLESS[cond] then
+                r[ok] = nil -- (this condition does not read anyone: it stays about the target)
+            end
+        end
+        same(s(4))
+    end -- (an older server: a subject loaded with the rule is kept as it is; check_draft says it needs the update)
+
+    local subjects = M.subjects_for(slot, r.target, cat, S.moreConds == true, r[ok])
     local keys, byKey = {}, {}
-    if slot == 2 then
+    if slot >= 2 then
         keys[1] = 'NONE'
     end
 
@@ -4349,7 +4604,7 @@ local function condition_editor(r, slot, cat, labelW)
         return byKey[v] and byKey[v].label or v
     end, function(v)
         if v == 'NONE' then
-            return 'No second condition: the first one alone decides.'
+            return slot == 2 and 'No second condition: the first one alone decides.' or 'No more conditions here (the ones after move up).'
         end
 
         return M.SUBJECT_HELP[v or '']
@@ -4357,7 +4612,7 @@ local function condition_editor(r, slot, cat, labelW)
     tooltip(M.SUBJECT_HELP[current or ''] or 'What the rule checks.')
     if picked ~= current then
         if picked == 'NONE' then
-            M.set_condition(r, 2, nil, cat)
+            M.set_condition(r, slot, nil, cat)
         elseif byKey[picked] then
             M.set_condition(r, slot, byKey[picked].ops[1][2], cat)
         end
@@ -4501,7 +4756,7 @@ local function condition_editor(r, slot, cat, labelW)
         end
     end
 
-    if M.ENEMY_CONDS[cond] and r.target ~= 'TARGET' then
+    if M.ENEMY_CONDS[cond] and r.target ~= 'TARGET' and r[ok] ~= 'ENEMY' then
         same_if_fits(s(180), labelW)
         colored(M.theme.bad, '(needs the target Enemy)')
     end
@@ -5412,6 +5667,17 @@ local function name_picker(r, cat)
     end
 
     local g = imgui()
+    if r.kind == 'burstcap' then
+        -- (F10) the highest tier: I-VI (the element is still picked from the skillchain)
+        same(s(6))
+        width(s(80))
+        local tiers = { '1', '2', '3', '4', '5', '6' }
+        r.name = combo('##gsq-tier', r.name or '3', tiers, function(v) return 'max ' .. (M.TIER_NAMES[tonumber(v) or 0] or '?') end,
+            function(v) return string.format('Never above tier %s; a lower tier when that one cannot be cast in time.', M.TIER_NAMES[tonumber(v) or 0] or '?') end)
+            or r.name
+        return
+    end
+
     local mate = M.mate()
     same_if_fits(s(260), s(100))
     width(fill_w(s(260), s(110))) -- (0.3.5: as wide as the row allows, with room for Show all)
@@ -5570,8 +5836,30 @@ local function rule_editor(d, r, cat, readonly)
     condition_editor(r, 1, cat, labelW)
     label('And')
     condition_editor(r, 2, cat, labelW)
+    -- (F22, server version 12) a third and a fourth condition, each shown once the one before it is set (or when loaded)
+    for slot = 3, M.MAX_CONDS do
+        local prev = M.COND_SLOTS[slot - 1][1]
+        if r[M.COND_SLOTS[slot][1]] ~= nil or (r[prev] ~= nil and M.f22_ready()) then
+            label('And')
+            condition_editor(r, slot, cat, labelW)
+        end
+    end
+
     if g.SetCursorPosX then
         g.SetCursorPosX(labelW)
+    end
+
+    -- (F18, server version 12) Wake to act: the rule may run while the mate rests in a fight (and stands it up)
+    if M.f22_ready() or r.wake then
+        local wake = { r.wake == true }
+        if g.Checkbox('Wake to act##gsq-wake', wake) then
+            r.wake = wake[1] or nil
+        end
+
+        tooltip('While this mate rests in a fight (Squads menu: Rest in fights), only rules with Wake to act are used. '
+            .. 'When one of them acts (e.g. a Cure for a member below 40% HP), the mate stands up for that action and then rests again; '
+            .. 'its other rules wait until the rest is over.')
+        same(s(12))
     end
 
     -- (job expansion) the advanced conditions (skillchain, level, timer, random) only when asked for
@@ -5586,7 +5874,9 @@ local function rule_editor(d, r, cat, readonly)
     width(s(160))
     local kinds = {}
     for _, k in ipairs(M.NEW_KINDS) do
-        kinds[#kinds + 1] = k
+        if not M.LATE_KINDS[k] or M.f22_ready() or r.kind == k then
+            kinds[#kinds + 1] = k
+        end
     end
 
     local kind = combo('##gsq-kind', r.kind, kinds, M.kind_label, function(v) return M.KIND_HELP[v or ''] end)
@@ -6188,6 +6478,25 @@ local function editor_panel()
             tooltip('More for the selected rule: move it to the top or to the bottom.')
             if more == 1 or more == 2 then
                 S.sel, S.checks = M.move_rule_end(d, S.sel, more == 1), {}
+            end
+
+            -- (2026-11-27) ready-made rules, after the selected one
+            local examples = M.examples_for(S.cat)
+            if #examples > 0 then
+                same_if_fits(s(100))
+                width(s(100))
+                local keys, byKey = { '' }, {}
+                for _, ex in ipairs(examples) do
+                    keys[#keys + 1] = ex.key
+                    byKey[ex.key] = ex
+                end
+
+                local pick = combo('##gsq-examples', '', keys, function(v) return byKey[v] and byKey[v].label or 'Examples' end,
+                    function(v) return byKey[v] and byKey[v].tip or nil end)
+                tooltip('Ready-made rules: picked ones are added after the selected rule and can be edited.')
+                if pick ~= '' and byKey[pick] then
+                    S.sel, S.checks = M.add_example(d, S.sel, pick), {}
+                end
             end
         end)
     end
@@ -7113,9 +7422,11 @@ M.SMN_STARTERS = { {
         .. '(level 10; with spells from scrolls, Garuda\'s pact). Below level 48 the rule waits and the mate uses rule 2. '
         .. 'Rule 2 (Rage): Claw on the enemy only while the mate has at least 60% MP, so MP is kept for support. '
         .. 'Garuda is called and switched to by the pact rules, which check the summon cost, the pact cost and the Blood '
-        .. 'Pact timer. The avatar is released before the mate rests (always). Avatar: Keep current (no switching for '
-        .. 'weakness). Rage and Ward: Rules only.',
-    settings = { avatar = 9, engage = true, rage = 2, ward = 2, between = 0, idle = false, ruleSwitch = true },
+        .. 'Pact timer. The avatar is released before the mate rests (always). Avatar: the mate\'s own choice stays as it '
+        .. 'is unless you pick another here. Rage and Ward: Rules only.',
+    -- (B8, 2026-11-27) avatar nil = the mate's own avatar choice is kept (it used to be 9, Keep current, which replaced a
+    -- saved Shiva and then brought the rules' Garuda)
+    settings = { avatar = nil, engage = true, rage = 2, ward = 2, between = 0, idle = false, ruleSwitch = true },
     rules = {
         { on = true, pact = 'HASTEGA', target = 'MASTER', cond = 'NOT_STATUS', arg = 'HASTE', when = 'COMBAT', protect = true },
         { on = true, pact = 'CLAW', target = 'ENEMY', cond = 'MY_MPP_GTE', arg = '60', when = 'COMBAT', protect = false },
@@ -7156,10 +7467,16 @@ end
 -- the !gsq requests that put a starter on a mate as ONE change (server capability "smn1"): begin, the settings, every
 -- rule (each checked when it arrives, nothing written), then the commit, which checks it all and only then replaces the
 -- mate's settings and pact rules. A refused part changes nothing.
-function M.smn_starter_requests(slot, starter)
+function M.smn_starter_requests(slot, starter, mateAvatar)
     local e = starter.settings
+    -- (B8) an avatar you did not pick in the draft is not sent as a change: "-" (server cap smn2) keeps the mate's choice; an
+    -- older server gets the mate's own value as loaded (mateAvatar)
+    local avatar = e.avatar
+    if not starter.avatarPicked then
+        avatar = M.cap('smn2') and '-' or (mateAvatar or e.avatar or 0)
+    end
     local out = { { 'smb', tostring(slot) },
-                  { 'smbs', tostring(slot), tostring(e.avatar), e.engage and '1' or '0', tostring(e.rage), tostring(e.ward),
+                  { 'smbs', tostring(slot), tostring(avatar), e.engage and '1' or '0', tostring(e.rage), tostring(e.ward),
                     tostring(e.between), e.idle and '1' or '0', e.ruleSwitch and '1' or '0' } }
     for i, r in ipairs(starter.rules) do
         out[#out + 1] = { 'smbr', tostring(slot), tostring(i), r.on == false and '0' or '1', r.pact, r.target, r.cond,
@@ -7182,7 +7499,7 @@ function M.smn_apply_starter(slot, starter)
         return false
     end
 
-    local list = M.smn_starter_requests(slot, starter)
+    local list = M.smn_starter_requests(slot, starter, S.smn and S.smn.slot == slot and S.smn.data and S.smn.data.avatar or nil)
     local function fail(i, why)
         read_request({ 'smba', tostring(slot) }, function() return true end, function() end)
         say(string.format('%s NOT saved: %s. Nothing was changed.', starter.name, M.readable(why or '?')), false)
@@ -7302,8 +7619,15 @@ function M.smn_starter_panel(mate, m)
 
     label('Avatar')
     width(s(180))
-    e.avatar = combo('##gsq-smst-av', e.avatar, { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 }, function(v) return M.SMN_AVATARS[v] end)
-    tooltip(M.SMN_HELP.avatar)
+    -- (B8) shown as the mate's own choice until you pick another one (then that one is saved)
+    if e.avatar == nil then
+        e.avatar = m.data and m.data.avatar or 0
+    end
+    local picked = combo('##gsq-smst-av', e.avatar, { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 }, function(v) return M.SMN_AVATARS[v] end)
+    if picked ~= e.avatar then
+        e.avatar, st.avatarPicked = picked, true
+    end
+    tooltip(M.SMN_HELP.avatar .. (st.avatarPicked and '' or '\n\nThis is the mate\'s own choice: saving the starter keeps it.'))
     label('Normal attacks')
     width(s(90))
     e.engage = onoffS('##gsq-smst-eng', e.engage, M.SMN_HELP.engage)

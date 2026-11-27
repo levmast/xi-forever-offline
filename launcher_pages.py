@@ -66,6 +66,8 @@ def prepare(app, names):
     if tall:
         width = 1056 if names.get("coopgui") is not None else 936      # (launcher_gui.fit_window: 1100 / 980 wide)
         BANNER = (width, round(width / 2.5))
+    if names.get("launcher_theme") and names["launcher_theme"].worn() == "playoffline":
+        BANNER = (660, 264)
     G.GALLERY_W, G.GALLERY_H = BANNER      # the press and loading pictures are cut to this when they are loaded
     G.ACCENT = GOLD                         # one highlight colour: what the older pages drew in cyan is gold too
     if "CheckList" in names:                # the "download" tag in the addon and plugin lists was cyan as well
@@ -1470,6 +1472,21 @@ def fit_window(app):
     if G.linux is not None:     # the Steam Deck's screen is 1280 x 800: never taller (or wider) than the screen
         width = min(width, app.winfo_screenwidth())
         height = min(height, app.winfo_screenheight() - (0 if G.linux.in_game_mode() else 40))
+    # (2026-11-26, Jaymz: a window made smaller by hand grew again on the CO-OP page and snapped back on the others;
+    # Starfret before) A window you have sized yourself keeps that size on every page. Sized by hand = not the size
+    # this function set last. A maximised window is left alone too.
+    try:
+        if app.state() == "zoomed":
+            return
+        app.update_idletasks()
+        now, last = (app.winfo_width(), app.winfo_height()), getattr(app, "_auto_size", None)
+        if last is not None and now[0] > 200 and (abs(now[0] - last[0]) > 6 or abs(now[1] - last[1]) > 6):
+            app._user_sized = True
+        if getattr(app, "_user_sized", False):
+            return
+    except Exception:
+        pass
+    app._auto_size = (width, height)
     app.geometry(f"{width}x{height}")
 
 

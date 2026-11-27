@@ -488,6 +488,33 @@
       "check": "polplugins/pivot.dll"
     },
     {
+      "id": "truefps",
+      "name": "TrueFPS",
+      "author": "SQLCommit",
+      "license": "MIT",
+      "homepage": "https://github.com/SQLCommit/TrueFPS",
+      "into": "ashita",
+      "note": "Higher frame rates with the game still at normal speed, smoother motion, and no cutscene stalls at high FPS. Installed switched off (2026-11-26, Alis): tick it in the Addons list to load it; /truefps opens its settings. Don't load it together with the plain fps addon.",
+      "source": {
+        "type": "github_release",
+        "repo": "SQLCommit/TrueFPS",
+        "tag": "v1.3",
+        "asset": "^TrueFPS-v[0-9.]+_Interface-4\\.30\\.zip$",
+        "sha256": "27098b3b7288aa7733f82fec2afbea63c26ef0593f426dc6dff7284b2d160dca"
+      },
+      "files": [
+        [
+          "plugins/",
+          "plugins/"
+        ],
+        [
+          "docs/",
+          "docs/"
+        ]
+      ],
+      "check": "plugins/truefps.dll"
+    },
+    {
       "id": "gambatte",
       "name": "Mini game player",
       "author": "libretro / Gambatte",

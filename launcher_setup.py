@@ -688,7 +688,8 @@ def update_config(kit, values, drop=()):
 # (2026-11-19) "Gambits" is now the squad Rule Set editor (wildcabbagepatch's Gambits v2, first shipped as GambitsV2);
 # the addon that had the name before (your own character's rules, Parser, EXP Watch, Enemy Info) is "autobox".
 OWN_ADDONS = ("Gambits", "autobox", "followme", "servermenu", "squadpanel", "stinkshell", "autora", "hcicons",
-              "vanasync")   # (2026-11-25) VanaSync: copied, not started (off by default)
+              "vanasync",   # (2026-11-25) VanaSync: copied, not started (off by default)
+              "venture")    # (2026-11-26) Ventures in the game: copied, not started (the Squads menu's Ventures button loads it)
 STOCK_ADDONS = ("distance", "fps", "move", "timestamp", "tparty", "checker", "drawdistance", "allmaps")
 STOCK_PLUGINS = ("minimap",)
 START_ADDONS = ("Gambits", "servermenu", "crystalboy")          # loaded at startup on a new install
@@ -696,6 +697,7 @@ START_ADDONS = ("Gambits", "servermenu", "crystalboy")          # loaded at star
 # at startup once (new installs and existing ones). Only the files the addon uses are copied: the sound effects as .wav,
 # the music as .mp3 (the .wav music and the .mp3 sound effects in Nalfey's asset pack are left out).
 TM_ADDON = "tetramaster"
+VENTURE_ADDON = "venture"
 TM_SKIP = ("*.before-*", "*.bak", "mus_quadmist.wav", "snd_*.mp3", "screenshots")
 
 
@@ -773,6 +775,18 @@ def migrate_gambits_names(kit, ashita_dir, log=print):
     return messages
 
 
+def _copy_changed(src, dst):
+    """shutil's copy for a big folder that seldom changes (the Ventures window's 500 pictures): a file that is there
+    already with the same size and time is left alone, so PLAY does not write 20 MB every time."""
+    try:
+        a, b = os.stat(src), os.stat(dst)
+        if a.st_size == b.st_size and abs(a.st_mtime - b.st_mtime) < 2:
+            return dst
+    except OSError:
+        pass
+    return shutil.copy2(src, dst)
+
+
 def install_own_addons(kit, ashita_dir):
     """Copies the kit's addons (addons-src, crystalboy) into Ashita and makes Crystal Boy's folders."""
     addons = os.path.join(ashita_dir, "addons")
@@ -780,7 +794,8 @@ def install_own_addons(kit, ashita_dir):
         src = os.path.join(kit, "addons-src", name)
         if os.path.isdir(src):
             shutil.copytree(src, os.path.join(addons, name), dirs_exist_ok=True,
-                            ignore=shutil.ignore_patterns("*.before-*", "*.bak"))
+                            ignore=shutil.ignore_patterns("*.before-*", "*.bak"),
+                            copy_function=_copy_changed if name == VENTURE_ADDON else shutil.copy2)
     src = os.path.join(kit, "crystalboy")
     if os.path.isdir(src):
         shutil.copytree(src, os.path.join(addons, "crystalboy"), dirs_exist_ok=True,
@@ -817,6 +832,32 @@ def enable_new_addons(kit, ashita_dir, boot_name, log=print):
     with open(marker, "w", encoding="utf-8") as handle:
         handle.write(time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
     return True
+
+
+def venture_off_by_default(ashita_dir, boot_name, log=print):
+    """(2026-11-26) Ventures in the game (addons-src/venture) is NOT started with the game: the Squads menu's Ventures
+    button loads it when someone asks for it (servermenu 1.36), and OPTIONS > Addons starts it with the game for those
+    who want that. Nothing here ever switches it on.
+    The first build of that day did switch it on, once (its marker: <Ashita>/config/addons/venture/enabled-once.txt).
+    Where that marker is, its line is taken out of the start script again, once, and the marker renamed to
+    off-by-default.txt: from then on the choice is the player's. Returns True when the line was taken out."""
+    folder = os.path.join(ashita_dir, "config", "addons", VENTURE_ADDON)
+    marker, done = os.path.join(folder, "enabled-once.txt"), os.path.join(folder, "off-by-default.txt")
+    if not os.path.exists(marker) or os.path.exists(done):
+        return False
+    import launcher_core as core
+    manager = core.ScriptManager(ashita_dir, boot_name)
+    manager.prepare()
+    was_on = VENTURE_ADDON in {a.lower() for a in manager.enabled("addon")}
+    if was_on:
+        manager.set("addon", VENTURE_ADDON, False)
+        log("Ventures is no longer started with the game: the Squads menu has a Ventures button that opens it.")
+    try:
+        os.replace(marker, done)
+    except OSError:                     # (the marker cannot be renamed: the second one alone says it was done)
+        with open(done, "w", encoding="utf-8") as handle:
+            handle.write(time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
+    return was_on
 
 
 def enable_hcicons(ashita_dir, boot_name, log=print):

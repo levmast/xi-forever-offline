@@ -58,6 +58,8 @@ and the Gambits, GambitsV2, Crystal Boy, followme, servermenu and squadpanel add
 Gambits began as the TitanGambits engine and was brought here by its author.
 
 ## Music
+
+- **PlayOffline Viewer (Instrumental)** by JO (jnull), for the PlayOffline Viewer launcher theme.
 All of the launcher's music was made for XI: Forever Offline by **JØ (jnull)**, our Head of Music.
 - "A Place to Return": the launcher's opening theme (`assets/press/default.mp3`).
 - "Beyond the Veil": the 8-Bit theme's song (`assets/press/beyond_the_veil.mp3`).

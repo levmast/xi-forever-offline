@@ -110,6 +110,13 @@ export function nextAlbum(prefs, step, automatic = false) {
   prefs.position = 0;
 }
 
+// (2026-11-26, J's Choose to Fight update) the title shown for a file: its name without the extension and without the
+// copy numbers a download adds at the very end ("Against the Odds (Solo Battle Theme) (1).mp3", "Track (2) (1).mp3").
+// Only whole " (n)" groups at the end go, n from 1 to 99; words in brackets ("(Battle Theme)", "(Remix)", "(Live)") and
+// numbers anywhere else stay. Display only: ids, files and assignments are untouched, and two files may show one title.
 export function trackTitle(filename) {
-  return filename.slice(0, filename.lastIndexOf("."));
+  const dot = filename.lastIndexOf(".");
+  const name = dot > 0 ? filename.slice(0, dot) : filename;
+  const clean = name.replace(/(?:\s+\([1-9]\d?\))+\s*$/, "");
+  return clean.trim() ? clean : name;
 }

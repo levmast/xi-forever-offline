@@ -10,5 +10,19 @@
   "alliance": {
     "file": "The March of Many (Alliance Battle Theme).mp3",
     "sha256": "2b914a51e1d9fdf0cc804fe65ac950c7bfdff01b7207418cc2b298d5a72fcab6"
-  }
+  },
+  "extras": [
+    {
+      "file": "Choose to Fight (Special Battle Theme XIFO Exclusive).mp3",
+      "sha256": "9c66b7937662c2ab3decdd756805756d65fd1dc23aebfd4a86832c8e1b9b3efd"
+    },
+    {
+      "file": "Just One More Cast.mp3",
+      "sha256": "637919e33cab000692ebb548c65e41d2c6ff2d78fb7ef984d05a82aa77235d8c"
+    },
+    {
+      "file": "Beyond the Next Hill.mp3",
+      "sha256": "8996907e7d6ce42800f52a109524551ce46eb9a77cefd1f749bcc467afe1dea4"
+    }
+  ]
 }

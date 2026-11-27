@@ -94,6 +94,22 @@ def _known(cur, sql, ids):
 #   missions: 15 logs x (uint16 current, statusUpper, statusLower, 64 x bool finished)
 #   assault:  uint16 current, 128 x bool;  campaign: uint16 current, 512 x bool
 QUEST_AREAS = 11
+# (2026-11-26, Hasuko: "Moghouse multi-exit quest does not seem to have come over properly on captured character")
+# The five Mog House exit quests each set a bit of their own in char_stats.mhflag when they are finished here
+# (scripts/quests: Growing_Flowers, A_Ladys_Heart, Flower_Child, Pretty_Little_Things, Keeping_Notes). The game never
+# sends that flag, so a transferred character had the quests finished in its log and still only one exit.
+# (quest log area, quest id, mhflag bit)
+MOG_EXIT_QUESTS = ((0, 58, 0x01), (1, 50, 0x02), (2, 65, 0x04), (3, 43, 0x08), (6, 0, 0x10))
+
+
+def mog_exit_flags(quests):
+    """The mhflag bits the finished Mog House exit quests in a quests blob stand for."""
+    flags = 0
+    for area, quest, bit in MOG_EXIT_QUESTS:
+        at = area * 64 + 32 + quest // 8
+        if at < len(quests) and quests[at] >> (quest % 8) & 1:
+            flags |= bit
+    return flags
 QUEST_OFFER = {0x50: 0, 0x58: 1, 0x60: 2, 0x68: 3, 0x70: 4, 0x78: 5, 0x80: 6, 0x88: 7, 0xE0: 8, 0xF0: 9, 0x100: 10}
 QUEST_DONE = {0x90: 0, 0x98: 1, 0xA0: 2, 0xA8: 3, 0xB0: 4, 0xB8: 5, 0xC0: 6, 0xC8: 7, 0xE8: 8, 0xF8: 9, 0x108: 10}
 MISSION_LOGS, MISSION_SIZE = 15, 70          # Sandoria 0 Bastok 1 Windurst 2 Zilart 3 ToAU 4 WoTG 5 CoP 6 ... RoV 13
@@ -413,6 +429,9 @@ def apply(conn, p):
         if logs:
             cur.execute("UPDATE chars SET quests = ?, missions = ?, assault = ?, campaign = ? WHERE charid = ?",
                         (logs["quests"], logs["missions"], logs["assault"], logs["campaign"], charid))
+            exits = mog_exit_flags(logs["quests"])           # the Mog House exits those quests open (bits only added)
+            if exits:
+                cur.execute("UPDATE char_stats SET mhflag = mhflag | ? WHERE charid = ?", (exits, charid))
         if p.get("points"):
             cur.execute("SELECT 1 FROM char_points WHERE charid = ?", (charid,))
             if cur.fetchone() is None:

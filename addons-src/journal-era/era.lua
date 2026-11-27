@@ -44,6 +44,8 @@ end
 -- The Trial-Size avatar quests and Waking the Beast are not here: they
 -- are 2006 or earlier.
 local late_quests = {
+    -- (2026-11-26, seraphinaspears) starts only after Seeing Spots, a Wings of the Goddess quest
+    sdz_ss_atelloune_lament = true,
     bsz_pb_trust_bastok = true,
     wq_wd_trust_windurst = true,
 

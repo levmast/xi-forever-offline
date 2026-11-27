@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.2 (2026-11-26)
+
+- New bundled track from J: "Choose to Fight (Special Battle Theme XIFO Exclusive)". It is an extra (battle-pack.json
+  "extras"): seeded into the library, assigned to no slot, so Solo / Party / Alliance stay as they were.
+- Titles no longer show the copy numbers a download adds at the end of a file name (" (1)", " (2) (1)"). Display only:
+  files, ids and assignments are untouched. Words in brackets and numbers elsewhere in a name stay.
+- Two more extras from J, his in-game versions of the app's tunes: "Just One More Cast" (fishing) and "Beyond the Next
+  Hill" (Ventures). In the library only: nothing starts them by itself yet (the add-on does not report fishing).
+- Add-on 0.1.2: the game's own battle theme no longer plays underneath (Zaltyz525, JØ). The game starts a new track at
+  its own volume when a fight begins or ends, after the add-on's one request to fade; the request is now repeated
+  once a second while VanaSync plays (four times a second for two seconds around a combat change), and full volume is
+  asked for a few more times after the music is handed back. Not yet confirmed in the real game.
+- `/vanasync open` (or `/vsync open`) in game brings the player window back after it was closed (Hexblood). The
+  add-on's next three snapshots carry `"open": true`; the host keeps the request (`GameBridge.take_open()`, one window
+  per ten seconds) and the launcher, which owns the window, opens it again within its five-second check. An app window
+  that is still there is closed first, so two players never play at once. Not yet tried on Windows.
+
 ## 0.1.1 · Live in XI: Forever Offline (2026-11-25)
 
 - Live game bridge: the XI: Forever Offline add-on `vanasync` sends combat, group size, alliance, zone and cutscene

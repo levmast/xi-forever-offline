@@ -3,7 +3,8 @@
   "by": "JØ",
   "credit": "All of the launcher's music was made for XI: Forever Offline by JØ, our Head of Music.",
   "songs": {
-    "default.mp3": "A Place to Return",
+    "playoffline_viewer.mp3": {"title": "PlayOffline Viewer (Instrumental)", "by": "JO (jnull)"},
+    "default.mp3": "We Are Who We Choose",
     "beyond_the_veil.mp3": "Beyond the Veil",
     "no_signal_all_vibes__until-2026-12-02.mp3": "No Signal, All Vibes",
     "xifo_theme__plays-1__until-2026-12-02.mp3": "",
@@ -13,6 +14,9 @@
       "by": "JØ and Nox"
     },
     "chronicle_roots.mp3": "Roots",
-    "windurst_theme.mp3": ""
+    "windurst_theme.mp3": {
+      "title": "",
+      "by": ""
+    }
   }
 }

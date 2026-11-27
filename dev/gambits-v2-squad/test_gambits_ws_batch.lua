@@ -216,7 +216,7 @@ GetSquad = function() return squad end
 local function run(line) srv.printed = {}; G.handle(srv, line); return srv.printed end
 local function F(line) return G.splitPlain(line, '|') end
 local o = run('hello 1')
-check(o[1] == 'GSQ|1|hello|11|32|120|64|live', 'hello: version 11 (capability words since 10) - ' .. tostring(o[1]))
+check(o[1] == 'GSQ|1|hello|12|32|120|64|live', 'hello: version 12 (capability words since 10) - ' .. tostring(o[1]))
 o = run('wsg 2 1')
 local f = F(o[1])
 check(#o == 2 and f[3] == 'ws' and f[4] == '1' and f[5] == 'WAR' and f[6] == 'l' and f[13] == '0' and f[14] == '-' and f[15] == '-' and f[16] == '1'

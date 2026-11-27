@@ -39,6 +39,7 @@ def open_window(parent, kit, ashita, boot_ini, look, say=None, running=None, cor
     running = running or (lambda: False)
 
     win = tk.Toplevel(parent)
+    top = win
     _OPEN["win"] = win
     win.title("HD texture packs and music")
     win.configure(bg=BG)
@@ -50,8 +51,29 @@ def open_window(parent, kit, ashita, boot_ini, look, say=None, running=None, cor
     def close():
         state["closed"] = True
         _OPEN["win"] = None
-        win.destroy()
+        top.destroy()
     win.protocol("WM_DELETE_WINDOW", close)
+
+    # (2026-11-26, Akiraheaven and Admiral Awesome: the buttons at the bottom were out of reach) everything below sits in
+    # a frame that scrolls (scroll bar on the right, or the mouse wheel anywhere in the window)
+    canvas = tk.Canvas(top, bg=BG, highlightthickness=0)
+    bar = tk.Scrollbar(top, orient="vertical", command=canvas.yview)
+    canvas.configure(yscrollcommand=bar.set)
+    bar.pack(side="right", fill="y")
+    canvas.pack(side="left", fill="both", expand=True)
+    win = tk.Frame(canvas, bg=BG)
+    inside = canvas.create_window((0, 0), window=win, anchor="nw")
+    win.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+    canvas.bind("<Configure>", lambda e: canvas.itemconfigure(inside, width=e.width))
+
+    def wheel(e):
+        if e.delta:
+            canvas.yview_scroll(int(-e.delta / 120) or (-1 if e.delta > 0 else 1), "units")
+        elif e.num in (4, 5):                                       # (Linux: the wheel is buttons 4 and 5)
+            canvas.yview_scroll(-1 if e.num == 4 else 1, "units")
+    top.bind("<MouseWheel>", wheel)
+    top.bind("<Button-4>", wheel)
+    top.bind("<Button-5>", wheel)
 
     def label(master, text, **kw):
         kw.setdefault("bg", BG)

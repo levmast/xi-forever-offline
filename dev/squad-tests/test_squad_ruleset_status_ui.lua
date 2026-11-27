@@ -246,7 +246,7 @@ local crashed = false
 for _, s in ipairs(SAID) do if has(s, 'hit a problem') then crashed = true end end
 check(not crashed, 'the menu never hit a render error')
 local src = io.open(KIT .. '/addons-src/servermenu/servermenu.lua', 'rb'):read('*a')
-check(src:match("addon%.version = '([^']+)'") == '1.35', 'servermenu version 1.35')
+check(src:match("addon%.version = '([^']+)'") == '1.36', 'servermenu version 1.36')
 print = realPrint
 io.write(string.format('\npassed %d, failed %d\n', passed, failed))
 os.exit(failed == 0 and 0 or 1)

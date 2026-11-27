@@ -32,7 +32,8 @@ local function world(opts)
     local W = { handlers = {}, clock = 100, sent = {}, clicks = {}, hover = false, who = opts.who or { 'Testcharone', 1 }, scale = 1,
                 width = 620, over = {}, texts = {}, tips = {}, buttons = {}, setTooltip = {}, textWrapped = 0, colors = 0, vars = 0,
                 pushed = {}, first = {}, cells = {}, combos = {}, wins = {}, winPos = {}, login = 2, zoning = 0, flags = {}, winColors = {}, sizes = {}, at = {}, look = {}, cstack = {}, rects = {}, begins = 0, ends = 0, inputs = {}, skipped = {}, content = {}, view = nil, items = {}, openCombo = nil, pick = nil, throwAt = nil, fullBinding = true, fontPushes = {}, fontPops = 0, fontScales = {} }
-    W.dir = os.tmpname(); os.remove(W.dir); mkdir(W.dir)
+    if opts.dir then W.dir = opts.dir else W.dir = os.tmpname(); os.remove(W.dir) end   -- (opts.dir: an Ashita folder that is there already)
+    mkdir(W.dir)
     if opts.cfg then mkdir(W.dir .. '/config/addons/servermenu'); put(W.dir .. '/config/addons/servermenu/settings.cfg', opts.cfg) end
     for _, p in ipairs(opts.prefs or {}) do assert(dofile(HERE .. '/../../addons-src/servermenu/xifo_ui.lua').write_pref(W.dir .. '/', p[1], p[2], mkdir)) end
     local L = { x = 0, endX = 0, same = false, w = 0, stack = {}, itemW = nil, inTip = false }
@@ -256,6 +257,10 @@ local function feedSheet(W, slot, o)
     for e = 0, 15 do if not (o.empty and o.empty[e]) then s(string.format('eq|%d|slot|haste_belt|%d', e, (o.worn and o.worn[e]) or (12000 + e))) end end
     s('end')
 end
+
+-- (1.36) the stand-ins alone, without running the checks below: for a test that puts this menu together with another
+-- add-on (dev/ventures/test_venture_button.py: the real venture add-on, each in its own Lua state as in the game)
+if rawget(_G, 'SQUAD_MENU_UI_LIB') then return { world = world, feed = feed, feedSheet = feedSheet } end
 
 -- ================================================================= 1. the theme of a new and of an existing installation
 section('1. Crimson for a new installation; an existing one keeps the look it has')
@@ -1791,6 +1796,232 @@ do
     for _ = 1, 3 do W.frame(2.5) end
     check(W.said('!squad position', from) == 0, 'picking what is already chosen sends nothing')
     W.close()
+end
+
+-- ================================================================= 15. (1.36) the Ventures button
+-- The add-on's side here is a stand-in: two small files written by hand, and its line "/xifoventure". The real add-on
+-- with this menu, each in its own Lua state: dev/ventures/test_venture_button.py.
+section('15. (1.36) Squad tab > Ventures: only with the add-on in Ashita; loads it, shows its window, shuts it; lit while shown')
+do
+    local BTN = 'Ventures##ventures'
+    local m = Ux.menu('crimson')
+    local function plant(W) mkdir(W.dir .. '/addons/venture'); put(W.dir .. '/addons/venture/venture.lua', '-- the venture add-on\n') end
+    local function folder(W) local d = W.dir .. '/config/addons/xiforever/Testcharone_1'; mkdir(d); return d end
+    local function exists(path) local f = io.open(path, 'r'); if f then f:close() end return f ~= nil end
+    -- what the add-on does: its file is there or gone, and it says so
+    local function mark(W, name, on, quiet, pid)
+        local path = folder(W) .. '/' .. name
+        if on then
+            pid = pid or Ux.process_id()
+            put(path, 'Ventures 1.1\n' .. (pid and ('pid=' .. string.format('%d', pid) .. '\n') or ''))
+        else
+            os.remove(path)
+        end
+        if not quiet then W.command('/xifoventure') end
+    end
+    local function start(o)
+        local W = world({ cfg = 'theme=crimson\nbutton_wide=true\n', who = o and o.who })
+        if not (o and o.bare) then plant(W) end
+        W.command('/menu squad'); feed(W); W.frame(); W.frame()
+        return W
+    end
+    local function press(W) W.clicks[BTN] = true; W.frame() end
+    local function lit(W) return same(W.look[BTN], m.c.sel) end
+    local function busy(W) return same(W.look[BTN], m.c.busy) end
+
+    -- drawn only when the add-on is there
+    local W = start({ bare = true })
+    check(not W.button(BTN) and order(W, 'callall', 'dismiss', 'refresh', 'sqattack'), 'no venture add-on in Ashita\'s addons folder: no Ventures button, the row as it was')
+    plant(W)
+    for _ = 1, 3 do W.frame(4) end
+    check(W.button(BTN) ~= nil, 'the add-on arrives (the launcher copied it): the button is there within ten seconds or so')
+    W.close()
+
+    W = start()
+    do
+        local ok, missing = order(W, 'callall', 'dismiss', 'refresh', 'ventures', 'sqattack')
+        check(ok, 'the Squad row: Call all, Dismiss all, Refresh, Ventures' .. (ok and '' or (' (missing ' .. tostring(missing) .. ')')))
+        local iR, xR, wR = atOf(W, 'Refresh##refresh', true)
+        local iV, xV, wV = atOf(W, BTN, true)
+        local iN, xN = atOf(W, '6 mates', true)
+        check(iV == iR + 1 and xV == xR + wR + 6 and wV == 76 and iN == iV + 1 and xN == xV + wV + 12,
+              'right after Refresh on the same line, 76 px wide, the mate count after it')
+        check(#W.over == 0, 'nothing in the menu lands beyond the edge' .. (W.over[1] and (' (' .. W.over[1] .. ')') or ''))
+        check(same(W.look[BTN], W.look['Refresh##refresh']) and not lit(W) and not busy(W), 'not loaded: a plain button like its neighbours')
+        W.hover = true; W.frame(); W.hover = false
+        local tip = false
+        for _, t in ipairs(W.tips) do tip = tip or has(t, 'Send squad mates off to level') end
+        check(tip and #W.setTooltip == 0, 'its tooltip says what Ventures is')
+    end
+
+    -- not loaded: the click loads the add-on; "/venture show" only once the add-on said it is there
+    local from = #W.sent + 1
+    press(W)
+    check(W.sent[#W.sent] == '/addon load venture' and W.said('/addon load venture', from) == 1 and W.said('/venture', from) == 0,
+          'a click when it is not loaded: "/addon load venture", and no "/venture" line yet (nobody would answer it)')
+    W.frame()
+    check(busy(W), 'the button waits (busy) while the add-on loads')
+    press(W); press(W)
+    check(W.said('/addon load venture', from) == 1 and W.said('/venture', from) == 0, 'clicks while it waits do nothing')
+    for _ = 1, 10 do W.frame(0.3) end
+    check(W.said('/venture', from) == 0 and busy(W), 'three seconds later, still no add-on: still waiting, still nothing sent')
+    mark(W, 'venture.loaded', true)
+    W.frame()
+    check(W.sent[#W.sent] == '/venture show' and W.said('/venture show', from) == 1, 'the add-on says it is loaded: "/venture show" at the next frame')
+    W.frame(); W.frame()
+    check(busy(W) and W.said('/venture show', from) == 1, 'until its window is shown the button still waits; the line is not sent twice')
+    mark(W, 'venture.open', true)
+    W.frame()
+    check(lit(W) and W.said('/addon load venture', from) == 1 and W.said('/venture', from) == 1, 'the window is shown: the button is lit; one load and one show in all')
+    W.hover = true; W.frame(); W.hover = false
+    do
+        local tip = false
+        for _, t in ipairs(W.tips) do tip = tip or has(t, 'Shut the Ventures window') end
+        check(tip, 'lit: the tooltip says a click shuts the window')
+    end
+    for _ = 1, 4 do W.frame(1.5) end
+    check(lit(W) and W.said('/venture', from) == 1, 'seconds later: still lit, nothing more sent')
+
+    -- shown: the click shuts the window
+    from = #W.sent + 1
+    press(W)
+    check(W.sent[#W.sent] == '/venture hide' and W.said('/venture', from) == 1, 'a click while the window is shown: "/venture hide"')
+    mark(W, 'venture.open', false)
+    W.frame(); W.frame()
+    check(not lit(W) and not busy(W), 'the add-on says its window is shut: no longer lit')
+
+    -- loaded, window shut: the click only shows the window
+    from = #W.sent + 1
+    press(W)
+    check(W.sent[#W.sent] == '/venture show' and W.said('/addon load', from) == 0, 'loaded already: a click sends "/venture show" alone')
+    -- ... and the add-on's files are looked at without its line too (four times a second while a click waits)
+    mark(W, 'venture.open', true, true)
+    W.frame(0.3); W.frame()
+    check(lit(W), 'an answer without the line "/xifoventure" is seen within a third of a second')
+
+    -- the window shut or shown some other way (/venture, its own X): the button follows
+    mark(W, 'venture.open', false); W.frame()
+    check(not lit(W), 'shut with its own X (the add-on says so): not lit at the next frame')
+    mark(W, 'venture.open', true); W.frame()
+    check(lit(W), 'opened with /venture: lit at the next frame')
+    mark(W, 'venture.open', false, true); W.frame(1.2); W.frame()
+    check(not lit(W), 'and without the line: within about a second')
+    check(W.command('/xifoventure') == true, 'the add-on\'s line "/xifoventure" is stopped here too (never sent to the game)')
+
+    -- the add-on unloaded (/addon unload venture removes both files): the next click loads it again
+    mark(W, 'venture.loaded', false, true); W.frame(2.2); W.frame()
+    from = #W.sent + 1
+    press(W)
+    check(W.sent[#W.sent] == '/addon load venture' and W.said('/venture', from) == 0, 'unloaded in the meantime: the next click loads it again')
+    W.close()
+
+    -- an add-on that never loads (a broken file): said once, and the button can be pressed again
+    W = start()
+    from = #W.sent + 1
+    press(W)
+    for _ = 1, 45 do W.frame(0.2) end
+    check(busy(W) and #W.prints == 1, 'nine seconds without the add-on: still waiting, nothing said')
+    for _ = 1, 10 do W.frame(0.2) end
+    local told = false
+    for _, line in ipairs(W.prints) do told = told or has(line, 'the Ventures add-on did not load') end
+    check(told and not busy(W) and not lit(W) and W.said('/addon load venture', from) == 1 and W.said('/venture', from) == 0,
+          'after ten seconds: the chat log says it did not load (once), the button is a plain button again, and no "/venture" line was ever sent')
+    press(W)
+    check(W.said('/addon load venture', from) == 2, 'and a click tries again')
+    W.close()
+
+    -- a file a closed game left behind, with this game's process id: "/venture show" goes unanswered
+    W = start()
+    mark(W, 'venture.loaded', true, true); W.frame(2.2)
+    from = #W.sent + 1
+    press(W)
+    check(W.sent[#W.sent] == '/venture show', 'a venture.loaded that looks like this game\'s: the click trusts it ("/venture show")')
+    for _ = 1, 100 do W.frame(0.019) end
+    check(W.said('/addon load', from) == 0 and busy(W), '1.9 seconds and a hundred frames without an answer: still waiting')
+    for _ = 1, 25 do W.frame(0.019) end   -- (the files are looked at four times a second: by 2.4 s at the latest)
+    check(W.said('/addon load venture', from) == 1 and not exists(folder(W) .. '/venture.loaded'),
+          'two seconds (and thirty frames) without an answer: the file was not this game\'s. It is removed and the add-on is loaded for real')
+    mark(W, 'venture.loaded', true); W.frame()
+    mark(W, 'venture.open', true); W.frame()
+    check(lit(W) and W.said('/venture show', from) == 2 and W.said('/addon load venture', from) == 1 and #W.prints == 1,
+          'the add-on loads and shows its window: lit, with one load and nothing said')
+    W.close()
+
+    -- ... but a game that stood still (a zone loading, the window minimised) is not an unanswered line
+    W = start()
+    mark(W, 'venture.loaded', true, true); W.frame(2.2)
+    from = #W.sent + 1
+    press(W)
+    W.frame(30); W.frame(30)
+    check(W.said('/addon load', from) == 0 and exists(folder(W) .. '/venture.loaded') and busy(W),
+          'a minute passes in two frames (the game stood still): nothing is removed and nothing loaded, the click still waits')
+    mark(W, 'venture.open', true); W.frame()
+    check(lit(W) and W.said('/venture', from) == 1, 'the add-on answers at its next frame: lit')
+    W.close()
+
+    -- the add-on is loaded for real and still does not show its window: said, not tried for ever
+    W = start()
+    from = #W.sent + 1
+    press(W)
+    mark(W, 'venture.loaded', true); W.frame()
+    for _ = 1, 120 do W.frame(0.02) end
+    told = false
+    for _, line in ipairs(W.prints) do told = told or has(line, 'the Ventures window did not open') end
+    check(told and not busy(W) and W.said('/addon load venture', from) == 1 and W.said('/venture show', from) == 1,
+          'loaded by this click, yet no window after two seconds: the chat log says so, and nothing is sent again')
+    W.close()
+
+    -- "/venture hide" unanswered: the open file was left behind too
+    W = start()
+    mark(W, 'venture.loaded', true, true); mark(W, 'venture.open', true, true); W.frame(2.2); W.frame()
+    check(lit(W), '(both files there: the button is lit)')
+    from = #W.sent + 1
+    press(W)
+    check(W.sent[#W.sent] == '/venture hide', 'a click: "/venture hide"')
+    for _ = 1, 120 do W.frame(0.02) end
+    check(not lit(W) and not busy(W) and not exists(folder(W) .. '/venture.open') and not exists(folder(W) .. '/venture.loaded') and #W.prints == 1,
+          'nobody answers for two seconds: both files are removed, the button is plain again, nothing is said')
+    press(W)
+    check(W.sent[#W.sent] == '/addon load venture', 'and the next click loads the add-on')
+    W.close()
+
+    -- a file another game process left (its id is not this game's) is not the add-on's word
+    W = start()
+    local other = (Ux.process_id() or 1) + 1
+    mark(W, 'venture.loaded', true, true, other); mark(W, 'venture.open', true, true, other); W.frame(2.2); W.frame()
+    check(Ux.process_id() == nil or not lit(W), 'files with another process\'s id: not lit')
+    from = #W.sent + 1
+    press(W)
+    check(Ux.process_id() == nil or (W.sent[#W.sent] == '/addon load venture' and W.said('/venture', from) == 0), 'and a click loads the add-on, no "/venture" line')
+    W.close()
+
+    -- nobody logged in: there is no character's folder to look in
+    W = start({ who = { '', 0 } })
+    from = #W.sent + 1
+    press(W)
+    told = false
+    for _, line in ipairs(W.prints) do told = told or has(line, 'log in with a character first') end
+    check(told and W.said('/addon load', from) == 0 and W.said('/venture', from) == 0 and not busy(W), 'at the title screen: the click only says to log in first')
+    W.close()
+
+    -- it fits, at every width and size, in every theme
+    local worst, where = 0, nil
+    for _, name in ipairs({ 'classic', 'squad', 'crimson' }) do
+        for _, width in ipairs({ 600, 620, 900 }) do
+            for _, scale in ipairs({ 0.75, 1, 2 }) do
+                local V = world({ cfg = 'theme=' .. name .. '\nbutton_wide=true\nscale=' .. scale .. '\n' })
+                V.width, V.scale = width, scale
+                plant(V)
+                V.command('/menu squad'); feed(V); V.frame(); V.frame()
+                if not V.button(BTN) then worst, where = worst + 1, 'no button at ' .. width end
+                if #V.over > worst then worst, where = #V.over, string.format('%s, %d px at %d %%: %s', name, width, scale * 100, tostring(V.over[1])) end
+                if V.colors ~= 0 or V.vars ~= 0 or V.begins ~= V.ends then worst, where = worst + 1, 'something pushed was not popped' end
+                V.close()
+            end
+        end
+    end
+    check(worst == 0, 'with the Ventures button: no control beyond the edge at 600 / 620 / 900 px and 75 / 100 / 200 %, in every theme; what is pushed is popped'
+        .. (where and (' (' .. where .. ')') or ''))
 end
 
 io.write(string.format('\npassed %d, failed %d\n', passed, failed))
